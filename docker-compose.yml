@@ -1,0 +1,53 @@
+# Local stack: PostgreSQL, Azurite (local Azure Blob Storage) and the Taskloom container.
+#   docker compose up --build        -> http://localhost:8080
+#   docker compose up db azurite     -> just the backing services, for `dotnet run` + `npm run dev`
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: taskloom
+      POSTGRES_PASSWORD: taskloom
+      POSTGRES_DB: taskloom
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskloom"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: azurite-blob --blobHost 0.0.0.0 --loose --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+    volumes:
+      - azurite:/data
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      azurite:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__Taskloom: "Host=db;Port=5432;Database=taskloom;Username=taskloom;Password=taskloom"
+      # Local-only sign-in: type any email. Turn this off anywhere real.
+      Auth__DevLogin__Enabled: "true"
+      # Exercise the Azure Blob adapter against Azurite (the well-known Azurite dev key, not a secret).
+      FileStore__Provider: Azure
+      FileStore__Azure__ConnectionString: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      # Optional: Google or Microsoft sign-in. See README.
+      Auth__Providers__google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      Auth__Providers__google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      Auth__Providers__microsoft__ClientId: ${ENTRA_CLIENT_ID:-}
+      Auth__Providers__microsoft__ClientSecret: ${ENTRA_CLIENT_SECRET:-}
+
+volumes:
+  pgdata:
+  azurite:

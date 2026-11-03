@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Taskloom.Api/Taskloom.Api.csproj" />
+    <Project Path="src/Taskloom.Application/Taskloom.Application.csproj" />
+    <Project Path="src/Taskloom.Cloud.Azure/Taskloom.Cloud.Azure.csproj" />
+    <Project Path="src/Taskloom.Domain/Taskloom.Domain.csproj" />
+    <Project Path="src/Taskloom.Infrastructure/Taskloom.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Taskloom.Api.Tests/Taskloom.Api.Tests.csproj" />
+  </Folder>
+</Solution>

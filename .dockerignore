@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/node_modules/
+src/Taskloom.Api/wwwroot/
+src/Taskloom.Api/data/
+web/dist/
+.git/
+.vs/
+.vscode/
+.idea/
+*.md
+tests/
