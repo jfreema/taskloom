@@ -21,7 +21,9 @@ COPY src/Taskloom.Api/Taskloom.Api.csproj src/Taskloom.Api/
 RUN dotnet restore src/Taskloom.Api/Taskloom.Api.csproj
 COPY src/ src/
 COPY --from=web /src/src/Taskloom.Api/wwwroot src/Taskloom.Api/wwwroot
-RUN dotnet publish src/Taskloom.Api/Taskloom.Api.csproj -c Release -o /app --no-restore
+RUN dotnet publish src/Taskloom.Api/Taskloom.Api.csproj -c Release -o /app --no-restore \
+    # The app runs as a non-root user: make sure it can read everything, whatever the file modes on disk.
+    && chmod -R a+rX /app
 
 # ---- Runtime ----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
