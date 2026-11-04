@@ -37,6 +37,8 @@ export interface BoardContext {
   openId: ComputedRef<Uuid | null>
   /** Cards kept visible although filters hide them ("Hidden by filters"). */
   keptIds: ComputedRef<ReadonlySet<Uuid>>
+  /** Parents shown only because one of their subtasks matches the filters (muted, 8.1). */
+  contextIds: ComputedRef<ReadonlySet<Uuid>>
   renamingId: Ref<Uuid | null>
   /** Cards just created here, which flash once. */
   flashIds: ShallowRef<ReadonlySet<Uuid>>

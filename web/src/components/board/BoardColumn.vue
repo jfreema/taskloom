@@ -43,6 +43,7 @@ const count = computed(() => props.column.tasks.length)
 const label = computed(() => `${props.column.status.name}, ${pluralize(count.value, 'task')}`)
 const shown = computed(() => props.column.shown)
 const dragActive = computed(() => activeDrag.value !== null)
+const showFooter = computed(() => board.canEdit.value && addAt.value !== 'bottom')
 
 useAutoScroll(bodyEl)
 
@@ -126,7 +127,7 @@ defineExpose({ openTop })
   >
     <BoardColumnHeader ref="header" :status="column.status" :count="count" @add="openTop" @collapse="collapse" />
 
-    <div ref="bodyEl" class="body">
+    <div ref="bodyEl" class="body" :class="{ 'has-footer': showFooter }">
       <BoardInlineAdd
         v-if="addAt === 'top'"
         :status-id="column.status.id"
@@ -151,7 +152,7 @@ defineExpose({ openTop })
         @close="closeAdd"
       />
 
-      <div v-if="board.canEdit.value && addAt !== 'bottom'" class="footer">
+      <div v-if="showFooter" class="footer">
         <button ref="footerButton" type="button" class="add-task" @click="openBottom">
           <UiIcon :icon="Plus" :size="14" />
           <span>Add task</span>
@@ -192,6 +193,12 @@ defineExpose({ openTop })
   scroll-padding: var(--space-2) 0 calc(var(--space-2) + 36px);
 }
 
+/* The footer ends the scroll content and holds the bottom padding itself, so that, sticking to the
+   bottom of the scrollport, nothing shows through beneath it. */
+.body.has-footer {
+  padding-bottom: 0;
+}
+
 .empty {
   display: flex;
   flex: none;
@@ -212,7 +219,11 @@ defineExpose({ openTop })
 }
 
 .show-all {
+  display: flex;
   flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em;
   height: var(--control-sm);
   border: 0;
   border-radius: var(--radius-sm);
@@ -222,7 +233,9 @@ defineExpose({ openTop })
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   font-weight: var(--fw-medium);
+  text-align: center;
   cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease-out);
 }
 
 .show-all:hover {
@@ -233,8 +246,9 @@ defineExpose({ openTop })
 .footer {
   position: sticky;
   bottom: 0;
+  z-index: 1;
   flex: none;
-  margin: 0 calc(-1 * var(--space-2)) calc(-1 * var(--space-2));
+  margin: 0 calc(-1 * var(--space-2));
   padding: 0 var(--space-2) var(--space-2);
   background: var(--bg-column);
 }

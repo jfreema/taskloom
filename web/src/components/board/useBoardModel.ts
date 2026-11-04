@@ -1,9 +1,10 @@
 // The Board's columns (8.8): one per status of the list in display order, each holding its visible
 // top-level tasks in manual order (position). Only top-level tasks get cards.
 // - With "Show completed" off (ViewConfig.showCompleted), Done columns are left out.
-// - Done columns render their first 20 cards and other columns their first 50, then "Show all N"
-//   for the rest of the session. A card created in this page session always renders, so a task
-//   added at the bottom of a long column doesn't vanish behind the cap.
+// - Done columns render their first 20 cards and other columns their first 50, then "Show all N",
+//   which lasts for the page session (switching views keeps it; a reload ends it). A card created
+//   in this page session, or put somewhere by hand (a drop, Alt+Left/Right), always renders, so it
+//   never vanishes behind the cap.
 // - Collapsed columns (ViewConfig.collapsedGroups `status:<id>`) render as strips, without cards.
 // - Completion hold (8.1): a task completed a moment ago (tasks.recentlyCompleted) keeps its old
 //   column and place for 1s with its done look, then moves to the top of the Done column, or
@@ -19,6 +20,9 @@ export const DONE_CAP = 20
 export const OPEN_CAP = 50
 /** A little longer than the store's 1s hold, so a hand-placed move never meets the end of it. */
 const PLACED_MS = 1500
+
+/** Columns opened with "Show all" in this page session, by status id (ids are unique across lists). */
+const sessionExpanded = reactive(new Set<Uuid>())
 
 export interface BoardColumnView {
   /** `status:<id>`, as in ViewConfig.collapsedGroups. */
@@ -44,7 +48,10 @@ export interface BoardModel {
   siblingIds(id: Uuid): Uuid[]
   showAll(statusId: Uuid): void
   setCollapsed(statusId: Uuid, collapsed: boolean): void
-  /** Marks a move the user placed by hand, so the completion hold doesn't hold the card back. */
+  /**
+   * Marks a move the user placed by hand: the completion hold doesn't hold the card back, and the
+   * card renders even past its column's cap.
+   */
   placed(id: Uuid): void
 }
 
@@ -56,17 +63,19 @@ export function useBoardModel(): BoardModel {
   const ctx = useListPageContext()
   const tasks = useTasks()
 
-  /** Columns opened with "Show all" this session. */
-  const expanded = reactive(new Set<Uuid>())
+  const expanded = sessionExpanded
+  /** Moves placed by hand in the last moment (they skip the completion hold). */
   const placedIds = reactive(new Set<Uuid>())
+  /** Cards placed by hand while the board is open (they skip the caps). */
+  const movedIds = reactive(new Set<Uuid>())
   /** Where each card was last rendered, for the completion hold. Not reactive. */
   const placements = new Map<Uuid, { statusId: Uuid; index: number }>()
 
   watch(
     () => ctx.listId.value,
     () => {
-      expanded.clear()
       placedIds.clear()
+      movedIds.clear()
       placements.clear()
     },
   )
@@ -117,7 +126,7 @@ export function useBoardModel(): BoardModel {
       const cap = done ? DONE_CAP : OPEN_CAP
       let shown = list
       if (list.length > cap && !expanded.has(status.id)) {
-        shown = list.filter((t, i) => i < cap || created.has(t.id))
+        shown = list.filter((t, i) => i < cap || created.has(t.id) || movedIds.has(t.id))
       }
       out.push({
         key,
@@ -156,6 +165,7 @@ export function useBoardModel(): BoardModel {
 
   function placed(id: Uuid): void {
     placedIds.add(id)
+    movedIds.add(id)
     setTimeout(() => placedIds.delete(id), PLACED_MS)
   }
 

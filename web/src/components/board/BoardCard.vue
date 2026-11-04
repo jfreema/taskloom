@@ -1,34 +1,28 @@
 <script setup lang="ts">
 // A Board card (8.8): an article named by the title, focusable, with data-task-row for the panel.
-// - The title (3 lines at most), up to 2 tags, and a meta row: due date, priority, subtask
-//   progress, comment and attachment counts, then the assignees.
+// - The title (3 lines at most), up to 2 tags, and the meta row (BoardCardMeta).
 // - Revealed controls: the complete toggle before the title (in the status colour; faint until
-//   the card is hovered or focused, so the title never shifts) and the "..." menu in the corner,
-//   which touch screens always show. A right-click opens that menu too.
+//   the card is hovered or focused, so the title never shifts) and the "..." menu in the corner
+//   (BoardCardMenu), which touch screens always show. A right-click opens that menu too. They are
+//   in the tab order only while focus is in the card, so Tab steps from card to card (as the
+//   List's rows do).
+// - A parent shown only for its matching subtasks (filters) has a muted title (8.1).
 // - A click opens the panel, unless it lands on a control or ends a text selection.
-// - The whole card drags (useDnd, lifted preview) except its controls; while it drags its slot is a
-//   dashed placeholder. As a drop target it shows the indicator at its closest edge, unless the
-//   drop would leave the card where it is.
+// - Drag and drop (useCardDnd): the whole card drags except its controls; while it drags its slot
+//   is a dashed placeholder, and as a drop target it shows the indicator at its closest edge.
 // - F2 turns the title into a field (BoardView sets renamingId).
-import { computed, ref, watch } from 'vue'
-import { Ellipsis } from '@lucide/vue'
-import { activeDrag, useDraggable, useDropTarget } from '../../composables/useDnd'
+import { computed, ref } from 'vue'
 import { useTaskActions } from '../../composables/useTaskActions'
-import { useMembers } from '../../stores/members'
 import { useTasks } from '../../stores/tasks'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { Status, Task } from '../../types'
 import CompleteToggle from '../fields/CompleteToggle.vue'
-import DueDate from '../fields/DueDate.vue'
-import LazyMenu from '../fields/LazyMenu.vue'
-import PriorityFlag from '../fields/PriorityFlag.vue'
-import SubtaskProgress from '../fields/SubtaskProgress.vue'
 import TagList from '../fields/TagList.vue'
-import TaskCounts from '../fields/TaskCounts.vue'
-import UiAvatarStack from '../ui/UiAvatarStack.vue'
-import UiIconButton from '../ui/UiIconButton.vue'
 import UiInlineEdit from '../ui/UiInlineEdit.vue'
+import BoardCardMenu from './BoardCardMenu.vue'
+import BoardCardMeta from './BoardCardMeta.vue'
 import { useBoard } from './boardContext'
+import { useCardDnd, type CardEdge } from './useCardDnd'
 
 const props = withDefaults(
   defineProps<{
@@ -36,19 +30,17 @@ const props = withDefaults(
     /** The column it renders in (during the completion hold, not yet the task's own status). */
     column: Status
     /** The column's own drop line at this card: the top of the column, or its end. */
-    dropHint?: 'top' | 'bottom' | null
+    dropHint?: CardEdge | null
   }>(),
   { dropHint: null },
 )
 
 const board = useBoard()
 const tasks = useTasks()
-const members = useMembers()
 const workspaces = useWorkspaces()
 const actions = useTaskActions()
 
 const el = ref<HTMLElement | null>(null)
-const menuOpen = ref(false)
 
 const id = computed(() => props.task.id)
 const done = computed(() => tasks.isDone(props.task))
@@ -57,46 +49,15 @@ const current = computed(() => board.openId.value === id.value)
 const renaming = computed(() => board.renamingId.value === id.value)
 const flash = computed(() => board.flashIds.value.has(id.value))
 const kept = computed(() => board.keptIds.value.has(id.value))
-const people = computed(() => props.task.assigneeIds.map((uid) => ({ id: uid, displayName: members.nameOf(uid) })))
-const hasMeta = computed(() => {
-  const t = props.task
-  return (
-    t.dueDate !== null ||
-    t.priority !== 'None' ||
-    t.subtaskCount > 0 ||
-    t.commentCount > 0 ||
-    t.attachmentCount > 0 ||
-    t.assigneeIds.length > 0
-  )
-})
+const context = computed(() => board.contextIds.value.has(id.value))
+/** Focus is on the card or a control inside it: only then are its controls in the tab order. */
+const focusWithin = ref(false)
 
-// ---- Drag and drop ----
-
-const { dragging } = useDraggable(el, {
-  data: () => ({ kind: 'task', id: id.value, listId: props.task.listId, fromStatusId: props.task.statusId }),
-  preview: 'lift',
-  disabled: () => !board.canDrag.value || renaming.value || tasks.isPendingDelete(id.value),
-})
-
-const { edge } = useDropTarget(el, {
-  data: () => ({ type: 'card', id: id.value }),
-  accepts: (d) => board.canDrag.value && d.listId === board.listId.value,
-  edges: ['top', 'bottom'],
-  onDrop: (d, e) => board.drop(d, props.column.id, { cardId: id.value, edge: e === 'top' ? 'top' : 'bottom' }),
-})
-
-watch(edge, (e) => {
-  if (e) board.hover.value = { id: id.value, statusId: props.column.id }
-  else if (board.hover.value?.id === id.value) board.hover.value = null
-})
-
-/** The edge to draw the indicator at, unless dropping there would change nothing. */
-const indicator = computed<'top' | 'bottom' | null>(() => {
-  if (props.dropHint) return props.dropHint
-  const e = edge.value
-  const d = activeDrag.value
-  if (!d || (e !== 'top' && e !== 'bottom')) return null
-  return board.resolveDrop(d, props.column.id, { cardId: id.value, edge: e }) ? e : null
+const { dragging, indicator } = useCardDnd(el, {
+  task: () => props.task,
+  columnId: () => props.column.id,
+  renaming: () => renaming.value,
+  dropHint: () => props.dropHint,
 })
 
 // ---- Pointer ----
@@ -129,24 +90,24 @@ function onContextMenu(e: MouseEvent): void {
   const button = el.value?.querySelector<HTMLElement>('[data-card-menu]')
   if (!button) return
   e.preventDefault()
-  if (!menuOpen.value) button.click()
+  if (button.getAttribute('aria-expanded') !== 'true') button.click()
 }
 
 function toggle(): void {
   void actions.toggleComplete(id.value)
 }
 
-function menuItems() {
-  return actions.rowMenuItems(props.task, {
-    variant: 'card',
-    canReorder: true,
-    siblingIds: () => board.model.siblingIds(id.value),
-    onPick: (field) => board.pick(id.value, field),
-  })
-}
-
 function onEditing(on: boolean): void {
   if (!on) board.endRename(id.value)
+}
+
+function onFocusIn(): void {
+  focusWithin.value = true
+}
+
+function onFocusOut(e: FocusEvent): void {
+  const next = e.relatedTarget
+  if (!(next instanceof Node) || !el.value?.contains(next)) focusWithin.value = false
 }
 </script>
 
@@ -156,6 +117,7 @@ function onEditing(on: boolean): void {
     class="board-card focus-inset"
     :class="{
       'is-done': done,
+      'is-context': context,
       'is-current': current,
       'is-dragging': dragging,
       'is-renaming': renaming,
@@ -172,6 +134,8 @@ function onEditing(on: boolean): void {
     data-row
     @click="onClick"
     @contextmenu="onContextMenu"
+    @focusin="onFocusIn"
+    @focusout="onFocusOut"
   >
     <div class="head">
       <CompleteToggle
@@ -181,6 +145,7 @@ function onEditing(on: boolean): void {
         :label="task.title"
         :color="color"
         :size="16"
+        :tabindex="focusWithin ? 0 : -1"
         @toggle="toggle"
       />
       <UiInlineEdit
@@ -199,32 +164,9 @@ function onEditing(on: boolean): void {
     </div>
 
     <TagList v-if="task.tagIds.length" class="tags" :tag-ids="task.tagIds" :max="2" />
-
-    <div v-if="hasMeta" class="meta">
-      <DueDate v-if="task.dueDate" :date="task.dueDate" :done="done" size="sm" />
-      <PriorityFlag v-if="task.priority !== 'None'" :priority="task.priority" :size="14" />
-      <SubtaskProgress :done="task.subtaskDoneCount" :total="task.subtaskCount" />
-      <TaskCounts :task="task" />
-      <span class="spacer" />
-      <UiAvatarStack v-if="people.length" :users="people" :size="20" :max="3" />
-    </div>
-
+    <BoardCardMeta :task="task" :done="done" />
     <p v-if="kept" class="kept">Hidden by filters</p>
-
-    <div v-if="!renaming" class="corner">
-      <LazyMenu v-model:open="menuOpen" lazy :items="menuItems" :aria-label="`Actions for ${task.title}`" placement="bottom-end">
-        <template #trigger="{ props: t }">
-          <UiIconButton
-            v-bind="t"
-            class="reveal reveal-touch"
-            data-card-menu
-            :icon="Ellipsis"
-            :label="`More actions for ${task.title}`"
-            size="xs"
-          />
-        </template>
-      </LazyMenu>
-    </div>
+    <BoardCardMenu v-if="!renaming" :task="task" :focusable="focusWithin" />
   </article>
 </template>
 
@@ -246,11 +188,6 @@ function onEditing(on: boolean): void {
   transition: box-shadow var(--dur-1) var(--ease-out);
 }
 
-.board-card:hover {
-  --card-tint: var(--bg-hover);
-  box-shadow: var(--shadow-2);
-}
-
 .board-card.is-current {
   --card-bg: var(--bg-selected);
   box-shadow:
@@ -258,17 +195,38 @@ function onEditing(on: boolean): void {
     var(--shadow-1);
 }
 
-.board-card.is-current:hover {
-  box-shadow:
-    inset 2px 0 0 var(--accent),
-    var(--shadow-2);
+/* Hover only where a pointer hovers: after a tap, touch screens would keep the last card "hovered". */
+@media (hover: hover) {
+  .board-card:hover {
+    --card-tint: var(--bg-hover);
+    box-shadow: var(--shadow-2);
+  }
+
+  .board-card.is-current:hover {
+    box-shadow:
+      inset 2px 0 0 var(--accent),
+      var(--shadow-2);
+  }
 }
 
-/* The source slot while it drags: a dashed placeholder at 40% (8.1). */
+/* A tap shows that it landed while the finger is down. */
+@media (hover: none) {
+  .board-card:active:not(.is-renaming) {
+    --card-tint: var(--bg-pressed);
+  }
+}
+
+/* The source slot while it drags: a dashed placeholder at 40% (8.1), without its revealed menu
+   (BoardCardMenu's root, which this scoped style reaches). */
 .board-card.is-dragging {
+  --card-tint: transparent;
   border-style: dashed;
   box-shadow: none;
   opacity: 0.4;
+}
+
+.board-card.is-dragging .corner {
+  visibility: hidden;
 }
 
 .board-card.is-renaming {
@@ -282,10 +240,12 @@ function onEditing(on: boolean): void {
   min-width: 0;
 }
 
-/* Faint until the card is hovered or holds focus; a done card shows its check. */
+/* Faint until the card is hovered or holds focus; a done card shows its check. The 24px target is
+   pulled up and left, so the 16px circle sits on the title's first line and lines up with the
+   tags and the meta row below. */
 .toggle {
   flex: none;
-  margin-top: 2px;
+  margin: -2px calc(-1 * var(--space-1)) -2px calc(-1 * var(--space-1));
   opacity: 0.5;
   transition: opacity var(--dur-1) var(--ease-out);
 }
@@ -311,7 +271,8 @@ function onEditing(on: boolean): void {
   line-clamp: 3;
 }
 
-.is-done .title {
+.is-done .title,
+.is-context .title {
   color: var(--text-tertiary);
 }
 
@@ -327,38 +288,11 @@ function onEditing(on: boolean): void {
   min-width: 0;
 }
 
-.meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  min-height: 20px;
-  color: var(--text-secondary);
-}
-
-.spacer {
-  flex: 1 1 auto;
-}
-
 .kept {
   margin: 0;
   color: var(--text-tertiary);
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
-}
-
-/* The menu sits over the title's end, on the card's own colour once shown, so revealing it moves nothing. */
-.corner {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  border-radius: var(--radius-sm);
-}
-
-.board-card:hover .corner,
-.board-card:focus-within .corner,
-.corner:has([aria-expanded="true"]) {
-  background: linear-gradient(var(--card-tint), var(--card-tint)), var(--card-bg);
 }
 
 /* Touch screens show only the menu (8.1): the title keeps clear of it, and a done card's check is
