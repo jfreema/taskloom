@@ -11,6 +11,12 @@ public class TaskloomFactory : WebApplicationFactory<Program>
 {
     private readonly string _db = $"taskloom_test_{Guid.NewGuid():N}";
 
+    /// <summary>Where the run's uploads go; deleted with the database.</summary>
+    private string FilesRoot => Path.Combine(Path.GetTempPath(), _db);
+
+    /// <summary>Dev login (and with it POST /api/dev/seed) is on unless a subclass turns it off.</summary>
+    protected virtual bool DevLoginEnabled => true;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         var server = Environment.GetEnvironmentVariable("TASKLOOM_TEST_DB")
@@ -18,9 +24,9 @@ public class TaskloomFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Testing");
         // UseSetting (not ConfigureAppConfiguration) so values are visible while Program.cs builds services.
         builder.UseSetting("ConnectionStrings:Taskloom", $"{server};Database={_db}");
-        builder.UseSetting("Auth:DevLogin:Enabled", "true");
+        builder.UseSetting("Auth:DevLogin:Enabled", DevLoginEnabled ? "true" : "false");
         builder.UseSetting("FileStore:Provider", "Local");
-        builder.UseSetting("FileStore:Local:Root", Path.Combine(Path.GetTempPath(), _db));
+        builder.UseSetting("FileStore:Local:Root", FilesRoot);
     }
 
     public override async ValueTask DisposeAsync()
@@ -28,6 +34,7 @@ public class TaskloomFactory : WebApplicationFactory<Program>
         using (var scope = Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<Infrastructure.TaskloomDbContext>().Database.EnsureDeletedAsync();
         await base.DisposeAsync();
+        if (Directory.Exists(FilesRoot)) Directory.Delete(FilesRoot, recursive: true);
     }
 
     /// <summary>A client signed in as the given email, sending the CSRF header on every call.</summary>
@@ -39,4 +46,10 @@ public class TaskloomFactory : WebApplicationFactory<Program>
         res.EnsureSuccessStatusCode();
         return client;
     }
+}
+
+/// <summary>The API as deployed anywhere real: no dev login, so no dev endpoints.</summary>
+public class NoDevLoginFactory : TaskloomFactory
+{
+    protected override bool DevLoginEnabled => false;
 }

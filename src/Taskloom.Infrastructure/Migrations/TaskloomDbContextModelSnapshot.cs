@@ -104,6 +104,98 @@ namespace Taskloom.Infrastructure.Migrations
                     b.ToTable("spaces", (string)null);
                 });
 
+            modelBuilder.Entity("Taskloom.Domain.Tag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("#7A868C");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId", "NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("tags", (string)null);
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.TaskActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("TaskId", "CreatedAt");
+
+                    b.ToTable("task_activities", (string)null);
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.TaskAssignee", b =>
+                {
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TaskId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("task_assignees", (string)null);
+                });
+
             modelBuilder.Entity("Taskloom.Domain.TaskAttachment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -162,6 +254,9 @@ namespace Taskloom.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("EditedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("TaskId")
                         .HasColumnType("uuid");
 
@@ -180,9 +275,6 @@ namespace Taskloom.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("AssigneeId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -193,6 +285,10 @@ namespace Taskloom.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DescriptionText")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -229,8 +325,6 @@ namespace Taskloom.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssigneeId");
-
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("ParentTaskId");
@@ -264,6 +358,21 @@ namespace Taskloom.Infrastructure.Migrations
                     b.HasIndex("SpaceId");
 
                     b.ToTable("lists", (string)null);
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.TaskTag", b =>
+                {
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("TaskId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("task_tags", (string)null);
                 });
 
             modelBuilder.Entity("Taskloom.Domain.User", b =>
@@ -382,10 +491,51 @@ namespace Taskloom.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Taskloom.Domain.Tag", b =>
+                {
+                    b.HasOne("Taskloom.Domain.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.TaskActivity", b =>
+                {
+                    b.HasOne("Taskloom.Domain.User", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Taskloom.Domain.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Actor");
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.TaskAssignee", b =>
+                {
+                    b.HasOne("Taskloom.Domain.TaskItem", null)
+                        .WithMany("Assignees")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Taskloom.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Taskloom.Domain.TaskAttachment", b =>
                 {
                     b.HasOne("Taskloom.Domain.TaskItem", null)
-                        .WithMany()
+                        .WithMany("Attachments")
                         .HasForeignKey("TaskId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -406,7 +556,7 @@ namespace Taskloom.Infrastructure.Migrations
                         .IsRequired();
 
                     b.HasOne("Taskloom.Domain.TaskItem", null)
-                        .WithMany()
+                        .WithMany("Comments")
                         .HasForeignKey("TaskId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -416,11 +566,6 @@ namespace Taskloom.Infrastructure.Migrations
 
             modelBuilder.Entity("Taskloom.Domain.TaskItem", b =>
                 {
-                    b.HasOne("Taskloom.Domain.User", null)
-                        .WithMany()
-                        .HasForeignKey("AssigneeId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Taskloom.Domain.User", null)
                         .WithMany()
                         .HasForeignKey("CreatedById")
@@ -434,7 +579,7 @@ namespace Taskloom.Infrastructure.Migrations
                         .IsRequired();
 
                     b.HasOne("Taskloom.Domain.TaskItem", null)
-                        .WithMany()
+                        .WithMany("Subtasks")
                         .HasForeignKey("ParentTaskId")
                         .OnDelete(DeleteBehavior.Cascade);
 
@@ -454,6 +599,23 @@ namespace Taskloom.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Space");
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.TaskTag", b =>
+                {
+                    b.HasOne("Taskloom.Domain.Tag", "Tag")
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Taskloom.Domain.TaskItem", null)
+                        .WithMany("Tags")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tag");
                 });
 
             modelBuilder.Entity("Taskloom.Domain.UserIdentity", b =>
@@ -485,6 +647,19 @@ namespace Taskloom.Infrastructure.Migrations
             modelBuilder.Entity("Taskloom.Domain.Space", b =>
                 {
                     b.Navigation("Lists");
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.TaskItem", b =>
+                {
+                    b.Navigation("Assignees");
+
+                    b.Navigation("Attachments");
+
+                    b.Navigation("Comments");
+
+                    b.Navigation("Subtasks");
+
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("Taskloom.Domain.TaskList", b =>

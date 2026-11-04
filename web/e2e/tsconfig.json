@@ -1,0 +1,20 @@
+{
+  // Typechecks the end-to-end suite and the Playwright config on their own: cd web && npx tsc --noEmit -p e2e
+  // Deliberately not referenced from web/tsconfig.json, so the app build (vue-tsc -b) never depends on the tests.
+  "compilerOptions": {
+    "target": "ES2023",
+    // DOM for the code that page.evaluate() runs in the browser.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["./**/*.ts", "../playwright.config.ts"]
+}

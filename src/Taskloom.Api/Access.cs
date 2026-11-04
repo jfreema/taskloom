@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
@@ -13,6 +14,16 @@ public static class ClaimsExtensions
         Guid.TryParse(user.FindFirstValue(UserIdClaim), out var id)
             ? id
             : throw new UnauthorizedAccessException();
+}
+
+public static class HttpContextExtensions
+{
+    /// <summary>A 401 has no body (spec 5.1), so the status code pages middleware must not add a ProblemDetails one.</summary>
+    public static void RespondUnauthorized(this HttpContext ctx)
+    {
+        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        if (ctx.Features.Get<IStatusCodePagesFeature>() is { } pages) pages.Enabled = false;
+    }
 }
 
 public class NotFoundException : Exception;

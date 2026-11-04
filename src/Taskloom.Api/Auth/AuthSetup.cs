@@ -26,7 +26,7 @@ public static class AuthSetup
                 o.ExpireTimeSpan = TimeSpan.FromDays(14);
                 o.SlidingExpiration = true;
                 // The SPA handles navigation; API calls get status codes, not redirects.
-                o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = 401; return Task.CompletedTask; };
+                o.Events.OnRedirectToLogin = ctx => { ctx.HttpContext.RespondUnauthorized(); return Task.CompletedTask; };
                 o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = 403; return Task.CompletedTask; };
             });
 
@@ -81,27 +81,28 @@ public static class AuthSetup
     {
         var g = app.MapGroup("/auth");
 
-        g.MapGet("/providers", (AuthOptions o) => new
-        {
-            devLogin = o.DevLogin.Enabled,
-            providers = o.Providers.Where(p => p.Value.IsConfigured)
-                .Select(p => new { key = p.Key.ToLowerInvariant(), displayName = string.IsNullOrEmpty(p.Value.DisplayName) ? p.Key : p.Value.DisplayName }),
-        });
+        g.MapGet("/providers", (AuthOptions o) => new AuthProvidersDto(
+            o.DevLogin.Enabled,
+            o.Providers.Where(p => p.Value.IsConfigured)
+                .Select(p => new AuthProviderDto(p.Key.ToLowerInvariant(), string.IsNullOrEmpty(p.Value.DisplayName) ? p.Key : p.Value.DisplayName))
+                .ToList()));
 
         g.MapGet("/login/{provider}", (string provider, string? returnUrl, AuthOptions o) =>
         {
             if (!o.Providers.TryGetValue(provider, out var p) || !p.IsConfigured) return Results.NotFound();
-            var target = returnUrl is not null && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//") ? returnUrl : "/";
-            return Results.Challenge(new AuthenticationProperties { RedirectUri = target }, [OidcSchemePrefix + provider.ToLowerInvariant()]);
+            // Only local paths (spec 5.8); anything else returns to "/".
+            return Results.Challenge(new AuthenticationProperties { RedirectUri = ReturnUrls.Safe(returnUrl) }, [OidcSchemePrefix + provider.ToLowerInvariant()]);
         });
 
         g.MapPost("/dev-login", async (DevLoginRequest req, AuthOptions o, UserProvisioning provisioning, HttpContext http) =>
         {
             if (!o.DevLogin.Enabled) return Results.NotFound();
-            if (string.IsNullOrWhiteSpace(req.Email) || !req.Email.Contains('@'))
-                return Results.ValidationProblem(new Dictionary<string, string[]> { ["email"] = ["Enter an email address."] });
-            var email = req.Email.Trim().ToLowerInvariant();
-            var user = await provisioning.FindOrCreateAsync("dev", email, email, req.DisplayName);
+            var email = Emails.Normalize(req.Email);
+            if (email is null) return Problems.BadRequest(Emails.InvalidMessage);
+            // A blank name is guessed from the email (spec 5.5, NameGuess).
+            var displayName = req.DisplayName?.Trim();
+            if (displayName is { Length: > Limits.Name }) return Problems.BadRequest("Display names can be up to 200 characters.");
+            var user = await provisioning.FindOrCreateAsync("dev", email, email, displayName);
             await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, UserProvisioning.PrincipalFor(user, "dev"));
             return Results.Ok(new UserDto(user.Id, user.Email, user.DisplayName));
         }).AddEndpointFilter<RequireTaskloomHeader>();
@@ -114,7 +115,7 @@ public static class AuthSetup
     }
 }
 
-public record DevLoginRequest(string Email, string? DisplayName);
+public record DevLoginRequest(string? Email, string? DisplayName);
 
 /// <summary>
 /// CSRF guard: state-changing calls must carry an "X-Taskloom: 1" header. A cross-site form

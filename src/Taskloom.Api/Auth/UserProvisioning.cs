@@ -22,7 +22,10 @@ public class UserProvisioning(TaskloomDbContext db)
         var isNew = user is null;
         if (user is null)
         {
-            user = new User { Email = email, DisplayName = string.IsNullOrWhiteSpace(displayName) ? email.Split('@')[0] : displayName };
+            // The provider's name, else one guessed from the email ("ana.moreno@" gives "Ana Moreno").
+            var name = displayName?.Trim();
+            if (name is { Length: > Limits.Name }) name = Text.Truncate(name, Limits.Name).TrimEnd();
+            user = new User { Email = email, DisplayName = string.IsNullOrEmpty(name) ? NameGuess.FromEmail(email) : name };
             db.Users.Add(user);
         }
         db.UserIdentities.Add(new UserIdentity { UserId = user.Id, Provider = provider, Subject = subject });

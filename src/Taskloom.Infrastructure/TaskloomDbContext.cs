@@ -16,6 +16,10 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<TaskComment> Comments => Set<TaskComment>();
     public DbSet<TaskAttachment> Attachments => Set<TaskAttachment>();
+    public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
+    public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<TaskTag> TaskTags => Set<TaskTag>();
+    public DbSet<TaskActivity> Activities => Set<TaskActivity>();
     /// <summary>ASP.NET Core data protection keys, so cookies survive restarts and work across replicas.</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
@@ -75,12 +79,12 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
         {
             e.ToTable("tasks");
             e.Property(x => x.Title).HasMaxLength(500);
+            e.Property(x => x.DescriptionText).HasColumnType("text").IsRequired();
             e.Property(x => x.Priority).HasConversion<string>().HasMaxLength(20);
             e.HasOne<TaskList>().WithMany().HasForeignKey(x => x.ListId).OnDelete(DeleteBehavior.Cascade);
             // NO ACTION (checked at end of statement) so deleting a list removes its tasks and statuses together.
             e.HasOne<ListStatus>().WithMany().HasForeignKey(x => x.StatusId).OnDelete(DeleteBehavior.NoAction);
-            e.HasOne<TaskItem>().WithMany().HasForeignKey(x => x.ParentTaskId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.AssigneeId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<TaskItem>().WithMany(x => x.Subtasks).HasForeignKey(x => x.ParentTaskId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.ListId, x.StatusId, x.Position });
             e.HasIndex(x => x.ParentTaskId);
@@ -88,7 +92,7 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
         b.Entity<TaskComment>(e =>
         {
             e.ToTable("task_comments");
-            e.HasOne<TaskItem>().WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<TaskItem>().WithMany(x => x.Comments).HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Author).WithMany().HasForeignKey(x => x.AuthorId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.TaskId);
         });
@@ -98,9 +102,44 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
             e.Property(x => x.FileName).HasMaxLength(255);
             e.Property(x => x.ContentType).HasMaxLength(255);
             e.Property(x => x.StorageKey).HasMaxLength(500);
-            e.HasOne<TaskItem>().WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<TaskItem>().WithMany(x => x.Attachments).HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UploadedById).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.TaskId);
+        });
+        b.Entity<TaskAssignee>(e =>
+        {
+            e.ToTable("task_assignees");
+            e.HasKey(x => new { x.TaskId, x.UserId });
+            e.HasOne<TaskItem>().WithMany(x => x.Assignees).HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.UserId);
+        });
+        b.Entity<Tag>(e =>
+        {
+            e.ToTable("tags");
+            e.Property(x => x.Name).HasMaxLength(50);
+            e.Property(x => x.NormalizedName).HasMaxLength(50);
+            e.Property(x => x.Color).HasMaxLength(20).HasDefaultValue(Palette.Slate);
+            e.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.WorkspaceId, x.NormalizedName }).IsUnique();
+        });
+        b.Entity<TaskTag>(e =>
+        {
+            e.ToTable("task_tags");
+            e.HasKey(x => new { x.TaskId, x.TagId });
+            e.HasOne<TaskItem>().WithMany(x => x.Tags).HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Tag).WithMany().HasForeignKey(x => x.TagId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.TagId);
+        });
+        b.Entity<TaskActivity>(e =>
+        {
+            e.ToTable("task_activities");
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30);
+            e.Property(x => x.FromValue).HasMaxLength(500);
+            e.Property(x => x.ToValue).HasMaxLength(500);
+            e.HasOne<TaskItem>().WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Actor).WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.TaskId, x.CreatedAt });
         });
     }
 }
