@@ -146,32 +146,34 @@ export function useHomeKeyboard(o: {
     document.removeEventListener('pointerdown', onPointerDown, true)
   })
 
-  /** The focused row left its place: focus the next row of the old order, else the previous, else a header. */
+  /**
+   * The focused row left its place (9.6): focus the next row of the old order, else the previous,
+   * else a section header. A row that only moved to another section counts as gone from here.
+   */
   function rescue(prev: Uuid[], next: Uuid[], id: Uuid): void {
     const shown = new Set(next)
+    shown.delete(id)
     const i = prev.indexOf(id)
     let target: Uuid | undefined
-    for (let j = i + 1; j < prev.length && !target; j++) if (prev[j] !== id && shown.has(prev[j])) target = prev[j]
+    for (let j = i + 1; j < prev.length && !target; j++) if (shown.has(prev[j])) target = prev[j]
     for (let j = i - 1; j >= 0 && !target; j--) if (shown.has(prev[j])) target = prev[j]
+    if (!target) target = next.find((x) => x !== id)
     const el = target ? rowEl(target) : null
+    lastFocusedId = null
     if (el) focusRow(el)
     else o.container.value?.querySelector<HTMLElement>('[data-section-toggle]')?.focus({ preventScroll: true })
   }
 
+  // Runs after the DOM update: a focused row that left (or moved to another section, which renders
+  // it anew) has dropped focus to the body by then. Overlays return focus before the update, so a
+  // picker or menu closed from the row has already put focus back in it.
   watch(
     o.order,
     (next, prev) => {
       const id = lastFocusedId
       if (!id || !prev) return
       const a = document.activeElement
-      const lost = !a || a === document.body
-      if (!lost) return
-      // Still rendered in the same place (a refresh): put focus back on it.
-      const same = rowEl(id)
-      if (same && next.indexOf(id) === prev.indexOf(id)) {
-        focusRow(same)
-        return
-      }
+      if (a && a !== document.body && a.isConnected) return
       rescue(prev, next, id)
     },
     { flush: 'post' },

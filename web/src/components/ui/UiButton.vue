@@ -329,12 +329,13 @@ function onLinkClick(e: MouseEvent, navigate: (e?: MouseEvent) => unknown): void
   opacity: 0;
 }
 
-/* Key hints on filled buttons follow the label colour. */
+/* Key hints on filled buttons follow the label colour, on the button's own fill: any tint
+   lowers the 11px cap's contrast (white on the light accent drops from 5.7:1 to 4.3:1). */
 .ui-button--primary .kbd :deep(.cap),
 .ui-button--danger .kbd :deep(.cap) {
   color: inherit;
   border-color: color-mix(in srgb, currentColor 30%, transparent);
-  background: color-mix(in srgb, currentColor 14%, transparent);
+  background: transparent;
 }
 
 .kbd {

@@ -14,8 +14,8 @@ import type { ListboxOption } from '../ui/listbox'
 import UiIcon from '../ui/UiIcon.vue'
 import UiKbd from '../ui/UiKbd.vue'
 import UiListbox from '../ui/UiListbox.vue'
-import UiPopover from '../ui/UiPopover.vue'
 import FieldTrigger from './FieldTrigger.vue'
+import LazyPopover from './LazyPopover.vue'
 import StatusIcon from './StatusIcon.vue'
 import StatusPill from './StatusPill.vue'
 import { triggerLabel } from './fieldLabel'
@@ -34,8 +34,10 @@ const props = withDefaults(
     readonly?: boolean
     anchor?: HTMLElement | null
     hideTrigger?: boolean
+    /** Mounts the popover only once used (List rows the pointer or focus hasn't reached yet). */
+    lazy?: boolean
   }>(),
-  { variant: 'pill', size: 24, readonly: false, anchor: null, hideTrigger: false },
+  { variant: 'pill', size: 24, readonly: false, anchor: null, hideTrigger: false, lazy: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [statusId: Uuid] }>()
@@ -97,7 +99,7 @@ function editStatuses(): void {
       <StatusIcon :status="shown" :size="iconSize" :decorative="false" />
     </span>
   </template>
-  <UiPopover v-else v-model:open="open" role="listbox" :anchor="anchor" :width="240">
+  <LazyPopover v-else v-model:open="open" :lazy="lazy" role="listbox" :anchor="anchor" :width="240">
     <template v-if="!hideTrigger" #trigger="{ props: t }">
       <FieldTrigger
         v-bind="{ ...$attrs, ...t }"
@@ -132,7 +134,7 @@ function editStatuses(): void {
         </template>
       </UiListbox>
     </template>
-  </UiPopover>
+  </LazyPopover>
 </template>
 
 <style scoped>

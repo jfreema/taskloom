@@ -229,12 +229,15 @@ table {
     user-select: none;
   }
 
-  /* 7.4: 16px text in fields, so iOS doesn't zoom. */
+  /* 7.4: at least 16px text in fields, so iOS doesn't zoom. A minimum, so larger fields keep
+     their size: 1em is the parent's size here, which covers a field that inherits larger text
+     (an inline edit in a heading); a field that sets a larger size on itself also names that
+     size in --field-font-size, on the field itself (custom properties inherit). */
   input,
   textarea,
   select,
   [contenteditable="true"] {
-    font-size: 16px !important;
+    font-size: max(16px, var(--field-font-size, 1em)) !important;
   }
 }
 
@@ -309,6 +312,7 @@ table {
 }
 
 .rich-text pre {
+  margin: 0;
   font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 18px;
@@ -345,6 +349,13 @@ table {
 
 .rich-text li > p {
   margin: 0;
+}
+
+/* 8px between blocks, after the margin resets above (same specificity, so it must come later):
+   a paragraph after a list, quote or code block, or a list after a paragraph, would otherwise
+   touch it. Headings and rules keep their own margins. */
+.rich-text > * + :is(p, ul, ol, blockquote, pre) {
+  margin-top: var(--space-2);
 }
 
 .rich-text hr {

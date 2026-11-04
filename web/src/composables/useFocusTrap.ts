@@ -1,6 +1,7 @@
 // Focus trap for modal layers (spec 7.7). While active, focus stays inside `el`, inside any layer
 // stacked above it (a picker opened from a dialog), or inside a region marked data-layer-allow
-// (the notifications region). Tab and Shift+Tab wrap at the ends. `el` must be the element of a
+// (the notifications region). Tab and Shift+Tab wrap at the ends, also from a focused element that
+// isn't tabbable (the container or a tabindex -1 focus root). `el` must be the element of a
 // registered layer (useLayer): the trap acts only while that layer is in the stack.
 import { getCurrentInstance, onBeforeUnmount, watch, type Ref } from 'vue'
 import { useLayerStack } from './useLayerStack'
@@ -28,6 +29,11 @@ function isVisible(el: HTMLElement): boolean {
 export function tabbables(container: HTMLElement): HTMLElement[] {
   const found = Array.from(container.querySelectorAll<HTMLElement>(TABBABLE))
   return found.filter((el) => el.tabIndex >= 0 && !el.closest('[inert]') && isVisible(el))
+}
+
+/** Whether `a` comes before `b` in document order, or contains it. */
+function precedesOrContains(a: Node, b: Node): boolean {
+  return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
 }
 
 /** Focuses the element matching `selector`, else the first tabbable element, else the container. */
@@ -73,10 +79,17 @@ export function useFocusTrap(el: Ref<HTMLElement | null>, active: Ref<boolean>):
     }
     const first = items[0]
     const last = items[items.length - 1]
-    if (e.shiftKey && (current === first || current === container)) {
+    // Focus can also rest on an element that isn't tabbable: the container, or a focus root with
+    // tabindex -1 (the task panel's). The browser would then move focus out of the layer (to the
+    // body, which fires no focusin), so wrap when no tabbable lies before it (Shift+Tab) or after
+    // it (Tab).
+    const tabbable = items.includes(current as HTMLElement)
+    const atStart = current === first || (!tabbable && precedesOrContains(current, first))
+    const atEnd = current === last || (!tabbable && !current.contains(last) && precedesOrContains(last, current))
+    if (e.shiftKey && atStart) {
       e.preventDefault()
       last.focus()
-    } else if (!e.shiftKey && current === last) {
+    } else if (!e.shiftKey && atEnd) {
       e.preventDefault()
       first.focus()
     }

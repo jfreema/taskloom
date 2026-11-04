@@ -13,9 +13,9 @@ import { formatDateLong, formatDue } from '../../lib/dates'
 import type { IsoDate } from '../../types'
 import UiDatePicker from '../ui/UiDatePicker.vue'
 import UiIcon from '../ui/UiIcon.vue'
-import UiPopover from '../ui/UiPopover.vue'
 import DueDate from './DueDate.vue'
 import FieldTrigger from './FieldTrigger.vue'
+import LazyPopover from './LazyPopover.vue'
 import { triggerLabel } from './fieldLabel'
 
 defineOptions({ inheritAttrs: false })
@@ -33,8 +33,10 @@ const props = withDefaults(
     readonly?: boolean
     anchor?: HTMLElement | null
     hideTrigger?: boolean
+    /** Mounts the popover only once used (List rows the pointer or focus hasn't reached yet). */
+    lazy?: boolean
   }>(),
-  { otherDate: null, variant: 'cell', done: false, readonly: false, anchor: null, hideTrigger: false },
+  { otherDate: null, variant: 'cell', done: false, readonly: false, anchor: null, hideTrigger: false, lazy: false },
 )
 
 const emit = defineEmits<{
@@ -77,9 +79,10 @@ function pick(v: IsoDate | null): void {
     </template>
     <span v-else-if="variant === 'field'" class="none">None</span>
   </span>
-  <UiPopover
+  <LazyPopover
     v-else
     v-model:open="open"
+    :lazy="lazy"
     :anchor="anchor"
     :aria-label="fieldName"
     width="auto"
@@ -114,7 +117,7 @@ function pick(v: IsoDate | null): void {
         @cancel="open = false"
       />
     </template>
-  </UiPopover>
+  </LazyPopover>
 </template>
 
 <style scoped>

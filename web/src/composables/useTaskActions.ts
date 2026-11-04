@@ -74,7 +74,7 @@ export function useTaskActions(): {
   const announce = useAnnouncer()
   const clipboard = useClipboard()
   const panel = useTaskPanel()
-  const { coarse } = useBreakpoint()
+  const { coarse, isPhone } = useBreakpoint()
 
   /** Complete or reopen, with the undo toast and the completion hold. */
   function toggleComplete(id: Uuid): Promise<void> {
@@ -228,7 +228,8 @@ export function useTaskActions(): {
       if (top) items.push({ id: 'move-list', label: 'Move to list…', icon: FolderInput, onSelect: () => openMoveDialog([t.id]) })
     }
 
-    if (variant === 'row' && top && coarse.value) {
+    // Phones have no selection (8.7), so "Select" is for coarse pointers on larger screens only.
+    if (variant === 'row' && top && coarse.value && !isPhone.value) {
       items.push({ id: 'select', label: 'Select', icon: SquareCheck, onSelect: () => startSelecting(t) })
     }
 

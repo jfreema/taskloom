@@ -1,28 +1,22 @@
 <script setup lang="ts">
 // One Home row (8.5): 40px, `data-row`, `data-task-row`. The complete circle in the status colour,
-// the title (subtasks add "in <parent>"), subtask progress, the location link, the due date, the
-// flag and the people, or "Unassigned" when it shows only because I created it. Revealed actions:
-// Reschedule (the parent opens the shared date picker on this row) and the shared row menu.
-// The row is one roving tab stop; its controls are tabbable only while it is the tab stop.
-// Below 640px of page width (container `page`) it takes two lines (56px).
+// the title (subtasks add "in <parent>"), subtask progress, then the details (HomeRowMeta: location,
+// due date, flag, people). Revealed actions: Reschedule (the parent opens the shared date picker on
+// this row) and the shared row menu. The row is one roving tab stop; its controls are tabbable only
+// while it is the tab stop. Below 640px of page width (container `page`) it takes two lines (56px).
 import { computed, ref } from 'vue'
 import { CalendarClock, Ellipsis } from '@lucide/vue'
 import { useTaskActions } from '../../composables/useTaskActions'
 import { useToday } from '../../composables/useToday'
 import { formatDue } from '../../lib/dates'
-import { useMembers } from '../../stores/members'
 import { useTasks } from '../../stores/tasks'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { Task } from '../../types'
 import CompleteToggle from '../fields/CompleteToggle.vue'
-import DueDate from '../fields/DueDate.vue'
-import PriorityFlag from '../fields/PriorityFlag.vue'
-import SpaceTile from '../fields/SpaceTile.vue'
 import SubtaskProgress from '../fields/SubtaskProgress.vue'
-import UiAvatarStack from '../ui/UiAvatarStack.vue'
-import UiBadge from '../ui/UiBadge.vue'
 import UiIconButton from '../ui/UiIconButton.vue'
 import UiMenu from '../ui/UiMenu.vue'
+import HomeRowMeta from './HomeRowMeta.vue'
 
 const props = defineProps<{
   task: Task
@@ -42,7 +36,6 @@ const emit = defineEmits<{
 
 const tasks = useTasks()
 const workspaces = useWorkspaces()
-const members = useMembers()
 const actions = useTaskActions()
 const today = useToday()
 
@@ -55,8 +48,6 @@ const parentTitle = computed(() => {
   const id = props.task.parentTaskId
   return id ? (tasks.get(id)?.title ?? tasks.refs[id]?.title ?? null) : null
 })
-const location = computed(() => workspaces.findList(props.task.listId))
-const people = computed(() => props.task.assigneeIds.map((id) => ({ id, displayName: members.nameOf(id) })))
 const readonly = computed(() => !props.canEdit || tasks.isPendingDelete(props.task.id))
 /** Controls inside the row join the tab order only while the row is the tab stop. */
 const inner = computed(() => (props.tabStop ? undefined : -1))
@@ -120,28 +111,7 @@ defineExpose({ el: root })
       <span v-if="parentTitle" class="parent truncate">in {{ parentTitle }}</span>
       <SubtaskProgress :done="task.subtaskDoneCount" :total="task.subtaskCount" />
     </span>
-    <span class="meta">
-      <RouterLink
-        v-if="location"
-        v-tooltip="{ text: `${location.space.name} / ${location.list.name}`, overflowOnly: true }"
-        class="location"
-        :to="`/l/${task.listId}`"
-        :tabindex="inner"
-      >
-        <SpaceTile :space="location.space" :size="16" />
-        <span class="truncate">{{ location.space.name }} / {{ location.list.name }}</span>
-      </RouterLink>
-      <span v-else class="location" />
-      <span class="due">
-        <span v-if="task.dueDate" class="sep" aria-hidden="true">·</span>
-        <DueDate :date="task.dueDate" :done="done" size="sm" />
-      </span>
-      <span class="flag"><PriorityFlag v-if="task.priority !== 'None'" :priority="task.priority" :size="14" /></span>
-      <span class="people">
-        <UiAvatarStack v-if="people.length" :users="people" :max="3" :size="20" />
-        <UiBadge v-else>Unassigned</UiBadge>
-      </span>
-    </span>
+    <HomeRowMeta class="meta" :task="task" :done="done" :tabindex="inner" />
     <span class="actions">
       <UiIconButton
         v-if="!readonly"
@@ -225,43 +195,6 @@ defineExpose({ el: root })
 
 .meta {
   grid-area: meta;
-  display: grid;
-  grid-template-columns: minmax(0, 200px) 88px 16px 76px;
-  align-items: center;
-  column-gap: var(--space-3);
-  min-width: 0;
-}
-
-.location {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  min-width: 0;
-  max-width: 200px;
-  min-height: var(--control-xs);
-  border-radius: var(--radius-xs);
-  color: var(--text-tertiary);
-  font-size: var(--fs-xs);
-  line-height: var(--lh-xs);
-  text-decoration: none;
-}
-
-a.location:hover {
-  color: var(--text-secondary);
-  text-decoration: underline;
-}
-
-.due,
-.flag,
-.people {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.sep {
-  display: none;
-  color: var(--text-tertiary);
 }
 
 .actions {
@@ -282,34 +215,6 @@ a.location:hover {
     min-height: 56px;
     padding-top: var(--space-1);
     padding-bottom: var(--space-1);
-  }
-
-  .meta {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1-5);
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .location {
-    flex: 0 1 auto;
-    max-width: 60%;
-  }
-
-  .due,
-  .flag,
-  .people {
-    flex: none;
-    gap: var(--space-1-5);
-  }
-
-  .flag:empty {
-    display: none;
-  }
-
-  .sep {
-    display: inline;
   }
 }
 </style>

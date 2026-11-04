@@ -103,7 +103,7 @@ function afterLeave(): void {
     @after-leave="afterLeave"
   >
     <form :id="formId" class="form" novalidate @submit.prevent="submit">
-      <UiInlineAlert v-if="noListHint" tone="info">Create a list to hold your tasks first. It starts with a space.</UiInlineAlert>
+      <UiInlineAlert v-if="noListHint" tone="info">Create a list to hold your tasks first. Lists live in spaces, so start with a space.</UiInlineAlert>
       <UiField label="Name" :error="error || undefined">
         <template #default="{ id, describedBy, invalid }">
           <UiInput

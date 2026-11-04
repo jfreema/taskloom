@@ -20,8 +20,8 @@ import UiAvatar from '../ui/UiAvatar.vue'
 import UiAvatarStack from '../ui/UiAvatarStack.vue'
 import UiIcon from '../ui/UiIcon.vue'
 import UiListbox from '../ui/UiListbox.vue'
-import UiPopover from '../ui/UiPopover.vue'
 import FieldTrigger from './FieldTrigger.vue'
+import LazyPopover from './LazyPopover.vue'
 import { joinNames, triggerLabel } from './fieldLabel'
 import { queryNear } from './pickerQuery'
 
@@ -40,8 +40,10 @@ const props = withDefaults(
     readonly?: boolean
     anchor?: HTMLElement | null
     hideTrigger?: boolean
+    /** Mounts the popover only once used (List rows the pointer or focus hasn't reached yet). */
+    lazy?: boolean
   }>(),
-  { taskIds: () => [], variant: 'stack', max: 3, size: 24, readonly: false, anchor: null, hideTrigger: false },
+  { taskIds: () => [], variant: 'stack', max: 3, size: 24, readonly: false, anchor: null, hideTrigger: false, lazy: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [ids: Uuid[]] }>()
@@ -123,7 +125,7 @@ async function invite(e: MouseEvent): Promise<void> {
       <span v-else class="muted">Unassigned</span>
     </span>
   </template>
-  <UiPopover v-else v-model:open="open" role="listbox" :anchor="anchor" :width="300">
+  <LazyPopover v-else v-model:open="open" :lazy="lazy" role="listbox" :anchor="anchor" :width="300">
     <template v-if="!hideTrigger" #trigger="{ props: t }">
       <FieldTrigger
         v-bind="{ ...$attrs, ...t }"
@@ -190,7 +192,7 @@ async function invite(e: MouseEvent): Promise<void> {
         </template>
       </UiListbox>
     </template>
-  </UiPopover>
+  </LazyPopover>
 </template>
 
 <style scoped>

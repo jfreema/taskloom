@@ -38,7 +38,10 @@ export const SHORTCUTS: ShortcutInfo[] = [
   { keys: 'P', label: 'Change the priority', group: 'Lists and boards' },
   { keys: 'F2', label: 'Rename', group: 'Lists and boards' },
   { keys: 'Delete', label: 'Delete, with undo', group: 'Lists and boards' },
+  // Alternatives share their partner's group and label; the shortcuts dialog merges them into one row.
+  { keys: 'Mod+Backspace', label: 'Delete, with undo', group: 'Lists and boards' },
   { keys: 'Shift+F10', label: 'Open the row or card menu', group: 'Lists and boards' },
+  { keys: 'ContextMenu', label: 'Open the row or card menu', group: 'Lists and boards' },
   { keys: 'Alt+ArrowUp', label: 'Move up one place', group: 'Lists and boards' },
   { keys: 'Alt+ArrowDown', label: 'Move down one place', group: 'Lists and boards' },
   { keys: 'Alt+ArrowLeft', label: 'Move the card to the previous column', group: 'Lists and boards' },

@@ -1,6 +1,10 @@
 // Home's data (8.5): the "mine" load with its fresh-data refresh (8.1), the persisted scope and
 // collapsed sections, and the sections computed from the tasks store.
-import { computed, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
+//
+// What Home last loaded is kept for the app's life (not per mount), so coming back to Home renders
+// the store at once and refreshes silently when the data is older than 30s. Any reset of the tasks
+// store (a workspace switch, sign-out) forgets it, so a fresh store always gets a full load.
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue'
 import { useToday } from '../../composables/useToday'
 import { isAbortError } from '../../lib/async'
 import { addDaysIso } from '../../lib/dates'
@@ -20,11 +24,15 @@ import {
   type HomeSections,
 } from './homeSections'
 
-/** Data on screen older than this is refetched when the window regains focus (8.1). */
+/** Data on screen older than this is refetched when the window regains focus or Home mounts again (8.1). */
 const STALE_MS = 30_000
 
+/** The last complete Home load: which workspace and user, and when. */
+const lastLoad = shallowRef<{ wsId: Uuid; userId: Uuid; at: number } | null>(null)
+let watchingResets = false
+
 export interface HomeData {
-  /** The first load for the current workspace is running. */
+  /** The first load for the current workspace is running (nothing to show yet). */
   loading: ComputedRef<boolean>
   /** The first load failed (a failed refresh keeps the old content). */
   error: Ref<unknown>
@@ -34,9 +42,12 @@ export interface HomeData {
   scope: Ref<HomeScope>
   collapsed: Ref<Record<HomeSectionKey, boolean>>
   toggleSection(key: HomeSectionKey): void
+  expand(key: HomeSectionKey): void
   sections: ComputedRef<HomeSections>
-  /** Every task of mine (All mine) that is open or was completed this week: none means first run. */
+  /** Any task of mine (All mine) that is open or was completed this week: none means first run. */
   hasAnyTask: ComputedRef<boolean>
+  /** Open tasks in the current scope. */
+  openCount: ComputedRef<number>
   /** Open tasks due today and overdue, in the current scope, for the subline. */
   dueTodayCount: ComputedRef<number>
   overdueCount: ComputedRef<number>
@@ -48,22 +59,32 @@ export function useHomeData(): HomeData {
   const session = useSession()
   const today = useToday()
 
+  if (!watchingResets) {
+    watchingResets = true
+    // Detached: it outlives this mount, like `lastLoad`.
+    tasks.$onAction(({ name }) => {
+      if (name === 'reset') lastLoad.value = null
+    }, true)
+  }
+
   const meId = computed(() => session.user?.id ?? null)
 
   // ---- Loading ----
 
   const running = ref(false)
   const error = ref<unknown>(null)
-  const loadedWs = ref<Uuid | null>(null)
-  let loadedAt = 0
   let controller: AbortController | null = null
 
-  const ready = computed(() => !!workspaces.currentId && loadedWs.value === workspaces.currentId)
+  const ready = computed(() => {
+    const l = lastLoad.value
+    return !!l && l.wsId === workspaces.currentId && l.userId === meId.value
+  })
   const loading = computed(() => running.value && !ready.value && !error.value)
 
   async function load(o: { silent?: boolean } = {}): Promise<void> {
     const wsId = workspaces.currentId
-    if (!wsId) return
+    const userId = meId.value
+    if (!wsId || !userId) return
     controller?.abort()
     const c = new AbortController()
     controller = c
@@ -75,14 +96,13 @@ export function useHomeData(): HomeData {
         { scope: 'mine', includeDone: false, doneSince: addDaysIso(today.value, -7) },
         { signal: c.signal },
       )
-      if (controller !== c) return
-      loadedWs.value = wsId
-      loadedAt = Date.now()
+      if (controller !== c || workspaces.currentId !== wsId) return
+      lastLoad.value = { wsId, userId, at: Date.now() }
       error.value = null
     } catch (err) {
       if (controller !== c || isAbortError(err)) return
       // A silent refresh keeps what is on screen; only a page without data shows the error.
-      if (!o.silent || loadedWs.value !== wsId) error.value = err
+      if (!o.silent || !ready.value) error.value = err
     } finally {
       if (controller === c) {
         controller = null
@@ -91,13 +111,27 @@ export function useHomeData(): HomeData {
     }
   }
 
-  watch(() => workspaces.currentId, () => void load(), { immediate: true })
+  function isStale(): boolean {
+    const l = lastLoad.value
+    return !l || Date.now() - l.at > STALE_MS
+  }
+
+  // A workspace (or user) Home hasn't loaded yet gets a full load; the same one, a silent refresh
+  // when it is stale. `immediate` covers the mount.
+  watch(
+    [() => workspaces.currentId, meId],
+    () => {
+      if (!ready.value) void load()
+      else if (isStale()) void load({ silent: true })
+    },
+    { immediate: true },
+  )
   // A new day moves the "completed this week" window.
   watch(today, () => void load({ silent: true }))
 
   function refreshIfStale(): void {
     if (document.visibilityState === 'hidden' || !ready.value || running.value) return
-    if (Date.now() - loadedAt > STALE_MS) void load({ silent: true })
+    if (isStale()) void load({ silent: true })
   }
 
   function onVisibility(): void {
@@ -140,9 +174,18 @@ export function useHomeData(): HomeData {
     if (meId.value) writeString(userKey('taskloom.home.scope', meId.value), s)
   })
 
-  function toggleSection(key: HomeSectionKey): void {
-    collapsed.value = { ...collapsed.value, [key]: !collapsed.value[key] }
+  function setCollapsed(key: HomeSectionKey, value: boolean): void {
+    if (collapsed.value[key] === value) return
+    collapsed.value = { ...collapsed.value, [key]: value }
     if (meId.value) writeJson(userKey('taskloom.home.collapsed', meId.value), collapsed.value)
+  }
+
+  function toggleSection(key: HomeSectionKey): void {
+    setCollapsed(key, !collapsed.value[key])
+  }
+
+  function expand(key: HomeSectionKey): void {
+    setCollapsed(key, false)
   }
 
   // ---- Sections ----
@@ -154,10 +197,11 @@ export function useHomeData(): HomeData {
     const me = meId.value
     if (!me || !ready.value) return []
     const lists = listIds.value
+    const held = tasks.recentlyCompleted
     const out: Task[] = []
     for (const t of Object.values(tasks.byId)) {
       if (!lists.has(t.listId) || tasks.isPendingDelete(t.id) || !isMine(t, me, 'mine')) continue
-      if (tasks.isDone(t) && !tasks.recentlyCompleted.has(t.id) && !completedThisWeek(t, today.value)) continue
+      if (tasks.isDone(t) && !held.has(t.id) && !completedThisWeek(t, today.value)) continue
       out.push(t)
     }
     return out
@@ -170,9 +214,26 @@ export function useHomeData(): HomeData {
   })
 
   const hasAnyTask = computed(() => mine.value.length > 0)
-  const openCount = (list: Task[]) => list.filter((t) => !tasks.isDone(t)).length
-  const dueTodayCount = computed(() => openCount(sections.value.today))
-  const overdueCount = computed(() => openCount(sections.value.overdue))
+  const countOpen = (list: Task[]) => list.reduce((n, t) => (tasks.isDone(t) ? n : n + 1), 0)
+  const dueTodayCount = computed(() => countOpen(sections.value.today))
+  const overdueCount = computed(() => countOpen(sections.value.overdue))
+  const openCount = computed(() =>
+    HOME_SECTIONS.reduce((n, key) => (key === 'completed' ? n : n + countOpen(sections.value[key])), 0),
+  )
 
-  return { loading, error, ready, load, scope, collapsed, toggleSection, sections, hasAnyTask, dueTodayCount, overdueCount }
+  return {
+    loading,
+    error,
+    ready,
+    load,
+    scope,
+    collapsed,
+    toggleSection,
+    expand,
+    sections,
+    hasAnyTask,
+    openCount,
+    dueTodayCount,
+    overdueCount,
+  }
 }

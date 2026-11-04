@@ -127,7 +127,9 @@ function onScrimClick(e: MouseEvent): void {
           tabindex="-1"
           data-sheet
         >
-          <header class="header" :class="{ 'sr-only': hideHeader }">
+          <!-- Plain divs: a <header> or <footer> outside main and sectioning elements is a banner or
+               contentinfo landmark, and a dialog must not add landmarks to the page. -->
+          <div class="header" :class="{ 'sr-only': hideHeader }">
             <div class="heading">
               <h2 :id="titleId" class="title">{{ title }}</h2>
               <p v-if="description" :id="descId" class="description">{{ description }}</p>
@@ -142,9 +144,9 @@ function onScrimClick(e: MouseEvent): void {
                 @click="requestClose('button')"
               />
             </div>
-          </header>
+          </div>
           <div v-if="$slots.default" ref="body" class="body" :class="{ 'no-header': hideHeader }"><slot /></div>
-          <footer v-if="$slots.footer" ref="footer" class="footer"><slot name="footer" /></footer>
+          <div v-if="$slots.footer" ref="footer" class="footer"><slot name="footer" /></div>
         </div>
       </div>
     </Transition>

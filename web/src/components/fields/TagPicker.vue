@@ -17,8 +17,8 @@ import type { Tag, Uuid } from '../../types'
 import type { ListboxOption } from '../ui/listbox'
 import UiIcon from '../ui/UiIcon.vue'
 import UiListbox from '../ui/UiListbox.vue'
-import UiPopover from '../ui/UiPopover.vue'
 import FieldTrigger from './FieldTrigger.vue'
+import LazyPopover from './LazyPopover.vue'
 import TagList from './TagList.vue'
 import { joinNames, triggerLabel } from './fieldLabel'
 
@@ -37,8 +37,10 @@ const props = withDefaults(
     readonly?: boolean
     anchor?: HTMLElement | null
     hideTrigger?: boolean
+    /** Mounts the popover only once used (List rows the pointer or focus hasn't reached yet). */
+    lazy?: boolean
   }>(),
-  { variant: 'chips', canCreate: undefined, max: 2, readonly: false, anchor: null, hideTrigger: false },
+  { variant: 'chips', canCreate: undefined, max: 2, readonly: false, anchor: null, hideTrigger: false, lazy: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [ids: Uuid[]] }>()
@@ -93,7 +95,7 @@ function create(query: string): void {
     <TagList v-if="known.length && variant !== 'icon'" :tag-ids="modelValue" :max="variant === 'chips' ? max : 99" :wrap="variant === 'field'" />
     <span v-else-if="variant === 'field'" class="muted">None</span>
   </span>
-  <UiPopover v-else v-model:open="open" role="listbox" :anchor="anchor" :width="260">
+  <LazyPopover v-else v-model:open="open" :lazy="lazy" role="listbox" :anchor="anchor" :width="260">
     <template v-if="!hideTrigger" #trigger="{ props: t }">
       <FieldTrigger
         v-bind="{ ...$attrs, ...t }"
@@ -145,7 +147,7 @@ function create(query: string): void {
         </template>
       </UiListbox>
     </template>
-  </UiPopover>
+  </LazyPopover>
 </template>
 
 <style scoped>

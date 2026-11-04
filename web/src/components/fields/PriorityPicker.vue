@@ -9,8 +9,8 @@
 import { computed } from 'vue'
 import { PRIORITY_LABEL, type Priority } from '../../types'
 import type { MenuItem } from '../ui/menu'
-import UiMenu from '../ui/UiMenu.vue'
 import FieldTrigger from './FieldTrigger.vue'
+import LazyMenu from './LazyMenu.vue'
 import PriorityFlag from './PriorityFlag.vue'
 import { triggerLabel } from './fieldLabel'
 import { digitOf, useKeysWhileOpen } from './pickerKeys'
@@ -27,8 +27,10 @@ const props = withDefaults(
     readonly?: boolean
     anchor?: HTMLElement | null
     hideTrigger?: boolean
+    /** Mounts the popover only once used (List rows the pointer or focus hasn't reached yet). */
+    lazy?: boolean
   }>(),
-  { variant: 'label', readonly: false, anchor: null, hideTrigger: false },
+  { variant: 'label', readonly: false, anchor: null, hideTrigger: false, lazy: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [priority: Priority] }>()
@@ -73,7 +75,7 @@ useKeysWhileOpen(open, ['1', '2', '3', '4', '0'], (e) => {
   <span v-if="readonly" v-bind="$attrs" class="static" :class="`static--${variant}`">
     <PriorityFlag :priority="modelValue" :show-label="variant !== 'icon'" />
   </span>
-  <UiMenu v-else v-model:open="open" :items="items" :anchor="anchor" aria-label="Priority" :min-width="200">
+  <LazyMenu v-else v-model:open="open" :lazy="lazy" :items="items" :anchor="anchor" aria-label="Priority" :min-width="200">
     <template v-if="!hideTrigger" #trigger="{ props: t }">
       <FieldTrigger
         v-bind="{ ...$attrs, ...t }"
@@ -87,7 +89,7 @@ useKeysWhileOpen(open, ['1', '2', '3', '4', '0'], (e) => {
         <span v-else-if="none && variant === 'chip'">Priority</span>
       </FieldTrigger>
     </template>
-  </UiMenu>
+  </LazyMenu>
 </template>
 
 <style scoped>

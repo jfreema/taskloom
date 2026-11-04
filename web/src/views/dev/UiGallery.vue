@@ -1,7 +1,10 @@
 <script setup lang="ts">
-// The primitive gallery at /_ui (spec 3.2, development only): one demo per 7.10 primitive, with a
-// theme switch so each can be checked in both themes. The full state matrix is B6's (10.4). The
-// demos live in components/ui/gallery, one file per group.
+// The primitive gallery at /_ui (spec 3.2, development only), with a theme switch so everything
+// can be checked in both themes:
+// - two state tables first: every control (7.10) and field (7.11) in every state it has
+//   (default, hover, focus, disabled, loading, invalid, empty), hover and focus forced;
+// - then one demo card per primitive and field, live.
+// The demos live in components/ui/gallery, one file per group.
 import { Monitor, Moon, Sun } from '@lucide/vue'
 import { useTheme } from '../../composables/useTheme'
 import { useBreakpoint } from '../../composables/useBreakpoint'
@@ -15,11 +18,15 @@ import GalleryForms from '../../components/ui/gallery/GalleryForms.vue'
 import GalleryMenus from '../../components/ui/gallery/GalleryMenus.vue'
 import GalleryOverlays from '../../components/ui/gallery/GalleryOverlays.vue'
 import GalleryPickers from '../../components/ui/gallery/GalleryPickers.vue'
+import GalleryStateControls from '../../components/ui/gallery/GalleryStateControls.vue'
+import GalleryStateFields from '../../components/ui/gallery/GalleryStateFields.vue'
 import GalleryStatus from '../../components/ui/gallery/GalleryStatus.vue'
+import { useForcedStates } from '../../components/ui/gallery/forcedStates'
 import FieldGallery from '../../components/fields/FieldGallery.vue'
 
 const { preference, setPreference } = useTheme()
 const { isPhone } = useBreakpoint()
+useForcedStates()
 
 const themeOptions = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -50,6 +57,8 @@ function setTheme(v: string): void {
     </header>
 
     <main class="grid">
+      <GalleryStateControls />
+      <GalleryStateFields />
       <GalleryBasics />
       <GalleryForms />
       <GalleryMenus />

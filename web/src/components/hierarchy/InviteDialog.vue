@@ -68,7 +68,8 @@ watch(
 
 const parsed = computed(() => parseInviteList(text.value))
 
-function shortList(items: readonly string[], max = 3): string {
+/** "Ana Moreno, sam@example.com, …": the first two, then an ellipsis. */
+function shortList(items: readonly string[], max = 2): string {
   return items.length > max ? `${items.slice(0, max).join(', ')}, …` : items.join(', ')
 }
 
@@ -189,11 +190,14 @@ async function submit(): Promise<void> {
             />
           </template>
         </UiField>
-        <div :id="summaryId" class="summary">
-          <p v-if="!summary && !invalidLine" class="line muted">Separate addresses with commas or new lines.</p>
-          <p v-if="summary" class="line">{{ summary }}</p>
-          <p v-if="invalidLine" class="line invalid">{{ invalidLine }}</p>
-        </div>
+        <p :id="summaryId" class="summary" :class="{ muted: !summary && !invalidLine }">
+          <template v-if="summary || invalidLine">
+            <span v-if="summary">{{ summary }}</span>
+            <span v-if="summary && invalidLine" aria-hidden="true"> · </span>
+            <span v-if="invalidLine" class="invalid">{{ invalidLine }}</span>
+          </template>
+          <template v-else>Separate addresses with commas or new lines.</template>
+        </p>
       </div>
 
       <div class="group">
@@ -222,24 +226,18 @@ async function submit(): Promise<void> {
 }
 
 .summary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0-5);
   min-height: var(--lh-xs);
-}
-
-.line {
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 
-.line.muted {
+.summary.muted {
   color: var(--text-tertiary);
 }
 
-.line.invalid {
+.invalid {
   color: var(--danger-text);
 }
 

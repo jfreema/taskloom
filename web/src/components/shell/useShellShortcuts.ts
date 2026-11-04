@@ -22,12 +22,14 @@ export function useShellShortcuts(): void {
   const layers = useLayerStack()
   const { isDesktop } = useBreakpoint()
 
-  // Also from text fields. Not over another dialog (the navigation drawer aside).
+  // Also from text fields, and over the drawers: the navigation drawer and the modal task panel
+  // (8.10 lists the palette among the ways the panel's task changes). Not over a dialog, which
+  // waits for an answer (a confirm, quick create, the palette itself).
   useShortcut(
     'Mod+k',
     () => {
       if (ui.paletteOpen || !workspaces.current) return false
-      if (layers.hasModal.value && !ui.sidebarDrawerOpen) return false
+      if (layers.layers.value.some((l) => l.modal && (l.level ?? 'modal') !== 'drawer')) return false
       ui.openPalette()
     },
     { allowInInputs: true },
