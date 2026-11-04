@@ -15,9 +15,14 @@ public static partial class RichText
     public const int MaxHtmlLength = 200_000;
     public const int MaxTextLength = 10_000;
 
+    public const string TooLongMessage = "Descriptions can be up to 200,000 characters.";
+    public const string TooComplexMessage = "This description is too complex to save.";
+
     private static readonly string[] Tags =
         ["p", "br", "strong", "b", "em", "i", "s", "del", "u", "code", "pre", "blockquote", "h2", "h3",
          "ul", "ol", "li", "a", "hr", "label", "input", "span", "div"];
+
+    private static readonly HashSet<string> KeptTags = [.. Tags];
 
     /// <summary>The sanitizer's attribute set is global, so it holds the union; this map says which tags may carry each.</summary>
     private static readonly Dictionary<string, HashSet<string>> AttributeTags = new(StringComparer.OrdinalIgnoreCase)
@@ -83,11 +88,16 @@ public static partial class RichText
     /// <summary>
     /// Returns safe HTML: only the tags and attributes of spec 5.7 survive, links open in a new tab, and inputs
     /// can only be checkboxes. An empty editor document (<c>&lt;p&gt;&lt;/p&gt;</c>) is stored as "".
+    /// A 400 (<see cref="ProblemException"/>) when <see cref="MarkupGuard"/> refuses the markup, or when the clean HTML
+    /// is longer than <see cref="MaxHtmlLength"/> (the limit of spec 4.2 is on what is stored, and the sanitizer can
+    /// lengthen its input: every link gains target and rel, every unclosed tag its end tag).
     /// </summary>
     public static string Sanitize(string? html)
     {
         if (string.IsNullOrWhiteSpace(html)) return "";
+        if (!MarkupGuard.Accepts(html, KeptTags)) throw ProblemException.BadRequest(TooComplexMessage);
         var clean = Sanitizer.Sanitize(html).Trim();
+        if (clean.Length > MaxHtmlLength) throw ProblemException.BadRequest(TooLongMessage);
         return clean == "<p></p>" ? "" : clean;
     }
 
@@ -100,7 +110,7 @@ public static partial class RichText
         if (string.IsNullOrWhiteSpace(html)) return "";
         var document = new HtmlParser().ParseDocument(html);
         var state = new TextState();
-        if (document.Body is { } body) Collect(body, state, inPre: false);
+        if (document.Body is { } body) Collect(body, state);
         state.EndLine(force: false);
 
         var lines = state.Lines
@@ -139,28 +149,47 @@ public static partial class RichText
         public bool HasCurrent => _hasCurrent;
     }
 
-    private static void Collect(INode node, TextState state, bool inPre)
+    /// <summary>An element whose children are being collected; a block ends its line once they are all done.</summary>
+    private sealed class Frame(INode node, bool inPre, bool isBlock, int linesBefore)
     {
-        foreach (var child in node.ChildNodes)
+        public INode Node { get; } = node;
+        public bool InPre { get; } = inPre;
+        public bool IsBlock { get; } = isBlock;
+        public int LinesBefore { get; } = linesBefore;
+        public int Next { get; set; }
+    }
+
+    /// <summary>Walks the tree with a stack of its own, so no nesting depth can overflow the call stack.</summary>
+    private static void Collect(INode root, TextState state)
+    {
+        var stack = new Stack<Frame>();
+        stack.Push(new Frame(root, inPre: false, isBlock: false, linesBefore: 0));
+        while (stack.TryPeek(out var frame))
         {
-            switch (child)
+            var children = frame.Node.ChildNodes;
+            if (frame.Next == children.Length)
+            {
+                stack.Pop();
+                if (!frame.IsBlock) continue;
+                if (state.HasCurrent) state.EndLine(force: true);
+                else if (state.Lines.Count == frame.LinesBefore) state.Lines.Add("");
+                continue;
+            }
+            switch (children[frame.Next++])
             {
                 case IText text:
                     // Outside <pre>, a line break in the source is just whitespace.
-                    state.Append(inPre ? text.Data.Replace("\r\n", "\n") : text.Data.Replace('\r', ' ').Replace('\n', ' '));
+                    state.Append(frame.InPre ? text.Data.Replace("\r\n", "\n") : text.Data.Replace('\r', ' ').Replace('\n', ' '));
                     break;
                 case IElement { LocalName: "br" }:
                     state.EndLine(force: true);
                     break;
                 case IElement element when BlockTags.Contains(element.LocalName):
                     state.EndLine(force: false);
-                    var linesBefore = state.Lines.Count;
-                    Collect(element, state, inPre || element.LocalName == "pre");
-                    if (state.HasCurrent) state.EndLine(force: true);
-                    else if (state.Lines.Count == linesBefore) state.Lines.Add("");
+                    stack.Push(new Frame(element, frame.InPre || element.LocalName == "pre", isBlock: true, state.Lines.Count));
                     break;
                 case IElement element:
-                    Collect(element, state, inPre);
+                    stack.Push(new Frame(element, frame.InPre, isBlock: false, linesBefore: 0));
                     break;
             }
         }

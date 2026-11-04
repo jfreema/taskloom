@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Taskloom.Application;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
 
@@ -68,10 +69,15 @@ public static class WorkspaceEndpoints
             return Results.NoContent();
         });
 
-        api.MapDelete("/workspaces/{id:guid}", async (Guid id, Access access, TaskloomDbContext db) =>
+        // Everything in it goes with it (CASCADE), and so do its tasks' stored files.
+        api.MapDelete("/workspaces/{id:guid}", async (Guid id, Access access, TaskloomDbContext db, IFileStore files) =>
         {
             await access.RequireWorkspaceAsync(id, WorkspaceRole.Owner);
+            var keys = await db.Attachments
+                .Where(a => db.Tasks.Any(t => t.Id == a.TaskId && db.Lists.Any(l => l.Id == t.ListId && l.Space!.WorkspaceId == id)))
+                .Select(a => a.StorageKey).ToListAsync();
             await db.Workspaces.Where(x => x.Id == id).ExecuteDeleteAsync();
+            foreach (var key in keys) await files.DeleteAsync(key);
             return Results.NoContent();
         });
 

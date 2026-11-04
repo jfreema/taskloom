@@ -82,9 +82,7 @@ public static class AttachmentEndpoints
             {
                 TaskId = id,
                 FileName = CleanFileName(file.FileName),
-                ContentType = string.IsNullOrWhiteSpace(file.ContentType) || file.ContentType.Length > MaxContentType || file.ContentType.Any(char.IsControl)
-                    ? "application/octet-stream"
-                    : file.ContentType,
+                ContentType = CleanContentType(file.ContentType),
                 SizeBytes = file.Length,
                 StorageKey = "",
                 UploadedById = access.UserId,
@@ -106,7 +104,7 @@ public static class AttachmentEndpoints
                 throw;
             }
             return Results.Ok(ToDto(a));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().WithMetadata(new LargeBody(RequestLimits.UploadBodyBytes));
 
         api.MapGet("/attachments/{id:guid}", async (Guid id, HttpContext http, Access access, TaskloomDbContext db, IFileStore files, CancellationToken ct) =>
         {
@@ -154,12 +152,28 @@ public static class AttachmentEndpoints
         MediaTypeHeaderValue.TryParse(contentType, out var media) && InlineTypes.Contains(media.MediaType.ToString());
 
     /// <summary>
-    /// The file's own name without any path or control characters, at most 255 characters (keeping the extension,
-    /// never splitting a surrogate pair).
+    /// The type the browser sent when it is one media type written in printable ASCII, else application/octet-stream.
+    /// It is sent back as the Content-Type of every download, and a header can't carry other characters: the server
+    /// would answer each download with a 500.
+    /// </summary>
+    private static string CleanContentType(string? raw) =>
+        raw is { Length: > 0 and <= MaxContentType } && raw.All(c => c is >= ' ' and <= '~') && MediaTypeHeaderValue.TryParse(raw, out _)
+            ? raw
+            : "application/octet-stream";
+
+    /// <summary>
+    /// Bidirectional formatting characters: a right-to-left override in "invoice[RLO]gpj.exe" shows the name as
+    /// "invoiceexe.jpg". Other format characters (such as the joiners inside emoji) stay.
+    /// </summary>
+    private static bool IsBidiControl(char c) => c is '\u061C' or '\u200E' or '\u200F' or (>= '\u202A' and <= '\u202E') or (>= '\u2066' and <= '\u2069');
+
+    /// <summary>
+    /// The file's own name without any path, control or bidirectional formatting characters, at most 255 characters
+    /// (keeping the extension, never splitting a surrogate pair).
     /// </summary>
     private static string CleanFileName(string? raw)
     {
-        var name = Path.GetFileName(string.Concat((raw ?? "").Where(c => !char.IsControl(c))).Replace('\\', '/')).Trim();
+        var name = Path.GetFileName(string.Concat((raw ?? "").Where(c => !char.IsControl(c) && !IsBidiControl(c))).Replace('\\', '/')).Trim();
         if (name.Length == 0) return "file";
         if (name.Length <= MaxFileName) return name;
         var extension = Path.GetExtension(name);

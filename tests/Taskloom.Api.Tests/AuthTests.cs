@@ -41,6 +41,8 @@ public class AuthTests(AuthTests.Site factory) : IClassFixture<AuthTests.Site>
         Assert.Equal($"https://login.microsoftonline.com/{SignInFactory.Tenant}/v2.0", microsoft.Authority);
         Assert.Equal(microsoft.Authority, microsoft.TokenValidationParameters.ValidIssuer);
         Assert.Equal("https://accounts.google.com", factory.OidcOptions("google").Authority);
+        Assert.Equal(["https://accounts.google.com", "accounts.google.com"], factory.OidcOptions("google").TokenValidationParameters.ValidIssuers);
+        Assert.Null(factory.OidcOptions("github").TokenValidationParameters.ValidIssuers);
         Assert.All(new[] { "microsoft", "google", "github" }, key => Assert.True(factory.OidcOptions(key).TokenValidationParameters.ValidateIssuer));
 
         // A listed provider's login challenges it (the key ignores case); an unknown one is 404.

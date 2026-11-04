@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 
 namespace Taskloom.Api;
@@ -140,13 +141,32 @@ public static class NameGuess
 /// <summary>Sign-in return paths (spec 5.8): only local paths, anything else becomes "/".</summary>
 public static class ReturnUrls
 {
+    /// <remarks>
+    /// Characters beyond ASCII are percent-encoded (as UTF-8, the way a browser writes them in a URL): the path ends up
+    /// in the Location header of the redirect after sign-in, and a header can't carry them, so the server would fail
+    /// the sign-in with a 500. A lone surrogate can't be encoded, so it gives "/".
+    /// </remarks>
     public static string Safe(string? raw)
     {
         if (string.IsNullOrEmpty(raw) || raw[0] != '/') return "/";
         if (raw.Length > 1 && (raw[1] == '/' || raw[1] == '\\')) return "/";
         foreach (var c in raw)
             if (c == '\\' || char.IsControl(c)) return "/";
-        return raw;
+        if (!raw.Any(c => c > '\x7e')) return raw;
+        var encoded = new StringBuilder(raw.Length * 2);
+        for (var i = 0; i < raw.Length; i++)
+        {
+            if (raw[i] <= '\x7e')
+            {
+                encoded.Append(raw[i]);
+                continue;
+            }
+            var length = char.IsSurrogatePair(raw, i) ? 2 : 1;
+            if (char.IsSurrogate(raw[i]) && length == 1) return "/";
+            encoded.Append(Uri.EscapeDataString(raw.Substring(i, length)));
+            i += length - 1;
+        }
+        return encoded.ToString();
     }
 }
 
@@ -204,15 +224,19 @@ public static class Json
         return found;
     }
 
-    /// <summary>The distinct ids of a JSON array of UUID strings, in order, or a 400 with <paramref name="message"/>.</summary>
+    /// <summary>
+    /// The distinct ids of a JSON array of UUID strings, in order, or a 400 with <paramref name="message"/>.
+    /// Linear in the array's length (a set finds repeats), however long a client makes it.
+    /// </summary>
     public static List<Guid> ReadIds(JsonElement v, string message)
     {
         if (v.ValueKind != JsonValueKind.Array) throw ProblemException.BadRequest(message);
         var ids = new List<Guid>();
+        var seen = new HashSet<Guid>();
         foreach (var item in v.EnumerateArray())
         {
             if (!item.TryGetGuidValue(out var id)) throw ProblemException.BadRequest(message);
-            if (!ids.Contains(id)) ids.Add(id);
+            if (seen.Add(id)) ids.Add(id);
         }
         return ids;
     }

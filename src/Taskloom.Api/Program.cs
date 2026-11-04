@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using Taskloom.Api;
 using Taskloom.Api.Auth;
@@ -18,8 +19,11 @@ var config = builder.Configuration;
 var connectionString = config.GetConnectionString("Taskloom")
     ?? throw new InvalidOperationException("Set ConnectionStrings__Taskloom.");
 // Single-task queries load assignees and tags in one query; queries returning several tasks opt into AsSplitQuery().
-builder.Services.AddDbContext<TaskloomDbContext>(o => o.UseNpgsql(connectionString,
-    npgsql => npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SingleQuery)));
+// A failed command is logged as a warning, not an error: the middleware below turns the expected ones (a taken id,
+// text PostgreSQL can't store) into 409 and 400, and any other failure still reaches the exception handler.
+builder.Services.AddDbContext<TaskloomDbContext>(o => o
+    .UseNpgsql(connectionString, npgsql => npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SingleQuery))
+    .ConfigureWarnings(w => w.Log((RelationalEventId.CommandError, LogLevel.Warning), (CoreEventId.SaveChangesFailed, LogLevel.Warning))));
 builder.Services.AddDataProtection().PersistKeysToDbContext<TaskloomDbContext>().SetApplicationName("Taskloom");
 
 // ---- Cloud adapters, picked by config so the code never changes between clouds ----
@@ -46,7 +50,11 @@ builder.Services.AddScoped<Access>();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
 // Unreadable bodies throw in every environment, so the middleware below answers with the same ProblemDetails 400.
 builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
-builder.Services.AddProblemDetails();
+// A 413 the server gives without a message (an over-long body cut off while it is read) gets the one RequestLimits gives.
+builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = c =>
+{
+    if (c.ProblemDetails.Status == StatusCodes.Status413PayloadTooLarge) c.ProblemDetails.Detail ??= RequestLimits.MessageFor(c.HttpContext);
+});
 builder.Services.AddHealthChecks();
 
 // Azure Container Apps (and most hosts) terminate TLS at an ingress proxy.
@@ -61,6 +69,8 @@ var app = builder.Build();
 
 if (app.Services.GetRequiredService<AuthOptions>().MicrosoftLacksTenant)
     app.Logger.LogWarning("Microsoft sign-in is off: set Auth:Microsoft:TenantId (ENTRA_TENANT_ID) to the Entra tenant id, a GUID.");
+if (app.Services.GetRequiredService<AuthOptions>().DevLogin.Enabled && !app.Environment.IsDevelopment())
+    app.Logger.LogWarning("Dev login is on outside Development: anyone who can reach this server can sign in as any email address. Set Auth:DevLogin:Enabled to false anywhere real.");
 
 if (config.GetValue("Database:MigrateOnStartup", true))
 {
@@ -71,6 +81,16 @@ if (config.GetValue("Database:MigrateOnStartup", true))
 app.UseForwardedHeaders();
 // Spec 5.8: every HTML response (index.html and the SPA fallback) carries the Content-Security-Policy.
 app.UseContentSecurityPolicyOnHtml();
+// No response is ever to be sniffed into another type than its Content-Type says (attachments set this themselves too).
+app.Use((ctx, next) =>
+{
+    ctx.Response.OnStarting(() =>
+    {
+        ctx.Response.Headers.XContentTypeOptions = "nosniff";
+        return Task.CompletedTask;
+    });
+    return next(ctx);
+});
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
@@ -81,7 +101,7 @@ app.Use(async (ctx, next) =>
     catch (BadHttpRequestException e) when (!ctx.Response.HasStarted)
     {
         var detail = e.StatusCode == StatusCodes.Status413PayloadTooLarge
-            ? "The request is too large. Files can be up to 25 MB."
+            ? RequestLimits.MessageFor(ctx)
             : Problems.UnreadableMessage;
         await Results.Problem(detail: detail, statusCode: e.StatusCode).ExecuteAsync(ctx);
     }
@@ -116,6 +136,7 @@ static bool IsUnstorableText(Exception? e)
     return false;
 }
 
+app.UseRequestBodyLimits();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();

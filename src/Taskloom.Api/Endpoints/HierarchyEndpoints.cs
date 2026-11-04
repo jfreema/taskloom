@@ -36,10 +36,15 @@ public static class HierarchyEndpoints
             return Results.NoContent();
         });
 
-        api.MapDelete("/spaces/{id:guid}", async (Guid id, Access access, TaskloomDbContext db) =>
+        // Its lists and their tasks go with it (CASCADE), and so do the tasks' stored files.
+        api.MapDelete("/spaces/{id:guid}", async (Guid id, Access access, TaskloomDbContext db, IFileStore files) =>
         {
             await access.RequireSpaceAsync(id, WorkspaceRole.Admin);
+            var keys = await db.Attachments
+                .Where(a => db.Tasks.Any(t => t.Id == a.TaskId && db.Lists.Any(l => l.Id == t.ListId && l.SpaceId == id)))
+                .Select(a => a.StorageKey).ToListAsync();
             await db.Spaces.Where(s => s.Id == id).ExecuteDeleteAsync();
+            foreach (var key in keys) await files.DeleteAsync(key);
             return Results.NoContent();
         });
 
@@ -98,10 +103,13 @@ public static class HierarchyEndpoints
             return Results.NoContent();
         });
 
-        api.MapDelete("/lists/{id:guid}", async (Guid id, Access access, TaskloomDbContext db) =>
+        // Its tasks go with it (CASCADE), and so do their stored files.
+        api.MapDelete("/lists/{id:guid}", async (Guid id, Access access, TaskloomDbContext db, IFileStore files) =>
         {
             await access.RequireListAsync(id, WorkspaceRole.Member);
+            var keys = await db.Attachments.Where(a => db.Tasks.Any(t => t.Id == a.TaskId && t.ListId == id)).Select(a => a.StorageKey).ToListAsync();
             await db.Lists.Where(l => l.Id == id).ExecuteDeleteAsync();
+            foreach (var key in keys) await files.DeleteAsync(key);
             return Results.NoContent();
         });
 

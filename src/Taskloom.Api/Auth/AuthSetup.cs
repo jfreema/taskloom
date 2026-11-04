@@ -50,6 +50,7 @@ public static class AuthSetup
                 o.TokenValidationParameters.ValidateIssuer = true;
                 // Only the tenant's own issuer, whatever the metadata says.
                 if (provider.Tenant is not null) o.TokenValidationParameters.ValidIssuer = provider.Authority;
+                else if (provider.IsGoogleAuthority) o.TokenValidationParameters.ValidIssuers = [.. SignInProvider.GoogleIssuers];
                 o.Events.OnTokenValidated = async ctx =>
                 {
                     var provisioning = ctx.HttpContext.RequestServices.GetRequiredService<UserProvisioning>();

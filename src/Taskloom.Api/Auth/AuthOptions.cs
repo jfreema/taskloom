@@ -95,6 +95,13 @@ public sealed record SignInProvider(string Key, string DisplayName, string Autho
 {
     public const string MicrosoftKey = "microsoft";
     public const string GoogleKey = "google";
+    public const string GoogleAuthority = "https://accounts.google.com";
+
+    /// <summary>Google documents both spellings of the issuer in its ID tokens.</summary>
+    public static readonly IReadOnlyList<string> GoogleIssuers = [GoogleAuthority, "accounts.google.com"];
 
     public string Scheme => AuthSetup.OidcSchemePrefix + Key;
+
+    /// <summary>The "google" provider pointed at Google itself.</summary>
+    public bool IsGoogleAuthority => Key == GoogleKey && string.Equals(Authority.TrimEnd('/'), GoogleAuthority, StringComparison.OrdinalIgnoreCase);
 }
