@@ -38,7 +38,8 @@ workspace with a "Personal" space and a "Tasks" list.
 The compose file starts PostgreSQL 16, Azurite (a local Azure Blob Storage emulator, so attachments go through
 the same Azure code path as production) and the Taskloom container.
 
-Reset all local data with `docker compose down -v`.
+Reset all local data with `docker compose down -v`. If port 8080, 5432 or 10000 is already in use, set
+`TASKLOOM_PORT`, `TASKLOOM_DB_PORT` or `TASKLOOM_BLOB_PORT` in a `.env` file next to `docker-compose.yml`.
 
 ### Option B: hot-reload development
 
