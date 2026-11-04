@@ -46,6 +46,8 @@ services:
       # Optional: Google or Microsoft sign-in. See README.
       Auth__Providers__google__ClientId: ${GOOGLE_CLIENT_ID:-}
       Auth__Providers__google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      # Microsoft sign-in is limited to one Entra tenant and stays off without its tenant id (a GUID).
+      Auth__Microsoft__TenantId: ${ENTRA_TENANT_ID:-}
       Auth__Providers__microsoft__ClientId: ${ENTRA_CLIENT_ID:-}
       Auth__Providers__microsoft__ClientSecret: ${ENTRA_CLIENT_SECRET:-}
 

@@ -22,7 +22,7 @@ param postgresAdminLogin string = 'taskloomadmin'
 @description('PostgreSQL administrator password.')
 param postgresAdminPassword string
 
-@description('Microsoft Entra ID tenant id for staff sign-in. Empty disables Microsoft sign-in.')
+@description('Microsoft Entra ID tenant id (a GUID) for staff sign-in. Sign-in is limited to this one tenant. Empty disables Microsoft sign-in.')
 param entraTenantId string = ''
 param entraClientId string = ''
 @secure()
@@ -188,11 +188,11 @@ var baseEnv = [
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
   { name: 'Auth__DevLogin__Enabled', value: 'false' }
 ]
+// The app derives the authority (https://login.microsoftonline.com/<tenant>/v2.0) from the tenant id and validates the issuer.
 var entraEnv = entraEnabled ? [
-  { name: 'Auth__Providers__microsoft__Authority', value: '${environment().authentication.loginEndpoint}${entraTenantId}/v2.0' }
+  { name: 'Auth__Microsoft__TenantId', value: entraTenantId }
   { name: 'Auth__Providers__microsoft__ClientId', value: entraClientId }
   { name: 'Auth__Providers__microsoft__ClientSecret', secretRef: 'entra-client-secret' }
-  { name: 'Auth__Providers__microsoft__ValidateIssuer', value: 'true' }
 ] : []
 var domainEnv = [for (d, i) in allowedEmailDomains: { name: 'Auth__AllowedEmailDomains__${i}', value: d }]
 

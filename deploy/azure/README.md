@@ -39,6 +39,8 @@ az deployment group create -g taskloom-rg -f deploy/azure/main.bicep -p deploy/a
    (`https://<app>/auth/callback/microsoft`).
 2. Create a client secret.
 3. Redeploy with `-p entraTenantId=<tenant id> entraClientId=<client id> entraClientSecret=<secret> allowedEmailDomains='["yourorg.com"]'`.
+   The tenant id is the directory's GUID (Entra ID › Overview). Sign-in is limited to that one tenant, and without
+   it Microsoft sign-in stays off.
 
 Dev sign-in is always off in this template.
 
