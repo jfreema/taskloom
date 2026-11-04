@@ -1,0 +1,107 @@
+/*
+ * Loom design tokens (spec 7.3 to 7.8). The only stylesheet that holds colour values.
+ * Theme: data-theme is absent for "System", and "light" or "dark" for an explicit choice
+ * (public/theme-init.js sets it before first paint; composables/useTheme.ts keeps it in sync).
+ */
+:root {
+  color-scheme: light;
+  --bg-canvas: #F3F5F5; --bg-surface: #FFFFFF; --bg-subtle: #F5F7F7; --bg-raised: #FFFFFF;
+  --bg-column: #EDF0F1; --bg-card: #FFFFFF;
+  --bg-hover: rgba(15, 40, 45, .05); --bg-pressed: rgba(15, 40, 45, .09); --bg-selected: #E2F3F0;
+  --bg-inverse: #161B1D; --bg-scrim: rgba(10, 20, 22, .32);
+  --border-subtle: #E3E7E8; --border-default: #D5DBDC; --border-control: #7F898D; --border-floating: #E3E7E8;
+  --text-primary: #161B1D; --text-secondary: #4A5458; --text-tertiary: #646E72; --text-disabled: #A0A9AC;
+  --text-inverse: #F3F5F5; --text-inverse-secondary: #AEB8BB; --text-inverse-accent: #5FD3C3; --text-inverse-danger: #FF8A8C;
+  --accent: #0D7469; --accent-hover: #0A6158; --accent-pressed: #084E47; --accent-fg: #FFFFFF;
+  --accent-text: #0A6158; --accent-subtle: #E2F3F0; --focus-ring: #0D7469; --focus-ring-inverse: #5FD3C3;
+  --selection: rgba(13, 116, 105, .24);
+  --danger: #C92A2F; --danger-hover: #B12328; --danger-fg: #FFFFFF; --danger-text: #B9252B; --danger-subtle: #FDEDED;
+  --warning-text: #8F5200; --warning-subtle: #FFF4DB; --success-text: #1C7440; --success-subtle: #E6F5EC;
+  --info-text: #1F5FC7; --info-subtle: #E8F0FE;
+  --priority-urgent: #D1343A; --priority-high: #D2661B; --priority-normal: #2F6FE4; --priority-low: #7A868C;
+  --tint-pill: 14%; --tint-pill-border: 30%; --tint-tile: 18%; --tint-tile-ink: 55%; --tint-ink: 60%;
+  --shadow-1: 0 1px 2px rgba(16, 28, 32, .06);
+  --shadow-2: 0 2px 6px -1px rgba(16, 28, 32, .08), 0 1px 2px rgba(16, 28, 32, .05);
+  --shadow-3: 0 8px 24px -6px rgba(16, 28, 32, .16), 0 2px 6px -2px rgba(16, 28, 32, .08);
+  --shadow-4: 0 16px 40px -8px rgba(16, 28, 32, .22), 0 4px 12px -4px rgba(16, 28, 32, .10);
+  --shadow-5: 0 28px 72px -12px rgba(16, 28, 32, .32);
+
+  --font-sans: "Inter Variable", -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  --fs-2xs: 11px; --lh-2xs: 14px; --fs-xs: 12px; --lh-xs: 16px; --fs-sm: 13px; --lh-sm: 18px;
+  --fs-md: 14px; --lh-md: 20px; --fs-lg: 16px; --lh-lg: 24px; --fs-xl: 18px; --lh-xl: 26px;
+  --fs-2xl: 22px; --lh-2xl: 28px; --fs-3xl: 28px; --lh-3xl: 34px;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 650;
+
+  --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px; --space-16: 64px;
+  --control-xs: 24px; --control-sm: 28px; --control-md: 32px; --control-lg: 40px;
+  --row-list: 36px; --row-sidebar: 30px; --row-menu: 32px; --touch-min: 44px;
+  --sidebar-w: 248px; --drawer-w: min(288px, 85vw); --topbar-h: 48px; --toolbar-h: 44px; --appbar-h: 52px;
+  --inset: 8px; --reading-w: 760px; --panel-w: clamp(440px, 36vw, 680px); --palette-w: 640px;
+  --modal-sm: 400px; --modal-md: 560px; --modal-lg: 720px;
+  --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 12px; --radius-2xl: 16px; --radius-full: 9999px;
+
+  --z-sticky: 10; --z-sidebar: 20; --z-panel: 30; --z-bulkbar: 40; --z-scrim: 50; --z-drawer: 60;
+  --z-modal: 70; --z-popover: 80; --z-toast: 90; --z-tooltip: 100; --z-drag: 110;
+
+  --dur-1: 80ms; --dur-2: 120ms; --dur-3: 180ms; --dur-4: 240ms;
+  --ease-out: cubic-bezier(.16, 1, .3, 1); --ease-in: cubic-bezier(.4, 0, 1, 1); --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+}
+
+/* Dark colours. The same declarations appear twice: for an explicit choice, and for "System" on a dark OS. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #0E1112; --bg-surface: #151A1C; --bg-subtle: #1A1F22; --bg-raised: #1C2225;
+  --bg-column: #101416; --bg-card: #20272A;
+  --bg-hover: rgba(220, 240, 245, .06); --bg-pressed: rgba(220, 240, 245, .10); --bg-selected: #133230;
+  --bg-inverse: #E6EBEC; --bg-scrim: rgba(0, 0, 0, .56);
+  --border-subtle: #262D30; --border-default: #323B3F; --border-control: #6F7C81; --border-floating: #323B3F;
+  --text-primary: #E6EBEC; --text-secondary: #AEB8BB; --text-tertiary: #8C979B; --text-disabled: #5B666A;
+  --text-inverse: #161B1D; --text-inverse-secondary: #4A5458; --text-inverse-accent: #0A6158; --text-inverse-danger: #B9252B;
+  --accent: #3DBFAE; --accent-hover: #5ACFBF; --accent-pressed: #34AE9E; --accent-fg: #04201C;
+  --accent-text: #5FD3C3; --accent-subtle: #133230; --focus-ring: #4FD1C1; --focus-ring-inverse: #0A6158;
+  --selection: rgba(61, 191, 174, .24);
+  --danger: #C2343A; --danger-hover: #A82B31; --danger-fg: #FFFFFF; --danger-text: #FF8A8C; --danger-subtle: #3A1517;
+  --warning-text: #F0B44C; --warning-subtle: #35270C; --success-text: #5ED18E; --success-subtle: #11301F;
+  --info-text: #7EAEFF; --info-subtle: #14243F;
+  --priority-urgent: #FF6B70; --priority-high: #FF9A4D; --priority-normal: #6FA3FF; --priority-low: #8D999E;
+  --tint-pill: 24%; --tint-pill-border: 35%; --tint-tile: 26%; --tint-tile-ink: 55%; --tint-ink: 60%;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .40);
+  --shadow-2: 0 2px 6px -1px rgba(0, 0, 0, .50), 0 1px 2px rgba(0, 0, 0, .40);
+  --shadow-3: 0 8px 24px -6px rgba(0, 0, 0, .60), 0 2px 6px -2px rgba(0, 0, 0, .45);
+  --shadow-4: 0 16px 40px -8px rgba(0, 0, 0, .70), 0 4px 12px -4px rgba(0, 0, 0, .50);
+  --shadow-5: 0 28px 72px -12px rgba(0, 0, 0, .80);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg-canvas: #0E1112; --bg-surface: #151A1C; --bg-subtle: #1A1F22; --bg-raised: #1C2225;
+    --bg-column: #101416; --bg-card: #20272A;
+    --bg-hover: rgba(220, 240, 245, .06); --bg-pressed: rgba(220, 240, 245, .10); --bg-selected: #133230;
+    --bg-inverse: #E6EBEC; --bg-scrim: rgba(0, 0, 0, .56);
+    --border-subtle: #262D30; --border-default: #323B3F; --border-control: #6F7C81; --border-floating: #323B3F;
+    --text-primary: #E6EBEC; --text-secondary: #AEB8BB; --text-tertiary: #8C979B; --text-disabled: #5B666A;
+    --text-inverse: #161B1D; --text-inverse-secondary: #4A5458; --text-inverse-accent: #0A6158; --text-inverse-danger: #B9252B;
+    --accent: #3DBFAE; --accent-hover: #5ACFBF; --accent-pressed: #34AE9E; --accent-fg: #04201C;
+    --accent-text: #5FD3C3; --accent-subtle: #133230; --focus-ring: #4FD1C1; --focus-ring-inverse: #0A6158;
+    --selection: rgba(61, 191, 174, .24);
+    --danger: #C2343A; --danger-hover: #A82B31; --danger-fg: #FFFFFF; --danger-text: #FF8A8C; --danger-subtle: #3A1517;
+    --warning-text: #F0B44C; --warning-subtle: #35270C; --success-text: #5ED18E; --success-subtle: #11301F;
+    --info-text: #7EAEFF; --info-subtle: #14243F;
+    --priority-urgent: #FF6B70; --priority-high: #FF9A4D; --priority-normal: #6FA3FF; --priority-low: #8D999E;
+    --tint-pill: 24%; --tint-pill-border: 35%; --tint-tile: 26%; --tint-tile-ink: 55%; --tint-ink: 60%;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .40);
+    --shadow-2: 0 2px 6px -1px rgba(0, 0, 0, .50), 0 1px 2px rgba(0, 0, 0, .40);
+    --shadow-3: 0 8px 24px -6px rgba(0, 0, 0, .60), 0 2px 6px -2px rgba(0, 0, 0, .45);
+    --shadow-4: 0 16px 40px -8px rgba(0, 0, 0, .70), 0 4px 12px -4px rgba(0, 0, 0, .50);
+    --shadow-5: 0 28px 72px -12px rgba(0, 0, 0, .80);
+  }
+}
+
+@media (pointer: coarse) {
+  :root { --row-list: 44px; --row-sidebar: 44px; --row-menu: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-2: 80ms; --dur-3: 80ms; --dur-4: 80ms; }
+}

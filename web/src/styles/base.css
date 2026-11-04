@@ -1,0 +1,466 @@
+/*
+ * Loom base styles (spec 7.4, 7.8, 7.13): reset and type defaults, focus, utilities,
+ * reveal-on-hover, touch rules, scrollbars, rich text and reduced motion.
+ * Colours come only from tokens.css.
+ */
+
+/* ---- Reset and type defaults ---- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-regular);
+  font-feature-settings: "cv05", "cv08";
+  color: var(--text-primary);
+  background: var(--bg-canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  min-height: 100dvh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: var(--fw-semibold);
+}
+
+p, figure, blockquote, dl, dd {
+  margin: 0;
+}
+
+ul[role], ol[role], nav ul, nav ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  text-align: inherit;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+input,
+textarea {
+  margin: 0;
+}
+
+img,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+svg {
+  flex-shrink: 0;
+}
+
+a {
+  color: var(--accent-text);
+  text-underline-offset: 2px;
+}
+
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+/* ---- Focus (9.6): always visible for keyboard focus, never for mouse focus ---- */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Rows and menu items draw the ring inside their edge. */
+.focus-inset:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Inverse surfaces (toast, bulk bar, tooltip) use the inverse ring. */
+.surface-inverse {
+  background: var(--bg-inverse);
+  color: var(--text-inverse);
+}
+
+.surface-inverse :focus-visible,
+.surface-inverse:focus-visible {
+  outline-color: var(--focus-ring-inverse);
+}
+
+/* ---- Utilities ---- */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Text at 22px and up (7.4). */
+.cv11 {
+  font-feature-settings: "cv05", "cv08", "cv11";
+}
+
+.truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tint recipes (7.2). Set style="--c: <hex>" on the element. */
+.tint-pill {
+  background: color-mix(in srgb, var(--c) var(--tint-pill), var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--c) var(--tint-pill-border), var(--bg-surface));
+  color: var(--text-primary);
+}
+
+.tint-tile {
+  background: color-mix(in srgb, var(--c) var(--tint-tile), var(--bg-surface));
+  color: color-mix(in srgb, var(--c) var(--tint-tile-ink), var(--text-primary));
+  font-weight: var(--fw-semibold);
+}
+
+.tint-chip {
+  background: color-mix(in srgb, var(--c) var(--tint-pill), var(--bg-surface));
+  color: color-mix(in srgb, var(--c) var(--tint-ink), var(--text-primary));
+  font-weight: var(--fw-medium);
+}
+
+/*
+ * Hover-only controls (8.1). Opacity, not visibility, so keyboard focus still reaches them.
+ * An open menu or popover keeps its trigger visible.
+ */
+.reveal {
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease-out);
+}
+
+[data-row]:hover .reveal,
+[data-row]:focus-within .reveal,
+.reveal:focus-visible,
+.reveal[aria-expanded="true"] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  /* Each row's and card's "..." menu is always visible on touch screens; it holds every revealed action. */
+  .reveal.reveal-touch {
+    opacity: 1;
+  }
+
+  /* Invisible controls must not catch taps. */
+  .reveal:not(.reveal-touch) {
+    visibility: hidden;
+  }
+}
+
+/* ---- Touch ---- */
+@media (pointer: coarse) {
+  [data-row] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* 7.4: 16px text in fields, so iOS doesn't zoom. */
+  input,
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}
+
+/* ---- Scrollbars ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+/* ---- Rich text (7.4), shared by the description editor and read-only views ---- */
+.rich-text {
+  font-size: var(--fs-md);
+  line-height: 22px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.rich-text > * + * {
+  margin-top: var(--space-2);
+}
+
+.rich-text p {
+  margin: 0;
+}
+
+.rich-text p + p {
+  margin-top: var(--space-2);
+}
+
+.rich-text h2 {
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+  margin: var(--space-4) 0 0;
+}
+
+.rich-text h3 {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: var(--fw-semibold);
+  margin: var(--space-3) 0 0;
+}
+
+.rich-text > h2:first-child,
+.rich-text > h3:first-child {
+  margin-top: 0;
+}
+
+.rich-text strong,
+.rich-text b {
+  font-weight: var(--fw-semibold);
+}
+
+.rich-text a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+
+.rich-text a:hover {
+  text-decoration-color: currentColor;
+}
+
+.rich-text code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-xs);
+  padding: 1px 4px;
+}
+
+.rich-text pre {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 18px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.rich-text pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.rich-text blockquote {
+  margin: 0;
+  border-left: 3px solid var(--border-default);
+  padding: 0 0 0 var(--space-3);
+  color: var(--text-secondary);
+}
+
+.rich-text ul,
+.rich-text ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.rich-text li + li {
+  margin-top: var(--space-0-5);
+}
+
+.rich-text li > p {
+  margin: 0;
+}
+
+.rich-text hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-3) 0;
+}
+
+/* Task lists: a 16px checkbox styled like UiCheckbox; checked items keep primary text. */
+.rich-text ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.rich-text li[data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.rich-text li[data-type="taskItem"] > label {
+  flex: none;
+  display: inline-flex;
+  margin-top: 3px;
+  user-select: none;
+}
+
+.rich-text li[data-type="taskItem"] > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.rich-text input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--border-control);
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+
+.rich-text input[type="checkbox"]::before {
+  content: "";
+  width: 5px;
+  height: 9px;
+  margin-top: -2px;
+  border: solid var(--accent-fg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  opacity: 0;
+}
+
+.rich-text input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.rich-text input[type="checkbox"]:checked::before {
+  opacity: 1;
+}
+
+.rich-text input[type="checkbox"]:disabled {
+  cursor: default;
+}
+
+.rich-text li[data-checked="true"] > div {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+/* ---- Shared animations (7.8). Transform animations only without a reduced-motion preference. ---- */
+@keyframes loom-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes loom-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@keyframes loom-flash {
+  from { background-color: var(--accent-subtle); }
+}
+
+@keyframes loom-pop {
+  0% { transform: scale(.8); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* A new row or card: the background flashes --accent-subtle, fading over 800ms. */
+.flash-new {
+  animation: loom-flash 800ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Completing a task: the status icon or complete circle pops. */
+  .pop {
+    animation: loom-pop var(--dur-4) var(--ease-out);
+  }
+}
+
+/* ---- Reduced motion (7.8): fades are capped by the tokens; nothing scrolls smoothly. ---- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}

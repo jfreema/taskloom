@@ -1,0 +1,64 @@
+/* Layout helpers shared by the /_ui gallery sections (each imports this file as scoped CSS). */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.row.align-start {
+  align-items: flex-start;
+}
+
+.row.end {
+  justify-content: flex-end;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.stack > .stretch,
+.stack > :deep(.ui-input),
+.stack > :deep(.ui-field),
+.stack > :deep(.ui-progress),
+.stack > :deep(.ui-inline-alert) {
+  align-self: stretch;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.muted {
+  color: var(--text-secondary);
+}
+
+.small {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+}
+
+/* A framed surface for primitives shown inline (a listbox, a date picker). */
+.frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border-floating);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+
+.pad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
