@@ -1,25 +1,42 @@
 {
   "name": "taskloom-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "typecheck": "vue-tsc -b",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e": "playwright test"
   },
   "dependencies": {
-    "pinia": "^4.1.0",
-    "vue": "^3.5.44",
-    "vue-router": "^5.4.0"
+    "@atlaskit/pragmatic-drag-and-drop": "4.0.0",
+    "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "3.2.1",
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": "3.0.0",
+    "@floating-ui/dom": "1.8.0",
+    "@floating-ui/vue": "2.0.1",
+    "@fontsource-variable/inter": "5.3.0",
+    "@lucide/vue": "1.61.0",
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-list": "3.32.0",
+    "@tiptap/extensions": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
+    "@tiptap/vue-3": "3.32.0",
+    "date-fns": "4.4.0",
+    "pinia": "4.1.0",
+    "vue": "3.5.44",
+    "vue-router": "5.4.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.6",
-    "@vitejs/plugin-vue": "^6.0.10",
-    "@vue/tsconfig": "^0.9.1",
-    "typescript": "^6.0.3",
-    "vite": "^8.3.5",
-    "vue-tsc": "^3.3.14"
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "26.6.6",
+    "@vitejs/plugin-vue": "6.0.10",
+    "@vue/tsconfig": "0.9.1",
+    "typescript": "6.0.3",
+    "vite": "8.3.5",
+    "vue-tsc": "3.3.14"
   }
 }

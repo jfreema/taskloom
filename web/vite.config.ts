@@ -7,6 +7,8 @@ const api = process.env.TASKLOOM_API ?? 'http://localhost:5080'
 
 export default defineConfig({
   plugins: [vue()],
+  // Lets several dev servers share one checkout without fighting over the dependency cache.
+  cacheDir: process.env.VITE_CACHE_DIR ?? 'node_modules/.vite',
   server: {
     port: 5173,
     proxy: {
