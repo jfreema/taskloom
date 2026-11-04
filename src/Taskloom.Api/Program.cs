@@ -59,6 +59,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 
 var app = builder.Build();
 
+if (app.Services.GetRequiredService<AuthOptions>().MicrosoftLacksTenant)
+    app.Logger.LogWarning("Microsoft sign-in is off: set Auth:Microsoft:TenantId (ENTRA_TENANT_ID) to the Entra tenant id, a GUID.");
+
 if (config.GetValue("Database:MigrateOnStartup", true))
 {
     using var scope = app.Services.CreateScope();
@@ -66,6 +69,8 @@ if (config.GetValue("Database:MigrateOnStartup", true))
 }
 
 app.UseForwardedHeaders();
+// Spec 5.8: every HTML response (index.html and the SPA fallback) carries the Content-Security-Policy.
+app.UseContentSecurityPolicyOnHtml();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
@@ -129,7 +134,8 @@ api.MapCommentEndpoints();
 api.MapAttachmentEndpoints();
 // Development only: the path does not exist unless dev login is enabled.
 if (app.Services.GetRequiredService<AuthOptions>().DevLogin.Enabled) api.MapDevEndpoints();
-api.MapFallback(() => Results.NotFound());
+// Unknown /api paths are 404, never the SPA; known paths with the wrong method or content type are 405 or 415.
+api.MapApiFallback();
 
 // The Vue app handles every other route.
 app.MapFallbackToFile("index.html");
