@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // Modal dialog (spec 7.10). A modal layer (7.7): scrim, focus trap, inert #app, scroll lock and
 // focus return. The title is an h2 that labels the dialog. On phones it is a bottom sheet (the
-// panel is marked data-sheet, so toasts rise above it).
+// panel is marked data-sheet, so toasts rise above it); `sheet="full"` makes that sheet fill the
+// screen (the palette and quick create, 8.11 and 8.12). `size="palette"` is the palette's 640px.
 // No native <dialog>: its top layer would hide toasts and pickers.
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { X } from '@lucide/vue'
@@ -17,7 +18,10 @@ const props = withDefaults(
   defineProps<{
     title: string
     description?: string
-    size?: 'sm' | 'md' | 'lg'
+    /** 400 / 560 / 720, or 'palette' (--palette-w, 640). */
+    size?: 'sm' | 'md' | 'lg' | 'palette'
+    /** Phones: 'auto' is a bottom sheet as tall as its content (max 92dvh); 'full' fills the screen. */
+    sheet?: 'auto' | 'full'
     /** Esc, scrim click and the close button. */
     dismissible?: boolean
     /** CSS selector; default is the first focusable element in the body. */
@@ -33,6 +37,7 @@ const props = withDefaults(
   {
     description: undefined,
     size: 'md',
+    sheet: 'auto',
     dismissible: true,
     initialFocus: undefined,
     role: 'dialog',
@@ -114,7 +119,7 @@ function onScrimClick(e: MouseEvent): void {
         <div
           ref="panel"
           class="panel"
-          :class="`size-${size}`"
+          :class="[`size-${size}`, `sheet-${sheet}`]"
           :role="role"
           aria-modal="true"
           :aria-labelledby="titleId"
@@ -194,6 +199,10 @@ function onScrimClick(e: MouseEvent): void {
 
 .size-lg {
   max-width: var(--modal-lg);
+}
+
+.size-palette {
+  max-width: var(--palette-w);
 }
 
 .header {
@@ -307,6 +316,15 @@ function onScrimClick(e: MouseEvent): void {
 
   .footer :deep(.ui-button) {
     flex: 1;
+  }
+
+  /* A full-screen sheet: the whole height, square corners, clear of the status bar. */
+  .ui-dialog-root .panel.sheet-full {
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top, 0px);
   }
 }
 
