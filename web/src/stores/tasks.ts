@@ -754,7 +754,8 @@ export const useTasks = defineStore('tasks', () => {
    * POST /api/lists/{id}/tasks. The full task is in the store at once (pass `r.id` to know its id
    * before the promise settles). Creates for one list, status and parent are sent one at a time.
    * On failure the row goes and a toast offers Retry with the same id; a 409 on that retry means
-   * the first attempt succeeded, so the list is refetched.
+   * the first attempt succeeded, so the list is refetched. Like update, the POST waits for any of
+   * its tags still being created (tags.whenCreated), so it never names an unknown tag.
    */
   function create(listId: Uuid, r: CreateTaskRequest): Promise<Task> {
     const workspaces = useWorkspaces()
@@ -800,7 +801,12 @@ export const useTasks = defineStore('tasks', () => {
     if (statusId) body.statusId = statusId
     const key = `${listId}|${statusId}|${parentTaskId ?? ''}`
     const prevChain = createChains.get(key) ?? Promise.resolve()
-    const run = enqueue(id, () => prevChain.then(() => api.post<Task>(`/api/lists/${listId}/tasks`, body)))
+    const run = enqueue(id, () =>
+      prevChain.then(async () => {
+        if (body.tagIds?.length) await useTags().whenCreated(body.tagIds)
+        return api.post<Task>(`/api/lists/${listId}/tasks`, body)
+      }),
+    )
     const chainTail = run.then(noop, noop)
     createChains.set(key, chainTail)
     void chainTail.then(() => {
@@ -1146,7 +1152,10 @@ export const useTasks = defineStore('tasks', () => {
 
   // ---- Status and count maintenance ----
 
-  /** Tasks of a deleted status move to `toStatusId` the way the server moves them (5.5). Nothing is sent. */
+  /**
+   * Tasks of a deleted status move to `toStatusId` the way the server moves them (5.5). Nothing is
+   * sent; like every store write it bumps changedAt, so an open TaskDetail refetches (8.10).
+   */
   function reassignStatus(fromStatusId: Uuid, toStatusId: Uuid): void {
     if (fromStatusId === toStatusId) return
     const toDone = statusOf(toStatusId)?.category === 'Done'
@@ -1159,13 +1168,20 @@ export const useTasks = defineStore('tasks', () => {
       const isCompleted = t.completedAt !== null
       if (t.parentTaskId && wasCompleted !== isCompleted) {
         const p = byId[t.parentTaskId]
-        if (p) p.subtaskDoneCount = Math.max(0, p.subtaskDoneCount + (isCompleted ? 1 : -1))
+        if (p) {
+          p.subtaskDoneCount = Math.max(0, p.subtaskDoneCount + (isCompleted ? 1 : -1))
+          changedAt[p.id] = Date.now()
+        }
       }
       lastWrite[t.id] = ++clock
+      changedAt[t.id] = Date.now()
     }
   }
 
-  /** A status changed category: set or clear completedAt on its loaded tasks like the server (5.5). */
+  /**
+   * A status changed category: set or clear completedAt on its loaded tasks like the server (5.5).
+   * Nothing is sent; changedAt is bumped as for reassignStatus.
+   */
   function applyCategoryChange(statusId: Uuid, category: StatusCategory): void {
     const done = category === 'Done'
     for (const t of Object.values(byId)) {
@@ -1176,9 +1192,13 @@ export const useTasks = defineStore('tasks', () => {
       else continue
       if (t.parentTaskId) {
         const p = byId[t.parentTaskId]
-        if (p) p.subtaskDoneCount = Math.max(0, p.subtaskDoneCount + (done ? 1 : -1))
+        if (p) {
+          p.subtaskDoneCount = Math.max(0, p.subtaskDoneCount + (done ? 1 : -1))
+          changedAt[p.id] = Date.now()
+        }
       }
       lastWrite[t.id] = ++clock
+      changedAt[t.id] = Date.now()
     }
   }
 

@@ -1,0 +1,76 @@
+/*
+ * Sidebar rows (8.3), shared by SidebarSpace and SidebarListRow through <style scoped src>.
+ * Rows are 30px (44px on coarse pointers) with 8px side padding and radius 6. The row draws the
+ * focus ring (inset) for its main button or link, so the ring also wraps the row's actions.
+ */
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--row-sidebar);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row.is-active {
+  background: var(--bg-selected);
+  color: var(--accent-text);
+}
+
+.row:has(> .row-main:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.row-main {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  border-radius: inherit;
+  color: inherit;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.row-main:focus-visible {
+  outline: none;
+}
+
+.row-main.is-editing {
+  cursor: auto;
+  padding-right: var(--space-1);
+}
+
+.is-active > .row-main {
+  font-weight: var(--fw-medium);
+}
+
+.name {
+  flex: 1;
+}
+
+.edit {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding-right: var(--space-1);
+}

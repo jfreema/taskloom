@@ -16,6 +16,7 @@ import GalleryMenus from '../../components/ui/gallery/GalleryMenus.vue'
 import GalleryOverlays from '../../components/ui/gallery/GalleryOverlays.vue'
 import GalleryPickers from '../../components/ui/gallery/GalleryPickers.vue'
 import GalleryStatus from '../../components/ui/gallery/GalleryStatus.vue'
+import FieldGallery from '../../components/fields/FieldGallery.vue'
 
 const { preference, setPreference } = useTheme()
 const { isPhone } = useBreakpoint()
@@ -57,6 +58,7 @@ function setTheme(v: string): void {
       <GalleryFeedback />
       <GalleryStatus />
       <GalleryEdges />
+      <FieldGallery />
     </main>
   </div>
 </template>

@@ -23,6 +23,12 @@ export interface ShortcutOptions {
   when?: () => boolean
   /** Also fire while focus is in a text field (Mod+K). Default false. */
   allowInInputs?: boolean
+  /**
+   * A key of the focused widget, such as an open picker's number keys: it works even when
+   * single-key shortcuts are off, which turns off only the keys 9.5 lists (WCAG 2.1.4 exempts
+   * keys that are active only while their component has focus). Default false.
+   */
+  widget?: boolean
 }
 
 type Handler = (e: KeyboardEvent) => void | boolean
@@ -35,6 +41,7 @@ interface Registration {
   el?: Ref<HTMLElement | null>
   when?: () => boolean
   allowInInputs: boolean
+  widget: boolean
 }
 
 type KeySnapshot = Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>
@@ -159,7 +166,7 @@ function onKeydown(e: KeyboardEvent): void {
     if (!alt) continue
     if (typing && !reg.allowInInputs) continue
     if (alt.every(isSingleKey)) {
-      if (!shortcutsEnabled.value && alt.some(isCharacterKey)) continue
+      if (!shortcutsEnabled.value && !reg.widget && alt.some(isCharacterKey)) continue
       // A modal layer (or an open popover holding focus) owns single keys; page shortcuts wait.
       if ((reg.scope === 'global' || reg.scope === 'view') && blockedByOverlay) continue
     }
@@ -201,6 +208,7 @@ export function useShortcut(keys: string | string[], handler: Handler, o: Shortc
     el: o.el,
     when: o.when,
     allowInInputs: o.allowInInputs ?? false,
+    widget: o.widget ?? false,
   }
   registrations = [...registrations, reg]
   let removed = false

@@ -118,11 +118,14 @@ export const useTags = defineStore('tags', () => {
     return nextSwatch(latest?.color)
   }
 
-  /** POST /api/workspaces/{id}/tags. Optimistic with a client id; toasts and removes it on failure. */
-  function create(r: { name: string; color?: string }): Promise<Tag> {
+  /**
+   * POST /api/workspaces/{id}/tags. Optimistic with a client id (`r.id`, else newId()), so a picker
+   * can select the tag at once; toasts and removes it on failure.
+   */
+  function create(r: { name: string; color?: string; id?: Uuid }): Promise<Tag> {
     const wsId = workspaces.currentId
     if (!wsId) return handled(Promise.reject(new Error('Choose a workspace first.')))
-    const id = newId()
+    const id = r.id ?? newId()
     const name = r.name.trim()
     const color = r.color ?? nextColor()
     const tag: Tag = { id, workspaceId: wsId, name, color, createdAt: new Date().toISOString() }

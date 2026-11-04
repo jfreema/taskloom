@@ -250,6 +250,7 @@ defineExpose({
     <template v-if="$slots.trigger" #trigger="t">
       <slot name="trigger" :open="t.open" :toggle="t.toggle" :props="wrapTrigger(t.props)" />
     </template>
+    <div v-if="$slots.header && depth === 0 && !back" class="header" role="none"><slot name="header" /></div>
     <div ref="list" class="list" role="none" @pointerleave="cancelHover">
       <UiMenuRows
         :items="items"
@@ -282,6 +283,12 @@ defineExpose({
 </template>
 
 <style scoped>
+/* An optional heading above the items (the account menu's name and email); not a menu stop. */
+.header {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 .list {
   display: flex;
   flex-direction: column;

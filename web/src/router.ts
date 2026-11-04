@@ -10,6 +10,7 @@ import {
   type RouteRecordRaw,
 } from 'vue-router'
 import { useSession } from './stores/session'
+import { useTasks } from './stores/tasks'
 import { useWorkspaces } from './stores/workspaces'
 import { useLayerStack } from './composables/useLayerStack'
 import { readJson, userKey } from './lib/storage'
@@ -21,6 +22,11 @@ declare module 'vue-router' {
     public?: boolean
     /** The page name in "<Page> · Taskloom"; a function for pages named after their data. */
     title?: string | ((route: RouteLocationNormalizedLoaded) => string | null | undefined)
+    /**
+     * The page scrolls an inner container rather than <main>, so AppShell doesn't add the phone
+     * FAB's room under <main>; that container reserves `var(--fab-room)` itself (the list page).
+     */
+    ownScroll?: boolean
   }
 }
 
@@ -60,6 +66,11 @@ function listTitle(route: RouteLocationNormalizedLoaded): string {
   return useWorkspaces().findList(String(route.params.listId))?.list.name ?? 'List'
 }
 
+/** The task page is named after its task once the store has it. */
+function taskTitle(route: RouteLocationNormalizedLoaded): string {
+  return useTasks().get(String(route.params.taskId))?.title || 'Task'
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -77,13 +88,14 @@ const routes: RouteRecordRaw[] = [
         name: 'list-default',
         // Never rendered: beforeEnter always redirects. A guard rather than `redirect`, because the
         // stored view is per user and the session is only known once the global guard has run.
+        // The redirect keeps the navigation's own push or replace (a sidebar link pushes, so Back
+        // returns to the previous list); /l/:id itself never gets a history entry.
         component: { render: () => null },
         beforeEnter: (to) => ({
           name: 'list',
           params: { listId: to.params.listId, view: lastViewFor(String(to.params.listId)) },
           query: to.query,
           hash: to.hash,
-          replace: true,
         }),
       },
       {
@@ -91,14 +103,14 @@ const routes: RouteRecordRaw[] = [
         name: 'list',
         component: () => import('./views/ListPage.vue'),
         props: true,
-        meta: { title: listTitle },
+        meta: { title: listTitle, ownScroll: true },
       },
       {
         path: 't/:taskId',
         name: 'task',
         component: () => import('./views/TaskPage.vue'),
         props: true,
-        meta: { title: 'Task' },
+        meta: { title: taskTitle },
       },
       {
         path: 'settings',

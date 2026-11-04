@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Modal dialog (spec 7.10). A modal layer (7.7): scrim, focus trap, inert #app, scroll lock and
-// focus return. The title is an h2 that labels the dialog. On phones it is a bottom sheet.
+// focus return. The title is an h2 that labels the dialog. On phones it is a bottom sheet (the
+// panel is marked data-sheet, so toasts rise above it).
 // No native <dialog>: its top layer would hide toasts and pickers.
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { X } from '@lucide/vue'
@@ -119,6 +120,7 @@ function onScrimClick(e: MouseEvent): void {
           :aria-labelledby="titleId"
           :aria-describedby="description ? descId : undefined"
           tabindex="-1"
+          data-sheet
         >
           <header class="header" :class="{ 'sr-only': hideHeader }">
             <div class="heading">

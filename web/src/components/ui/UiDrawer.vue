@@ -7,7 +7,8 @@
 //   in place (so it turns inert with the app when a dialog opens). Esc closes it while focus is
 //   inside and no layer is open; focus then goes back to what opened it.
 // - Left and right drawers slide 24px and fade; bottom sheets rise, radius 16 at the top, at most
-//   85dvh, with a decorative 36×4 grabber.
+//   85dvh, with a decorative 36×4 grabber. A modal bottom sheet is marked data-sheet, so toasts
+//   rise above it.
 // - Focus starts on the panel itself, or on `initialFocus` (a CSS selector) when given.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useLayer, useLayerStack } from '../../composables/useLayerStack'
@@ -68,6 +69,9 @@ const panelWidth = computed(() => {
   if (props.side === 'bottom') return undefined
   return props.width ?? (props.side === 'left' ? 'var(--drawer-w)' : 'min(640px, 100vw)')
 })
+
+/** A side panel as wide as the screen (the phone task sheet) has no edge to draw. */
+const fullWidth = computed(() => panelWidth.value === '100vw' || panelWidth.value === '100%')
 
 // A non-modal drawer isn't a layer, so it returns focus itself: to what had focus when it opened,
 // when focus was inside it as it closed.
@@ -140,12 +144,14 @@ defineExpose({ panel, close: () => requestClose('programmatic') })
         <div
           ref="panel"
           class="panel"
+          :class="{ 'is-full': fullWidth }"
           role="dialog"
           aria-modal="true"
           :aria-label="ariaLabel"
           :aria-labelledby="ariaLabelledby"
           :style="{ width: panelWidth }"
           tabindex="-1"
+          :data-sheet="side === 'bottom' ? '' : undefined"
         >
           <div v-if="side === 'bottom'" class="grabber" aria-hidden="true" />
           <slot />
@@ -191,7 +197,8 @@ defineExpose({ panel, close: () => requestClose('programmatic') })
   height: 100%;
   background: var(--bg-raised);
   color: var(--text-primary);
-  box-shadow: var(--shadow-5);
+  /* 7.6: --shadow-4 is the task panel's (a drawer); --shadow-5 is for dialogs and the palette. */
+  box-shadow: var(--shadow-4);
   overflow: hidden;
   outline: none;
 }
@@ -210,6 +217,13 @@ defineExpose({ panel, close: () => requestClose('programmatic') })
 
 .side-right .panel {
   border-left: 1px solid var(--border-floating);
+}
+
+.side-left .panel.is-full,
+.side-right .panel.is-full {
+  border-left: 0;
+  border-right: 0;
+  box-shadow: none;
 }
 
 .side-bottom {

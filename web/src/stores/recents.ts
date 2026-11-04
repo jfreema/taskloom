@@ -68,9 +68,17 @@ export const useRecents = defineStore('recents', () => {
     writeJson(key, { tasks: tasks.value, lists: lists.value, lastListId: lastListId.value } satisfies Stored)
   }
 
-  watch(() => [session.user?.id ?? null, workspaces.currentId] as const, reload, { immediate: true })
+  // Synchronous, so a page that records a visit in the same tick as the workspace switch (the
+  // list page opening as the shell finishes loading) writes to the new workspace's key.
+  watch([() => session.user?.id ?? null, () => workspaces.currentId], reload, { immediate: true, flush: 'sync' })
+
+  /** Reloads first when the user or workspace changed since the last load. */
+  function sync(): void {
+    if (storageKey() !== key) reload()
+  }
 
   function touchTask(t: Pick<Task, 'id' | 'title' | 'listId'>): void {
+    sync()
     const first = tasks.value[0]
     if (first && first.id === t.id && first.title === t.title && first.listId === t.listId) return
     tasks.value = [{ id: t.id, title: t.title, listId: t.listId }, ...tasks.value.filter((x) => x.id !== t.id)].slice(0, MAX)
@@ -78,12 +86,14 @@ export const useRecents = defineStore('recents', () => {
   }
 
   function touchList(listId: Uuid): void {
+    sync()
     if (lists.value[0] === listId) return
     lists.value = [listId, ...lists.value.filter((x) => x !== listId)].slice(0, MAX)
     persist()
   }
 
   function setLastList(listId: Uuid): void {
+    sync()
     if (lastListId.value === listId) return
     lastListId.value = listId
     persist()
@@ -91,6 +101,7 @@ export const useRecents = defineStore('recents', () => {
 
   /** Forgets a task or a list (deleted, or gone from the workspace). */
   function forget(id: Uuid): void {
+    sync()
     const nextTasks = tasks.value.filter((t) => t.id !== id && t.listId !== id)
     const nextLists = lists.value.filter((x) => x !== id)
     const clearLast = lastListId.value === id

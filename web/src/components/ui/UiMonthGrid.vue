@@ -126,7 +126,8 @@ function onKeydown(e: KeyboardEvent): void {
     </div>
     <div ref="grid" class="grid" role="grid" :aria-labelledby="titleId" @keydown="onKeydown">
       <div class="row" role="row">
-        <div v-for="w in weekdays" :key="w.long" class="weekday" role="columnheader" :aria-label="w.long">
+        <div v-for="w in weekdays" :key="w.long" class="weekday" role="columnheader">
+          <span class="sr-only">{{ w.long }}</span>
           <span aria-hidden="true">{{ w.narrow }}</span>
         </div>
       </div>

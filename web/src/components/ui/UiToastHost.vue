@@ -8,7 +8,13 @@
 // - Mod+Z runs the newest Undo (9.2). It is registered here, once for the app, and only when focus
 //   isn't in a text field, where the browser's own undo applies. With nothing to undo the key
 //   passes on.
+// - On phones dialogs are bottom sheets (UiDialog, and UiDrawer from the bottom; both mark their
+//   panel data-sheet). While one is open the toasts rise above it when they fit there, so they
+//   never cover its fields; above a full-height sheet there is no room and they keep their place.
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { CircleAlert, CircleCheck, X } from '@lucide/vue'
+import { useBreakpoint } from '../../composables/useBreakpoint'
+import { useLayerStack } from '../../composables/useLayerStack'
 import { useShortcut } from '../../composables/useShortcut'
 import { useToast, useToastHost } from '../../composables/useToast'
 import UiIcon from './UiIcon.vue'
@@ -23,12 +29,71 @@ function onFocusOut(e: FocusEvent): void {
   const region = e.currentTarget as HTMLElement
   if (!(e.relatedTarget instanceof Node) || !region.contains(e.relatedTarget)) resumeAll('focus')
 }
+
+const SHEET_GAP = 8
+const TOP_MARGIN = 16
+
+const layers = useLayerStack()
+const { isPhone } = useBreakpoint()
+const host = ref<HTMLElement | null>(null)
+/** The topmost open bottom sheet (phones only). */
+const sheet = computed<HTMLElement | null>(() => {
+  if (!isPhone.value) return null
+  const all = layers.layers.value
+  for (let i = all.length - 1; i >= 0; i--) {
+    const panel = all[i].el()?.querySelector<HTMLElement>(':scope > [data-sheet]')
+    if (panel) return panel
+  }
+  return null
+})
+/** The host's distance from the bottom edge while it sits above a sheet, else null. */
+const lift = ref<number | null>(null)
+
+function measure(): void {
+  const panel = sheet.value
+  const el = host.value
+  if (!panel || !el) {
+    lift.value = null
+    return
+  }
+  // The sheet sits on the bottom edge; offsetHeight ignores its rise transform.
+  const above = panel.offsetHeight + SHEET_GAP
+  lift.value = el.offsetHeight <= window.innerHeight - above - TOP_MARGIN ? above : null
+}
+
+let observer: ResizeObserver | null = null
+function stopWatching(): void {
+  observer?.disconnect()
+  observer = null
+  window.removeEventListener('resize', measure)
+}
+watch(
+  sheet,
+  (panel) => {
+    stopWatching()
+    if (panel) {
+      if (typeof ResizeObserver !== 'undefined') {
+        observer = new ResizeObserver(measure)
+        observer.observe(panel)
+        if (host.value) observer.observe(host.value)
+      }
+      window.addEventListener('resize', measure, { passive: true })
+    }
+    measure()
+  },
+  { flush: 'post' },
+)
+onBeforeUnmount(stopWatching)
+
+const hostStyle = computed(() => (lift.value === null ? undefined : { bottom: `${lift.value}px` }))
 </script>
 
 <template>
   <Teleport to="#overlay-root">
     <section
+      ref="host"
       class="ui-toast-host"
+      :style="hostStyle"
       aria-label="Notifications"
       data-layer-allow
       @pointerenter="pauseAll('hover')"
@@ -149,6 +214,10 @@ function onFocusOut(e: FocusEvent): void {
 
   .toast-move {
     transition: transform var(--dur-3) var(--ease-in-out);
+  }
+
+  .ui-toast-host {
+    transition: bottom var(--dur-3) var(--ease-out);
   }
 }
 

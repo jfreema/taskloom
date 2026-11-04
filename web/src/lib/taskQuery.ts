@@ -108,7 +108,7 @@ export function activeFilterCount(f: TaskFilters): number {
 // ---- Matching ----
 
 function fold(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase()
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase()
 }
 
 function isDoneIn(t: Task, ctx: FilterContext): boolean {

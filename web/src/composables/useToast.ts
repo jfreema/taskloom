@@ -2,7 +2,7 @@
 // - At most 3 are visible, newest at the bottom; a fourth closes the oldest non-danger toast ('replaced').
 // - Defaults: 5s, 8s with an action, 10s for danger; 0 keeps a toast until it is dismissed.
 // - Showing an existing id replaces that toast in place. A danger message shown again within 2s
-//   reuses the existing toast.
+//   reuses the existing toast; its Retry then retries both failures, and both onClose callbacks run.
 // - Hover or focus on the region pauses every timer (UiToastHost calls pauseAll / resumeAll).
 import { computed, shallowRef, type ComputedRef } from 'vue'
 
@@ -82,17 +82,38 @@ function close(id: string, reason: ToastCloseReason): void {
   entry.onClose?.(reason)
 }
 
+/** One action that runs both: two failures folded into one toast keep both retries. */
+function mergeActions(a: ToastAction | undefined, b: ToastAction | undefined): ToastAction | undefined {
+  if (!a || !b || a.run === b.run) return a ?? b
+  return {
+    label: a.label,
+    run: () => {
+      a.run()
+      b.run()
+    },
+  }
+}
+
 function showInternal(o: ToastOptions, undo: boolean): string {
   const tone = o.tone ?? 'neutral'
   if (tone === 'danger' && !o.id) {
     const now = Date.now()
     const twin = items.value.find((t) => t.tone === 'danger' && t.message === o.message && now - t.createdAt < DANGER_DEDUPE_MS)
-    if (twin) {
-      const entry = entries.get(twin.id)
-      if (entry) {
-        entry.remaining = twin.duration
-        startTimer(entry)
+    const entry = twin ? entries.get(twin.id) : undefined
+    if (twin && entry) {
+      const item: ToastItem = { ...twin, action: mergeActions(twin.action, o.action), createdAt: now }
+      entry.item = item
+      const first = entry.onClose
+      const second = o.onClose
+      if (second) {
+        entry.onClose = (reason) => {
+          first?.(reason)
+          second(reason)
+        }
       }
+      items.value = items.value.map((t) => (t.id === twin.id ? item : t))
+      entry.remaining = twin.duration
+      startTimer(entry)
       return twin.id
     }
   }
@@ -176,6 +197,10 @@ function error(err: unknown, o?: { retry?: () => void }): string {
   return show({ message, tone: 'danger', action })
 }
 
+function isThenable(v: unknown): v is PromiseLike<unknown> {
+  return !!v && (typeof v === 'object' || typeof v === 'function') && typeof (v as { then?: unknown }).then === 'function'
+}
+
 function undoable(
   message: string,
   undo: () => void | Promise<void>,
@@ -188,9 +213,10 @@ function undoable(
       action: {
         label: 'Undo',
         run: () => {
-          const result = undo()
-          // Stores report their own failures with an error toast; never leave a rejection unhandled.
-          if (result instanceof Promise) result.catch(() => undefined)
+          const result: unknown = undo()
+          // Stores report their own failures with an error toast; never leave a rejection unhandled
+          // (any thenable, not only a native Promise).
+          if (isThenable(result)) result.then(undefined, () => undefined)
         },
       },
       onClose: (reason) => {

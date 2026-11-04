@@ -1,7 +1,7 @@
 // The task panel's URL state (8.10). `?task=<uuid>` on Home and list pages opens the panel;
 // TaskPanelHost (A2) renders it and reports its mode here. Opening uses router.replace, except in
 // sheet mode (phones), where it pushes an entry marked `taskloomSheet` so the browser's Back closes it.
-import { computed, effectScope, nextTick, ref, shallowRef, type ComputedRef, type Ref } from 'vue'
+import { computed, effectScope, nextTick, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue'
 import type { RouteLocationNormalizedLoaded, Router } from 'vue-router'
 import type { Uuid } from '../types'
 import { appRouter } from './appRouter'
@@ -46,6 +46,16 @@ function ensureState(router: Router): PanelState {
   state = scope.run(() => {
     const openId = computed(() => taskQuery(router.currentRoute.value))
     const index = computed(() => (openId.value ? order.value.indexOf(openId.value) : -1))
+    // A close that doesn't go through close() and keeps the page (the browser's Back on a sheet):
+    // focus returns to the row when it was in the panel. This runs before the DOM updates, while
+    // focus is still inside; a modal or sheet drawer then returns focus to its opener, which after
+    // J and K is another task's row, so focusAfterClose runs once that is done.
+    watch(
+      () => [openId.value, router.currentRoute.value.path] as const,
+      ([id, path], [prevId, prevPath]) => {
+        if (!id && prevId && path === prevPath && focusInPanel()) focusAfterClose(prevId)
+      },
+    )
     return {
       openId,
       isOpen: computed(() => openId.value !== null),
@@ -82,11 +92,31 @@ function navigate(router: Router, id: Uuid, o: { focus: boolean; replaceOnly: bo
   }
 }
 
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]'
+
+function focusInPanel(): boolean {
+  const a = typeof document !== 'undefined' ? document.activeElement : null
+  return !!a?.closest('[data-task-panel-root]')
+}
+
+/**
+ * Focus after the panel closes (8.10): the task's row (the row itself when it can take focus, else
+ * its first control), scrolled into view only when out of sight; otherwise #main. It runs after the
+ * route change has rendered, so after a modal or sheet drawer has returned focus to its opener:
+ * after J and K that opener is another task's row.
+ */
 function focusAfterClose(id: Uuid): void {
   void nextTick(() => {
     const row = document.querySelector<HTMLElement>(`[data-task-row="${CSS.escape(id)}"]`)
-    const target = row ?? document.getElementById('main')
-    target?.focus({ preventScroll: !!row })
+    const target = row && (row.matches(FOCUSABLE) ? row : row.querySelector<HTMLElement>(FOCUSABLE))
+    if (target) {
+      target.focus({ preventScroll: true })
+      if (document.activeElement === target) {
+        target.scrollIntoView?.({ block: 'nearest' })
+        return
+      }
+    }
+    document.getElementById('main')?.focus({ preventScroll: true })
   })
 }
 

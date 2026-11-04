@@ -36,6 +36,8 @@ const emit = defineEmits<{ select: [item: MenuItem] }>()
 
 defineSlots<{
   trigger?(p: { open: boolean; toggle: () => void; props: PopoverTriggerProps }): unknown
+  /** Optional, not in 7.10: text above the items (not focusable), e.g. the account menu's name and email. */
+  header?(): unknown
 }>()
 
 const { isPhone } = useBreakpoint()
@@ -99,6 +101,9 @@ function back(): void {
   >
     <template v-if="$slots.trigger" #trigger="t">
       <slot name="trigger" :open="t.open" :toggle="t.toggle" :props="t.props" />
+    </template>
+    <template v-if="$slots.header" #header>
+      <slot name="header" />
     </template>
   </UiMenuLevel>
 </template>

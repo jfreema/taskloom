@@ -176,7 +176,6 @@ function onLinkClick(e: MouseEvent, navigate: (e?: MouseEvent) => unknown): void
 .ui-button--xs {
   height: var(--control-xs);
   padding: 0 var(--space-2);
-  gap: var(--space-1);
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
 }

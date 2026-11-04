@@ -147,6 +147,9 @@ export function hide(el?: HTMLElement): void {
 }
 
 function scheduleShow(el: HTMLElement): void {
+  // An element whose tooltip is off (an undefined value) doesn't cancel one pending on an ancestor,
+  // e.g. PageHeader's tooltip for a compacted action button.
+  if (!bound.get(el)?.options) return
   clearTimeout(showTimer)
   const warm = tooltipState.visible || Date.now() - lastHiddenAt < WARM_WINDOW_MS
   if (warm) show(el)
