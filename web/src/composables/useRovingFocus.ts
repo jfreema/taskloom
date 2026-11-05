@@ -41,10 +41,14 @@ export function useRovingFocus(container: Ref<HTMLElement | null>, o: RovingFocu
     }
   }
 
+  /**
+   * After DOM changes, at the next frame: sync() reads layout (getClientRects), which then costs
+   * nothing extra, where in the task that changed the DOM it would force a layout of its own (S10).
+   */
   function queueSync(): void {
     if (syncQueued) return
     syncQueued = true
-    queueMicrotask(() => {
+    requestAnimationFrame(() => {
       syncQueued = false
       sync()
     })

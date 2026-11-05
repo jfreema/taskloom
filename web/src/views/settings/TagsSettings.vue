@@ -14,6 +14,7 @@ import UiButton from '../../components/ui/UiButton.vue'
 import UiEmptyState from '../../components/ui/UiEmptyState.vue'
 import UiErrorState from '../../components/ui/UiErrorState.vue'
 import UiSkeleton from '../../components/ui/UiSkeleton.vue'
+import { skeletonDelay } from '../../components/shell/skeletonHandover'
 import { useAnnouncer } from '../../composables/useAnnouncer'
 import { useConfirm } from '../../composables/useConfirm'
 import { useDelayedFlag } from '../../composables/useDelayedFlag'
@@ -55,7 +56,7 @@ const state = computed<'loading' | 'error' | 'empty' | 'list'>(() => {
   return tags.loadError ? 'error' : 'empty'
 })
 
-const showSkeleton = useDelayedFlag(computed(() => state.value === 'loading'))
+const showSkeleton = useDelayedFlag(computed(() => state.value === 'loading'), skeletonDelay())
 
 const description = computed(() => `Tags group related tasks across the lists of ${workspaces.current?.name ?? 'this workspace'}.`)
 

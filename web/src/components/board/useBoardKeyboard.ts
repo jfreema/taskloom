@@ -7,7 +7,11 @@
 // - Alt+Left/Right move the card to the previous or next column at the same index, Alt+Up/Down move
 //   it one place; each move is announced ("Moved to In progress, 1 of 3").
 // - Esc lets a docked panel close first, then leaves the board for the page.
+// - Getting in: the arrows and J/K pressed elsewhere on the page (or on the body, after a reload)
+//   focus the remembered card (the last focused one), else the open task's card, else the first
+//   card.
 import { type ComputedRef, type Ref } from 'vue'
+import { focusOutsideGrids } from '../shell/shellContext'
 import { useAnnouncer } from '../../composables/useAnnouncer'
 import { useShortcut } from '../../composables/useShortcut'
 import { useTaskActions, type PickField } from '../../composables/useTaskActions'
@@ -28,6 +32,8 @@ export interface BoardKeyboardDeps {
   startRename(id: Uuid): void
   /** Focuses the target now, or after the render that puts it in place. */
   refocus(target: FocusTarget): void
+  /** The card that last held focus (useBoardFocus), for getting back into the board. */
+  remembered?: () => Uuid | null
 }
 
 export function cardEl(root: HTMLElement | null, id: Uuid): HTMLElement | null {
@@ -118,6 +124,22 @@ export function useBoardKeyboard(d: BoardKeyboardDeps): void {
   useShortcut(['ArrowUp', 'k'], () => vertical(-1), grid)
   useShortcut('ArrowRight', () => across(1), grid)
   useShortcut('ArrowLeft', () => across(-1), grid)
+
+  // ---- Getting in ----
+
+  /** The remembered card, else the open task's card, else the first card of the first column with cards. */
+  function enter(): boolean {
+    const open = panel.openId.value
+    for (const id of [d.remembered?.() ?? null, open]) if (id && focusCard(id)) return true
+    const first = d.model.columns.value.find((c) => !c.collapsed && c.shown.length)?.shown[0]
+    return focusCard(first?.id)
+  }
+
+  // Global scope with a condition rather than 'view': it also works with focus on the body. A modal
+  // layer or an open popover still takes these keys first (useShortcut).
+  useShortcut(['ArrowDown', 'j', 'ArrowUp', 'k', 'ArrowLeft', 'ArrowRight'], enter, {
+    when: () => focusOutsideGrids() && !d.root.value?.contains(document.activeElement),
+  })
 
   // ---- Acting on the focused card ----
 

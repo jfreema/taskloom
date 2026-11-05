@@ -2,7 +2,8 @@
 // One Home row (8.5): 40px, `data-row`, `data-task-row`. The complete circle in the status colour,
 // the title (subtasks add "in <parent>"), subtask progress, then the details (HomeRowMeta: location,
 // due date, flag, people). Revealed actions: Reschedule (the parent opens the shared date picker on
-// this row) and the shared row menu. The row is one roving tab stop; its controls are tabbable only
+// this row) and the shared row menu; with a mouse they overlay the row's trailing edge on a fade
+// rather than taking a column. The row is one roving tab stop; its controls are tabbable only
 // while it is the tab stop. Below 640px of page width (container `page`) it takes two lines (56px).
 import { computed, ref } from 'vue'
 import { CalendarClock, Ellipsis } from '@lucide/vue'
@@ -104,7 +105,7 @@ defineExpose({ el: root })
       :color="statusColor"
       :readonly="readonly"
       :tabindex="inner"
-      @toggle="actions.toggleComplete(task.id)"
+      @toggle="void actions.toggleComplete(task.id)"
     />
     <span class="main">
       <span v-tooltip="{ text: task.title, overflowOnly: true }" class="title truncate">{{ task.title }}</span>
@@ -202,6 +203,58 @@ defineExpose({ el: root })
   display: inline-flex;
   align-items: center;
   gap: var(--space-0-5);
+}
+
+/* One-line rows under a mouse (V12): the actions take no column of their own. They overlay the
+   row's trailing edge on a fade of the row's own colour while the row is hovered, focused from
+   the keyboard or has its menu open, so the details end at the row's padding. */
+@media (hover: hover) {
+  @container page (min-width: 640px) {
+    .home-row {
+      --row-base: var(--bg-surface);
+      --row-tint: transparent;
+      grid-template-columns: var(--control-xs) minmax(120px, 1fr) auto;
+      grid-template-areas: "toggle main meta";
+      padding-right: var(--space-2);
+    }
+
+    .home-row:hover {
+      --row-tint: var(--bg-hover);
+    }
+
+    .home-row.is-current {
+      --row-base: var(--bg-selected);
+      --row-tint: transparent;
+    }
+
+    .actions {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      padding: 0 var(--space-1) 0 var(--space-6);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      background:
+        linear-gradient(to right, transparent, var(--row-tint) var(--space-6)),
+        linear-gradient(to right, transparent, var(--row-base) var(--space-6));
+      opacity: 0;
+      transition: opacity var(--dur-1) var(--ease-out);
+    }
+
+    .home-row:hover .actions,
+    .home-row:focus-visible .actions,
+    .home-row:has(:focus-visible) .actions,
+    .actions:has([aria-expanded="true"]) {
+      opacity: 1;
+    }
+  }
+}
+
+/* Touch (7.5): one-line rows are 44px. */
+@media (pointer: coarse) {
+  .home-row {
+    min-height: var(--touch-min);
+  }
 }
 
 /* Narrow pages (the phone, or a docked panel): two lines, 56px. */

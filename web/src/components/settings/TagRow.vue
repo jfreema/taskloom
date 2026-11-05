@@ -84,4 +84,18 @@ const emit = defineEmits<{ rename: [name: string]; recolour: [hex: string]; remo
     flex-basis: 96px;
   }
 }
+
+/* Touch (7.5): the name is a 44px target, and the colour and Delete buttons sit far enough apart
+   that their 44px hit areas don't overlap. */
+@media (pointer: coarse) {
+  .tag-row {
+    column-gap: var(--space-4);
+  }
+
+  .name :deep(.view) {
+    align-items: center;
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+  }
+}
 </style>

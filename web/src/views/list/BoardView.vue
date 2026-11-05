@@ -132,8 +132,8 @@ provideBoard({
 
 // ---- Focus ----
 
-const { refocus, onFocusIn, onFocusOut } = useBoardFocus(boardEl, model)
-useBoardKeyboard({ root: boardEl, model, canEdit, pick, startRename, refocus })
+const { refocus, remembered, onFocusIn, onFocusOut } = useBoardFocus(boardEl, model)
+useBoardKeyboard({ root: boardEl, model, canEdit, pick, startRename, refocus, remembered })
 
 // ---- The panel ----
 

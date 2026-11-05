@@ -35,6 +35,8 @@ const props = defineProps<{
   /** Open in the task panel. */
   current: boolean
   flash: boolean
+  /** Just followed into another group (a status change): highlighted for a second. */
+  moved: boolean
   renaming: boolean
   /** The drop indicator this row draws. */
   drop: 'top' | 'bottom' | null
@@ -138,6 +140,7 @@ function onCheck(_value: boolean, e: MouseEvent | KeyboardEvent): void {
       'is-context': context,
       'is-dragging': dragging,
       'flash-new': flash,
+      'is-moved': moved,
       'drop-top': drop === 'top',
       'drop-bottom': drop === 'bottom',
     }"
@@ -213,6 +216,16 @@ function onCheck(_value: boolean, e: MouseEvent | KeyboardEvent): void {
   color: var(--text-primary);
   cursor: default;
   transition: background-color var(--dur-1) var(--ease-out);
+  /* Rows far from the viewport skip style, layout and paint (S10); every row has a fixed height,
+     so nothing moves when one starts rendering. Rows clip what they paint, except while they show
+     a drop indicator, which crosses the row's edge (below). */
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--row-list);
+}
+
+.list-row.drop-top,
+.list-row.drop-bottom {
+  content-visibility: visible;
 }
 
 .list-row:hover {
@@ -226,6 +239,27 @@ function onCheck(_value: boolean, e: MouseEvent | KeyboardEvent): void {
 .list-row.is-current {
   background: var(--bg-selected);
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* A row that just landed in another group (a status change from its picker): --bg-selected that
+   holds, then fades out over the second; under reduced motion it stays, without the fade, for the
+   second the class is on. */
+.list-row.is-moved {
+  animation: list-row-moved 1s var(--ease-out);
+}
+
+@keyframes list-row-moved {
+  0%,
+  40% {
+    background-color: var(--bg-selected);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .list-row.is-moved {
+    animation: none;
+    background: var(--bg-selected);
+  }
 }
 
 .list-row.is-dragging {
@@ -302,7 +336,7 @@ function onCheck(_value: boolean, e: MouseEvent | KeyboardEvent): void {
    their auto columns collapse; the cells space themselves (no column gap). */
 @container page (width < 560px) {
   .list-row {
-    --title-indent: calc(20px + var(--space-1-5) + var(--control-xs) + var(--space-1-5));
+    --title-indent: calc(20px + var(--space-1-5) + var(--control-xs) + var(--space-1-5) + var(--touch-shift, 0px));
     display: grid;
     grid-template-columns: var(--title-indent) auto auto auto minmax(0, 1fr) auto;
     grid-template-rows: 32px 20px;
@@ -312,7 +346,7 @@ function onCheck(_value: boolean, e: MouseEvent | KeyboardEvent): void {
   }
 
   .list-row.is-sub {
-    --title-indent: calc(var(--space-6) + 20px + var(--space-1-5) + var(--control-xs) + var(--space-1-5));
+    --title-indent: calc(var(--space-6) + 20px + var(--space-1-5) + var(--control-xs) + var(--space-1-5) + var(--touch-shift, 0px));
   }
 
   .cell--gutter {

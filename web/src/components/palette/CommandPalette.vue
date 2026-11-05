@@ -46,7 +46,7 @@ function close(): void {
 }
 
 const search = usePaletteSearch({ query, active: open })
-const { groups, noResults, trimmed } = usePaletteItems({ query, expanded, search, close })
+const { groups, noResults, trimmed } = usePaletteItems({ query, expanded, search, close, active: open })
 
 const options = computed<PaletteOption[]>(() => groups.value.flatMap((g) => g.options))
 const hasRecent = computed(() => groups.value.some((g) => g.key === 'recent'))
@@ -104,6 +104,7 @@ const liveText = computed(() => {
     sheet="full"
     hide-header
     :close-button="false"
+    body="fill"
     @after-leave="onAfterLeave"
   >
     <div class="command-palette">
@@ -173,25 +174,23 @@ const liveText = computed(() => {
 </template>
 
 <style scoped>
-/* The palette draws its own edges, so the dialog body loses its padding (UiDialog has no prop for
-   it). The body stays the one scroll container: the input and the key hints stick to its edges, and
-   the region axe asks to be reachable by keyboard holds the input. */
-:global(.ui-dialog-root .panel > .body:has(> .command-palette)) {
-  padding: 0;
+/* The palette draws its own edges and is the one scroll container (the dialog body is "fill"): the
+   input and the key hints stick to its edges, and the region axe asks to be reachable by keyboard
+   holds the input. */
+.command-palette {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
   scroll-padding-top: calc(48px + var(--space-2));
   scroll-padding-bottom: calc(36px + var(--space-2));
 }
 
 @media (min-width: 640px) {
-  :global(.ui-dialog-root .panel > .body:has(> .command-palette)) {
+  .command-palette {
     max-height: min(560px, calc(100dvh - 12vh - var(--space-4) - 2px));
   }
-}
-
-.command-palette {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
 }
 
 .field {
@@ -279,7 +278,7 @@ const liveText = computed(() => {
 /* Phones: a full-height sheet with a Cancel button (and no key hints); toasts keep clear of the
    last results. */
 @media (max-width: 639px) {
-  :global(.ui-dialog-root .panel > .body:has(> .command-palette)) {
+  .command-palette {
     scroll-padding-top: calc(56px + var(--space-2));
     scroll-padding-bottom: 88px;
   }

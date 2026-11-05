@@ -4,7 +4,7 @@
 // Keyboard shortcuts, Settings and Sign out.
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronDown, Keyboard, LogOut, Monitor, Moon, Settings, Sun } from '@lucide/vue'
+import { ChevronDown, CircleUser, Keyboard, LogOut, Monitor, Moon, Settings, Sun } from '@lucide/vue'
 import { useTheme } from '../../composables/useTheme'
 import { useSession } from '../../stores/session'
 import { useUi } from '../../stores/ui'
@@ -30,7 +30,7 @@ const THEMES: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
 
 function items(): MenuItem[] {
   return [
-    { id: 'profile', label: 'Profile', onSelect: () => void router.push({ name: 'settings-profile' }) },
+    { id: 'profile', label: 'Profile', icon: CircleUser, onSelect: () => void router.push({ name: 'settings-profile' }) },
     { kind: 'label', id: 'theme', label: 'Theme' },
     ...THEMES.map(
       (t): MenuItem => ({

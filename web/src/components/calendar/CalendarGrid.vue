@@ -6,10 +6,13 @@
 // create on the day. Moving past the shown weeks shows that day's month. Keys on a chip: Up and
 // Down (or Tab) move through the day's chips and its "+N more", Enter opens the task, Esc goes back
 // to the day. T and N follow the single-key shortcut setting (useShortcut, grid scope).
+// From elsewhere on the page (or the body), the arrows, Home, End and T focus the tab-stop day
+// (the remembered one, else today) and then do what they do there.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useShortcut } from '../../composables/useShortcut'
 import { addDaysIso, addMonthsIso, endOfWeekIso, startOfWeekIso } from '../../lib/dates'
 import type { IsoDate, Uuid } from '../../types'
+import { focusOutsideGrids } from '../shell/shellContext'
 import CalendarDay from './CalendarDay.vue'
 import type { CalendarModel } from './useCalendarModel'
 
@@ -148,6 +151,18 @@ function onKeydown(e: KeyboardEvent): void {
 
 // T and N: single-key shortcuts (9.5), so they follow the setting and never fire while typing.
 useShortcut('t', () => focusDay(props.model.today.value), { scope: 'grid', el: gridEl })
+
+// Getting in: the day keys, pressed outside the grid, act from the tab-stop day.
+useShortcut(
+  ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 't'],
+  (e) => {
+    if (e.key === 't' || e.key === 'T') return focusDay(props.model.today.value)
+    const cell = cellOf(tabStop.value)
+    if (!cell) return false
+    onDayKey(e, cell)
+  },
+  { when: () => !!gridEl.value && focusOutsideGrids() },
+)
 useShortcut(
   'n',
   (e) => {

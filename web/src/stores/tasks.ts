@@ -10,7 +10,7 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 import { api, newId, query } from '../api'
 import { useDelayedDelete } from '../composables/useDelayedDelete'
-import { useToast } from '../composables/useToast'
+import { errorMessage, useToast } from '../composables/useToast'
 import { errorStatus, handled, noop } from '../lib/async'
 import { pluralize } from '../lib/format'
 import { isEmptyHtml } from '../lib/html'
@@ -44,6 +44,13 @@ export interface ListMeta {
   error: unknown
 }
 
+/** An unsaved description (see `descriptionDrafts`). */
+export interface DescriptionDraft {
+  html: string
+  /** False after a failure that sending again can't fix (400, 403): only the user can resolve it. */
+  retryable: boolean
+}
+
 /** Bulk calls take at most this many items (5.1). */
 export const BULK_CHUNK = 500
 /** The completion hold (8.1). */
@@ -52,6 +59,10 @@ const HOLD_MS = 1000
 const FRESH_MS = 30_000
 
 const EMPTY_TASKS: Task[] = []
+
+function sameIds(a: readonly Uuid[], b: readonly Uuid[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i])
+}
 
 /** A queued request skipped because the task's create failed first (its row is already gone). */
 class SkippedError extends Error {
@@ -99,6 +110,13 @@ export const useTasks = defineStore('tasks', () => {
   const recentlyCompleted = ref<Set<Uuid>>(new Set())
   const pendingDeletes = reactive(new Set<Uuid>())
   const creating = reactive(new Set<Uuid>())
+  /**
+   * Description HTML that the server hasn't accepted yet, by task: a save failed, or the editor
+   * closed with an edit not yet saved. The editor restores it when the task opens again, and a
+   * draft that failed for want of a network is sent again when the browser comes back online.
+   * Kept across `reset()`, so a workspace switch doesn't lose typing.
+   */
+  const descriptionDrafts = reactive(new Map<Uuid, DescriptionDraft>())
 
   // Bookkeeping that nothing renders.
   const seq: Record<Uuid, number> = {}
@@ -112,6 +130,8 @@ export const useTasks = defineStore('tasks', () => {
   const retryToasts = new Map<string, string>()
   const holdTimers = new Map<Uuid, ReturnType<typeof setTimeout>>()
   const listLoads = new Map<Uuid, Promise<void>>()
+  /** Tasks with a description editor on screen, which sends its own draft again. */
+  const descriptionHolders = new Map<Uuid, number>()
 
   // ---- Indexes ----
 
@@ -220,13 +240,19 @@ export const useTasks = defineStore('tasks', () => {
     return out
   }
 
-  /** Writes a server row. `keepCounts` keeps the local subtask counts (a child is still busy). */
+  /**
+   * Writes a server row. `keepCounts` keeps the local subtask counts (a child is still busy). Id
+   * lists that haven't changed keep their arrays, so a refresh re-renders only the tasks it changed
+   * (reactive writes of equal plain values trigger nothing).
+   */
   function writeRow(t: Task, keepCounts = false): void {
     const existing = byId[t.id]
     if (existing) {
       const count = existing.subtaskCount
       const done = existing.subtaskDoneCount
-      Object.assign(existing, t)
+      const assigneeIds = sameIds(existing.assigneeIds, t.assigneeIds) ? existing.assigneeIds : [...t.assigneeIds]
+      const tagIds = sameIds(existing.tagIds, t.tagIds) ? existing.tagIds : [...t.tagIds]
+      Object.assign(existing, t, { assigneeIds, tagIds })
       if (keepCounts) {
         existing.subtaskCount = count
         existing.subtaskDoneCount = done
@@ -882,6 +908,7 @@ export const useTasks = defineStore('tasks', () => {
       return api.patch<Task>(`/api/tasks/${id}`, body)
     }).then(
       (server) => {
+        if (typeof patch.description === 'string') clearDescriptionDraft(id, patch.description)
         if (gen !== generation) return server
         settle(id)
         if (seq[id] === s) writeRow(server, parentsWithBusyChildren().has(id))
@@ -889,6 +916,7 @@ export const useTasks = defineStore('tasks', () => {
         return byId[id] ?? server
       },
       (err: unknown) => {
+        if (typeof patch.description === 'string') noteDescriptionFailure(id, patch.description, err)
         if (gen !== generation) throw err
         settle(id)
         if (undoToast) toast.dismiss(undoToast)
@@ -897,6 +925,79 @@ export const useTasks = defineStore('tasks', () => {
       },
     )
     return handled(p)
+  }
+
+  // ---- Description drafts ----
+
+  /** Records (or replaces) the task's unsaved description. */
+  function setDescriptionDraft(id: Uuid, html: string, retryable = true): void {
+    descriptionDrafts.set(id, { html, retryable })
+  }
+
+  /** Forgets the task's draft; with `html`, only while the draft still holds exactly that HTML. */
+  function clearDescriptionDraft(id: Uuid, html?: string): void {
+    const draft = descriptionDrafts.get(id)
+    if (draft && (html === undefined || draft.html === html)) descriptionDrafts.delete(id)
+  }
+
+  function noteDescriptionFailure(id: Uuid, html: string, err: unknown): void {
+    const status = errorStatus(err)
+    // Gone, signed out, or never created: there is nothing left to save the text to.
+    if (err instanceof SkippedError || status === 404 || status === 401) {
+      clearDescriptionDraft(id, html)
+      return
+    }
+    setDescriptionDraft(id, html, errorMessage(err).retryable)
+  }
+
+  /** A description editor for the task is on screen; it sends its own draft again. Returns the release. */
+  function holdDescription(id: Uuid): () => void {
+    descriptionHolders.set(id, (descriptionHolders.get(id) ?? 0) + 1)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      const n = (descriptionHolders.get(id) ?? 1) - 1
+      if (n > 0) descriptionHolders.set(id, n)
+      else descriptionHolders.delete(id)
+    }
+  }
+
+  /**
+   * Sends the task's draft (an editor that closed with an unsaved edit, or a retry once back
+   * online). Success forgets it; failure keeps it, and a task still in the store toasts as usual.
+   */
+  function sendDescriptionDraft(id: Uuid): void {
+    const draft = descriptionDrafts.get(id)
+    if (!draft) return
+    const html = draft.html
+    if (byId[id]) {
+      if (isPendingDelete(id)) return
+      void update(id, { description: html }, { undo: false }).catch(noop)
+      return
+    }
+    // The task left the store (a workspace switch): send the text directly.
+    void api.patch<Task>(`/api/tasks/${id}`, { description: html }).then(
+      () => clearDescriptionDraft(id, html),
+      (err: unknown) => noteDescriptionFailure(id, html, err),
+    )
+  }
+
+  /** Back online: sends every draft that failed for want of a network, except those an editor shows. */
+  function retryDescriptionDrafts(): void {
+    for (const [id, draft] of [...descriptionDrafts]) {
+      if (draft.retryable && !descriptionHolders.has(id)) sendDescriptionDraft(id)
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', retryDescriptionDrafts)
+    // The drafts live only in memory: warn before a reload or a closed tab drops one.
+    window.addEventListener('beforeunload', (e) => {
+      if (descriptionDrafts.size === 0) return
+      e.preventDefault()
+      e.returnValue = ''
+    })
   }
 
   /**
@@ -1283,6 +1384,7 @@ export const useTasks = defineStore('tasks', () => {
     listMeta,
     changedAt,
     recentlyCompleted,
+    descriptionDrafts,
     get,
     isPendingDelete,
     isDone,
@@ -1310,5 +1412,9 @@ export const useTasks = defineStore('tasks', () => {
     stripTag,
     forgetList,
     reset,
+    setDescriptionDraft,
+    clearDescriptionDraft,
+    sendDescriptionDraft,
+    holdDescription,
   }
 })

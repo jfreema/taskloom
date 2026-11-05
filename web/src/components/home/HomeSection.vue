@@ -3,7 +3,7 @@
 // its rows while expanded (collapsed sections render none). The button's name is the label alone,
 // the count is its description, and the rows are a list named by the heading. Today shows a muted
 // "Nothing due today" row when empty. A long section renders 100 rows, then "Show N more" (8.1).
-import { computed, useId } from 'vue'
+import { computed, onMounted, onUpdated, useId } from 'vue'
 import { ChevronRight } from '@lucide/vue'
 import { pluralize } from '../../lib/format'
 import UiButton from '../ui/UiButton.vue'
@@ -24,7 +24,12 @@ const props = withDefaults(
   { emptyText: undefined, hiddenCount: 0 },
 )
 
-const emit = defineEmits<{ toggle: []; more: [] }>()
+const emit = defineEmits<{
+  toggle: []
+  more: []
+  /** After each render of the section (its rows render here): Home mounts the next batch (useHomeMounting). */
+  rendered: []
+}>()
 
 defineSlots<{
   /** Header actions, revealed on hover or focus ("Move all to today"). */
@@ -39,6 +44,9 @@ const countId = `${id}-count`
 const listId = `${id}-rows`
 const countText = computed(() => pluralize(props.count, 'task'))
 const moreText = computed(() => `Show ${Math.min(props.hiddenCount, 100)} more`)
+
+onMounted(() => emit('rendered'))
+onUpdated(() => emit('rendered'))
 </script>
 
 <template>
@@ -157,6 +165,20 @@ const moreText = computed(() => `Show ${Math.min(props.hiddenCount, 100)} more`)
 
 .more {
   padding: var(--space-1) 0 0 calc(var(--space-2) + var(--control-xs) + var(--space-3) - var(--space-2));
+}
+
+/* Touch (7.5): the header row and its toggle are 44px, so "Move all to today" (28px) keeps its whole
+   44px hit area inside the header. */
+@media (pointer: coarse) {
+  .head,
+  .toggle {
+    min-height: var(--touch-min);
+  }
+
+  /* The first row's complete circle has a 44px hit area that reaches 6px above the row. */
+  .head {
+    margin-bottom: var(--space-2);
+  }
 }
 
 .empty {

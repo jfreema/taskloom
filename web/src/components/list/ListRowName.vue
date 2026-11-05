@@ -191,13 +191,35 @@ function onRenameEditing(on: boolean): void {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(20px + var(--space-1-5) + 11.5px);
+  left: calc(20px + var(--space-1-5) + 11.5px + var(--touch-shift, 0px));
   width: 1px;
   background: var(--border-default);
 }
 
 .is-sub.is-last .cell--name::before {
   bottom: 50%;
+}
+
+/* Touch (7.5): the chevron and the status icon are 44px targets side by side (the icon moves right
+   by --touch-shift, set by ListTable). */
+@media (pointer: coarse) {
+  .chevron {
+    position: relative;
+  }
+
+  .chevron::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--touch-min);
+    height: var(--touch-min);
+    transform: translate(-50%, -50%);
+  }
+
+  .status {
+    margin-left: var(--touch-shift, 0px);
+  }
 }
 
 /* Phones: the first line (32px) of the 56px two-line row; the thread line runs the row's height. */
@@ -215,6 +237,22 @@ function onRenameEditing(on: boolean): void {
 
   .is-sub.is-last .cell--name::before {
     bottom: 50%;
+  }
+}
+
+/* Phone rows clip what they paint (content-visibility), and the first line is only 32px: the 44px
+   targets of the chevron and the status icon start at the row's top edge instead of centring. */
+@media (pointer: coarse) {
+  @container page (width < 560px) {
+    .chevron::after {
+      top: calc((20px - 32px) / 2);
+      transform: translateX(-50%);
+    }
+
+    .status :deep(.field-trigger)::after {
+      top: calc((var(--control-xs) - 32px) / 2);
+      transform: translateX(-50%);
+    }
   }
 }
 </style>

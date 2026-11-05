@@ -12,14 +12,14 @@
 // - Rows carry only what changes rarely; the components read the task itself, so an edit to one
 //   task re-renders one row.
 // - Progressive mounting: when many rows appear at once (opening a long list, clearing a search,
-//   "Show N more", Expand all), one batch of task rows more renders per frame, so no single long
-//   task builds hundreds of rows (S10). The rest follow frame by frame, in display order. The first
-//   render mounts a screenful; later batches follow what a row costs on this device (lib/mountBudget),
-//   timing each frame's step.
-import { computed, nextTick, onScopeDispose, reactive, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue'
+//   "Show N more", Expand all), the rows mount in batches, each in a task of its own, so no single
+//   long task builds hundreds of rows (S10). The rest follow batch by batch, in display order, each
+//   once the table has rendered the one before (it calls rendered()). The first render mounts most
+//   of a screenful; batches follow what a row costs on this device (lib/mountBudget).
+import { computed, onScopeDispose, reactive, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue'
 import { useListPageContext } from '../../composables/useListPageContext'
 import { useToday } from '../../composables/useToday'
-import { listRowBudget } from '../../lib/mountBudget'
+import { createMountStepper, listRowBudget } from '../../lib/mountBudget'
 import { groupTasks, sortTasks, type TaskGroup } from '../../lib/taskQuery'
 import { useSession } from '../../stores/session'
 import { useTasks } from '../../stores/tasks'
@@ -29,8 +29,12 @@ import type { CreateTaskRequest, Task, Uuid } from '../../types'
 /** Top-level rows each group renders before "Show N more", and how many more each click shows. */
 export const GROUP_LIMIT = 100
 
-/** Task rows a list's first render may mount, about a screenful, so its first paint is complete. */
-const FIRST_ROWS = 20
+/**
+ * Task rows a list's first render may mount: the top of the screen, which the next batches complete,
+ * usually before the first paint. Fewer than a batch: that render also builds the page and takes down
+ * the one before (Home, the Board), which cost more than the rows.
+ */
+const FIRST_ROWS = 8
 
 export interface TaskRowItem {
   kind: 'task'
@@ -110,6 +114,12 @@ export interface ListModel {
   groupOf(taskId: Uuid): GroupView | null
   /** Keeps a task just added from an add row where it was added (see Pins above). */
   pin(taskId: Uuid, where: { groupKey: string; placement: 'Top' | 'Bottom'; parentId: Uuid | null }): void
+  /** Rows are still mounting (progressive mounting): the table is aria-busy until they all have. */
+  mounting: Readonly<Ref<boolean>>
+  /** The table calls this after each render (progressive mounting): the next batch follows. */
+  rendered(): void
+  /** The table calls this when it unmounts: it mounts from the first batch again when it comes back. */
+  detached(): void
 }
 
 export function headerKey(groupKey: string): string {
@@ -140,8 +150,11 @@ export function useListModel(canEdit: ComputedRef<boolean>): ListModel {
   /** Tasks added from an add row, kept where they were added (see Pins above), by add order. */
   const pins = reactive(new Map<Uuid, { groupKey: string; top: boolean; parentId: Uuid | null; seq: number }>())
   let pinSeq = 0
-  /** Task rows the last `groups` evaluation rendered; the next may render one batch more. Not reactive. */
-  let renderedRows = 0
+  /** The rows the table last rendered (progressive mounting). Not reactive. */
+  let mountedKeys: ReadonlySet<string> = new Set()
+  /** The rows the last `groups` evaluation lets render, and how many of its task rows are new. Not reactive. */
+  let cutKeys: ReadonlySet<string> = new Set()
+  let cutFresh = 0
 
   watch([() => ctx.config.value.groupBy, () => ctx.config.value.sort.field], () => pins.clear())
 
@@ -163,7 +176,10 @@ export function useListModel(canEdit: ComputedRef<boolean>): ListModel {
       openAdd.value = null
       placements.clear()
       pins.clear()
-      renderedRows = 0
+      mountedKeys = new Set()
+      cutKeys = new Set()
+      cutFresh = 0
+      stepper.cancel()
     },
   )
 
@@ -317,65 +333,72 @@ export function useListModel(canEdit: ComputedRef<boolean>): ListModel {
 
   // ---- Progressive mounting ----
 
-  /** Rows were held back: the next step follows on the next frame. */
+  /** Rows were held back: the next batch follows in a task of its own. */
   let behind = false
   const step = ref(0)
-  let frame = 0
-  /** Task rows the last `groups` evaluation added. Not reactive. */
-  let added = 0
 
-  /** The groups as rendered: fullGroups, cut after the task rows this frame may mount. */
+  /**
+   * The groups as rendered: fullGroups, where task rows the table hasn't rendered yet come in at most
+   * one batch per render, in display order. Rows it has rendered stay, so an Expand all or a cleared
+   * search adds rows around the ones on screen (scroll anchoring keeps them in place) instead of
+   * taking them down to mount them again. A new add or "Show N more" row waits until the task rows
+   * before it in its group have all come in.
+   */
   const groups = computed<GroupView[]>(() => {
     void step.value
+    const before = mountedKeys
     const batch = listRowBudget.batch()
-    const limit = renderedRows + (renderedRows === 0 ? Math.max(FIRST_ROWS, batch) : batch)
-    let n = 0
-    let cut = false
+    let room = before.size === 0 ? Math.min(FIRST_ROWS, batch) : batch
+    const keys = new Set<string>()
+    let fresh = 0
+    let held = false
     const out = fullGroups.value.map((g) => {
-      if (cut) return g.rows.length ? { ...g, rows: [] } : g
-      let tasksIn = 0
-      for (const r of g.rows) if (r.kind === 'task') tasksIn++
-      if (n + tasksIn <= limit) {
-        n += tasksIn
-        return g
-      }
-      // The cut falls in this group: its rows up to the limit, and none of its later rows.
-      const rows: RowItem[] = []
-      for (const r of g.rows) {
-        if (r.kind === 'task') {
-          if (n >= limit) break
-          n++
-        }
-        rows.push(r)
-      }
-      cut = true
-      return { ...g, rows }
+      let heldHere = false
+      let rows: RowItem[] | null = null
+      g.rows.forEach((r, i) => {
+        let show = before.has(r.key)
+        if (!show && r.kind === 'task' && room > 0) {
+          show = true
+          room--
+          fresh++
+        } else if (!show && r.kind !== 'task') show = !heldHere
+        if (!show && r.kind === 'task') heldHere = true
+        if (show) {
+          keys.add(r.key)
+          rows?.push(r)
+        } else rows ??= g.rows.slice(0, i)
+      })
+      if (heldHere) held = true
+      return rows ? { ...g, rows } : g
     })
-    added = n - renderedRows
-    renderedRows = n
-    behind = cut
+    cutKeys = keys
+    cutFresh = fresh
+    behind = held
     return out
   })
 
-  /** One frame's step: one batch more, timed until its render is done. */
-  function nextStep(): void {
-    frame = 0
-    const at = performance.now()
-    added = 0
-    step.value++
-    void nextTick(() => listRowBudget.record(added, performance.now() - at))
+  const stepper = createMountStepper(listRowBudget, () => step.value++)
+  onScopeDispose(() => stepper.cancel())
+
+  // `behind` changes only when `groups` is evaluated again.
+  const mounting = computed(() => {
+    void groups.value
+    return behind
+  })
+
+  function rendered(): void {
+    const added = cutFresh
+    cutFresh = 0
+    mountedKeys = cutKeys
+    stepper.rendered(added, behind)
   }
 
-  watch(
-    groups,
-    () => {
-      if (behind && !frame) frame = requestAnimationFrame(nextStep)
-    },
-    { flush: 'post', immediate: true },
-  )
-  onScopeDispose(() => {
-    if (frame) cancelAnimationFrame(frame)
-  })
+  function detached(): void {
+    mountedKeys = new Set()
+    stepper.cancel()
+    // `groups` doesn't track mountedKeys: its next evaluation starts from the first batch again.
+    step.value++
+  }
 
   const navKeys = computed(() => {
     const out: string[] = []
@@ -499,5 +522,8 @@ export function useListModel(canEdit: ComputedRef<boolean>): ListModel {
     siblingIds,
     groupOf,
     pin,
+    mounting,
+    rendered,
+    detached,
   }
 }

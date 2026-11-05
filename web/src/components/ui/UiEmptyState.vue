@@ -55,6 +55,12 @@ withDefaults(
   color: var(--accent-text);
 }
 
+/* Balanced lines: no word left alone on a second line. */
+.title,
+.description {
+  text-wrap: balance;
+}
+
 .title {
   max-width: 360px;
   font-size: var(--fs-md);

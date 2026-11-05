@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // The workspace switcher at the top of the sidebar (3.4): a 40px trigger named "Workspace: <name>"
-// and a UiMenu with one radio item per workspace, then Workspace settings, Members, Invite people
-// (Admin+) and Create workspace. Switching always goes through useWorkspaceSwitch, which commits
-// pending deletes, clears the selection and the task store, and goes Home (8.2).
-import { computed } from 'vue'
+// and a UiMenu with one radio item per workspace (its tile as the leading icon), then Workspace
+// settings, Members, Invite people (Admin+) and Create workspace. Switching always goes through
+// useWorkspaceSwitch, which commits pending deletes, clears the selection and the task store, and
+// goes Home (8.2).
+import { computed, h, markRaw, type FunctionalComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronDown, Plus, Settings, UserPlus, Users } from '@lucide/vue'
 import { useWorkspaceSwitch } from '../../composables/useWorkspaceSwitch'
@@ -12,6 +13,7 @@ import { useWorkspaces } from '../../stores/workspaces'
 import UiIcon from '../ui/UiIcon.vue'
 import UiMenu from '../ui/UiMenu.vue'
 import type { MenuItem } from '../ui/menu'
+import WorkspaceTile from './WorkspaceTile.vue'
 
 const workspaces = useWorkspaces()
 const ui = useUi()
@@ -20,9 +22,13 @@ const switcher = useWorkspaceSwitch()
 
 const current = computed(() => workspaces.current)
 const name = computed(() => current.value?.name ?? 'No workspace')
-const letter = computed(() => (Array.from(current.value?.name.trim() ?? '')[0] ?? '').toLocaleUpperCase())
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true })
+
+/** A menu item's icon: the workspace's 16px tile (UiIcon renders it like a Lucide icon). */
+function tileIcon(wsName: string): FunctionalComponent {
+  return markRaw((_props, { attrs }) => h(WorkspaceTile, { name: wsName, size: 16, class: attrs.class }))
+}
 
 function items(): MenuItem[] {
   const out: MenuItem[] = []
@@ -34,6 +40,7 @@ function items(): MenuItem[] {
         kind: 'radio',
         id: `ws-${w.id}`,
         label: w.name,
+        icon: tileIcon(w.name),
         checked: w.id === workspaces.currentId,
         onSelect: () => {
           if (w.id !== workspaces.currentId) void switcher.switchTo(w.id, { navigate: true })
@@ -65,23 +72,25 @@ function items(): MenuItem[] {
         class="ws-trigger focus-inset"
         :aria-label="`Workspace: ${name}`"
       >
-        <span v-if="current" class="ws-tile" aria-hidden="true">{{ letter }}</span>
+        <WorkspaceTile v-if="current" :name="current.name" />
         <span class="ws-name truncate">{{ name }}</span>
-        <UiIcon :icon="ChevronDown" :size="14" class="chevron" />
+        <UiIcon :icon="ChevronDown" :size="12" class="chevron" />
       </button>
     </template>
   </UiMenu>
 </template>
 
 <style scoped>
+/* Tight gaps and a 12px chevron leave the name 136px, so the generated "<First>'s Workspace" fits
+   at 248px; longer names still end in an ellipsis with the full name in the tooltip. */
 .ws-trigger {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   width: 100%;
   min-width: 0;
   height: var(--control-lg);
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-1-5) 0 var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   text-align: left;
@@ -93,21 +102,6 @@ function items(): MenuItem[] {
   background: var(--bg-hover);
 }
 
-.ws-tile {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-size: var(--fs-sm);
-  line-height: 1;
-  font-weight: var(--fw-semibold);
-}
-
 .ws-name {
   flex: 1;
   font-size: var(--fs-md);
@@ -116,6 +110,14 @@ function items(): MenuItem[] {
 }
 
 .chevron {
+  flex: none;
   color: var(--text-tertiary);
+}
+
+/* Touch (7.5): a 44px row. */
+@media (pointer: coarse) {
+  .ws-trigger {
+    height: var(--touch-min);
+  }
 }
 </style>

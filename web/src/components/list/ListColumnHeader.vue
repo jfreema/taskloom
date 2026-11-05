@@ -114,7 +114,7 @@ function toggleAll(): void {
 .cell--name {
   flex: 1 1 0;
   min-width: var(--name-min);
-  padding-left: calc(20px + var(--space-1-5) + var(--control-xs) + var(--space-1-5));
+  padding-left: calc(20px + var(--space-1-5) + var(--control-xs) + var(--space-1-5) + var(--touch-shift, 0px));
 }
 
 .cell--status {

@@ -4,8 +4,9 @@
 //   input is role="combobox" with aria-activedescendant and aria-controls; the list is the
 //   listbox. Without search the list itself takes focus.
 // - Keys: Up and Down move, Home and End jump, PageUp and PageDown move by 8, Enter picks. In
-//   multiple mode Space toggles while the query is empty. Esc clears the query first; with an
-//   empty query it emits `escape` and lets the popover close.
+//   multiple mode Space toggles while the query is empty, and a pick (Enter or click) clears the
+//   query with the picked option still active, ready for the next one. Esc clears the query
+//   first; with an empty query it emits `escape` and lets the popover close.
 // - `options` may be a function: it runs when the list mounts, so closed pickers build nothing.
 // - Groups keep first-appearance order. A clear row (clearLabel) comes first, a create row
 //   ("Create “q”") last when nothing matches the query exactly.
@@ -105,8 +106,15 @@ onMounted(() => {
   nav.scrollIntoView()
 })
 
-// A new query starts again at the first match.
-watch(q, () => nav.setActive(0, byKeyboard.value))
+/** The row a multiple-mode pick keeps active while it clears the query. */
+let keepKey: string | null = null
+
+// A new query starts again at the first match (or at the row just picked).
+watch(q, () => {
+  const i = keepKey ? navRows.value.findIndex((r) => r.key === keepKey) : -1
+  keepKey = null
+  nav.setActive(Math.max(i, 0), byKeyboard.value)
+})
 
 function choose(row: Row): void {
   if (row.kind === 'option' && row.option.disabled) return
@@ -126,6 +134,10 @@ function choose(row: Row): void {
     const current = Array.isArray(props.modelValue) ? props.modelValue : props.modelValue ? [props.modelValue] : []
     const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
     emit('update:modelValue', next)
+    if (query.value) {
+      keepKey = row.key
+      query.value = ''
+    }
   } else {
     emit('update:modelValue', value)
   }

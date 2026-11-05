@@ -220,12 +220,12 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
   flex: 1 1 auto;
   align-items: center;
   min-width: 0;
-  padding-left: calc(var(--gutter-w) + 20px + var(--space-1-5));
+  padding-left: calc(var(--gutter-w) + 20px + var(--space-1-5) + var(--touch-shift, 0px));
   padding-right: var(--space-3);
 }
 
 .is-sub .add-cell {
-  padding-left: calc(var(--gutter-w) + var(--space-6) + 20px + var(--space-1-5));
+  padding-left: calc(var(--gutter-w) + var(--space-6) + 20px + var(--space-1-5) + var(--touch-shift, 0px));
 }
 
 .plus {
@@ -243,7 +243,7 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
   position: absolute;
   top: 0;
   bottom: 50%;
-  left: calc(var(--gutter-w) + 20px + var(--space-1-5) + 11.5px);
+  left: calc(var(--gutter-w) + 20px + var(--space-1-5) + 11.5px + var(--touch-shift, 0px));
   width: 1px;
   background: var(--border-default);
 }
@@ -325,6 +325,23 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
   .add-row {
     height: 44px;
     padding-left: var(--space-3);
+  }
+}
+
+/* Touch (7.5): "Add task" is a 44px target, the height of the row. */
+@media (pointer: coarse) {
+  .add-button {
+    position: relative;
+  }
+
+  .add-button::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--touch-min);
+    transform: translateY(-50%);
   }
 }
 </style>

@@ -2,11 +2,11 @@
 // The List's treegrid (8.7): `role="treegrid"` named "<List> tasks", multiselectable, whose only
 // children are rowgroups: the column header, then one per group.
 // - Roving tabindex and focus rescue (useListFocus), keys (useListKeyboard), dragging (useListDnd),
-//   the panel's J/K order (setOrder), and following the open task (scroll it into view without
-//   moving focus).
+//   the panel's J/K order (setOrder), and following the open task (useFollowOpenTask).
+// - Rows mount in batches (useListModel); the grid is aria-busy until they all have.
 // - Pickers opened by S/A/D/P use the cell's trigger; for a hidden column, ListPickerFallback opens
 //   one anchored to the row.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, shallowRef, watch } from 'vue'
 import { useBreakpoint } from '../../composables/useBreakpoint'
 import { useListPageContext } from '../../composables/useListPageContext'
 import { useTaskActions, type PickField } from '../../composables/useTaskActions'
@@ -19,6 +19,7 @@ import ListColumnHeader from './ListColumnHeader.vue'
 import ListGroup from './ListGroup.vue'
 import ListPickerFallback from './ListPickerFallback.vue'
 import { provideListTable, type ListColumns } from './listTable'
+import { useFollowOpenTask } from './useFollowOpenTask'
 import { useListDnd } from './useListDnd'
 import { useListFocus } from './useListFocus'
 import { focusRow, useListKeyboard } from './useListKeyboard'
@@ -86,26 +87,23 @@ onBeforeUnmount(() => resize?.disconnect())
 
 const dnd = useListDnd({ listId: ctx.listId, model, enabled: dragEnabled })
 
+// Progressive mounting: once a render is on screen, the model mounts the next batch (useListModel).
+onMounted(() => model.rendered())
+onUpdated(() => {
+  model.rendered()
+  follow.rendered()
+})
+onBeforeUnmount(() => model.detached())
+
 // ---- Roving tab stop and focus rescue ----
 
-const { tabStop, onFocusIn, onFocusOut } = useListFocus(root, model)
+const { tabStop, remembered, movedKey, follow: followRow, onFocusIn, onFocusOut } = useListFocus(root, model)
 
 // ---- The panel ----
 
 watch(() => model.taskOrder.value, (ids) => panel.setOrder(ids), { immediate: true })
 
-// The open task's row comes into view (J/K in the panel, the palette), without taking focus.
-watch(
-  () => panel.openId.value,
-  (id) => {
-    if (!id) return
-    void nextTick(() => {
-      const row = root.value?.querySelector<HTMLElement>(`[data-task-row="${CSS.escape(id)}"]`)
-      row?.scrollIntoView?.({ block: 'nearest' })
-    })
-  },
-  { immediate: true },
-)
+const follow = useFollowOpenTask(root, () => panel.openId.value, model.mounting)
 
 // ---- Rename, flash, add rows ----
 
@@ -222,6 +220,7 @@ provideListTable({
   tabStop,
   renamingId,
   flashIds,
+  movedKey,
   openTask: (id) => panel.open(id),
   check: (id, shift) => {
     if (shift) selection.selectRange(id, model.renderedTopIds.value)
@@ -230,13 +229,16 @@ provideListTable({
   startRename,
   endRename,
   rename: (id, title) => void actions.rename(id, title),
-  setStatus: (id, statusId) => void actions.setStatus(id, statusId),
+  setStatus: (id, statusId) => {
+    void actions.setStatus(id, statusId)
+    followRow(taskKey(id))
+  },
   addSubtask,
   pick,
   created,
 })
 
-useListKeyboard({ root, model, canEdit, selectable, canReorder, startRename, pick })
+useListKeyboard({ root, model, canEdit, selectable, canReorder, startRename, pick, remembered })
 
 const listName = computed(() => ctx.list.value?.name ?? 'List')
 
@@ -252,6 +254,7 @@ defineExpose({ focusTask: (id: Uuid) => focusRow(root.value, taskKey(id)) })
     :class="{ 'has-selection': selection.count > 0, 'is-guest': !canEdit }"
     :aria-label="`${listName} tasks`"
     aria-multiselectable="true"
+    :aria-busy="model.mounting.value ? 'true' : undefined"
     data-shortcut-scope="grid"
     @focusin="onFocusIn"
     @focusout="onFocusOut"
@@ -274,6 +277,7 @@ defineExpose({ focusTask: (id: Uuid) => focusRow(root.value, taskKey(id)) })
   --w-tags: 160px;
   --w-menu: 40px;
   --colhead-h: 32px;
+  --touch-shift: 0px;
   /* As wide as the page, and never narrower than its columns: wider tables scroll sideways. */
   min-width: min-content;
 }
@@ -300,10 +304,13 @@ defineExpose({ focusTask: (id: Uuid) => focusRow(root.value, taskKey(id)) })
   }
 }
 
-/* Touch: the row menu's 44px hit area fits its cell, so it never widens the table. */
+/* Touch: the row menu's 44px hit area fits its cell, so it never widens the table. The status icon
+   moves right by --touch-shift, so its 44px target and the subtask chevron's sit side by side; the
+   titles and everything lined up with the icons or titles move with it. */
 @media (pointer: coarse) {
   .list-table {
     --w-menu: 44px;
+    --touch-shift: var(--space-4);
   }
 }
 </style>

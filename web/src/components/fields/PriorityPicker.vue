@@ -73,7 +73,8 @@ useKeysWhileOpen(open, ['1', '2', '3', '4', '0'], (e) => {
 
 <template>
   <span v-if="readonly" v-bind="$attrs" class="static" :class="`static--${variant}`">
-    <PriorityFlag :priority="modelValue" :show-label="variant !== 'icon'" />
+    <span v-if="none && variant !== 'icon'" class="empty-text">None</span>
+    <PriorityFlag v-else :priority="modelValue" :show-label="variant !== 'icon'" />
   </span>
   <LazyMenu v-else v-model:open="open" :lazy="lazy" :items="items" :anchor="anchor" aria-label="Priority" :min-width="200">
     <template v-if="!hideTrigger" #trigger="{ props: t }">

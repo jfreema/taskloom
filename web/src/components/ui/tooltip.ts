@@ -5,6 +5,9 @@
 // - Hides on Esc, pointer down, scroll or blur.
 // - Adds aria-describedby only when its text differs from the trigger's accessible name.
 // - With `overflowOnly`, shows only while the trigger's text is cut off by an ellipsis.
+// The directive only records each element's options: a few listeners on the document find the
+// element under the pointer or focus (the nearest one whose tooltip is on), so a long list of
+// rows adds no listeners of its own (S10).
 import { reactive, type ObjectDirective } from 'vue'
 import type { Placement } from '@floating-ui/vue'
 
@@ -44,16 +47,10 @@ const SHOW_DELAY_MS = 500
 const WARM_WINDOW_MS = 300
 const TOUCH_FOCUS_WINDOW_MS = 800
 
-interface Bound {
-  options: TooltipOptions | null
-  onEnter: (e: PointerEvent) => void
-  onLeave: () => void
-  onFocus: (e: FocusEvent) => void
-  onBlur: () => void
-  onDown: () => void
-}
-
-const bound = new WeakMap<HTMLElement, Bound>()
+/** Each bound element's options; null while its tooltip is off. */
+const bound = new WeakMap<HTMLElement, TooltipOptions | null>()
+/** The element whose tooltip the pointer is over (not touch). */
+let hovered: HTMLElement | null = null
 let showTimer: ReturnType<typeof setTimeout> | undefined
 let lastHiddenAt = 0
 let lastTouchAt = 0
@@ -122,7 +119,7 @@ function isCutOff(el: HTMLElement): boolean {
 
 function show(el: HTMLElement): void {
   clearTimeout(showTimer)
-  const options = bound.get(el)?.options
+  const options = bound.get(el)
   if (!options || !el.isConnected) return
   if (options.overflowOnly && !isCutOff(el)) return
   if (tooltipState.anchor && tooltipState.anchor !== el) setDescribedBy(tooltipState.anchor, false)
@@ -147,81 +144,94 @@ export function hide(el?: HTMLElement): void {
 }
 
 function scheduleShow(el: HTMLElement): void {
-  // An element whose tooltip is off (an undefined value) doesn't cancel one pending on an ancestor,
-  // e.g. PageHeader's tooltip for a compacted action button.
-  if (!bound.get(el)?.options) return
   clearTimeout(showTimer)
   const warm = tooltipState.visible || Date.now() - lastHiddenAt < WARM_WINDOW_MS
   if (warm) show(el)
   else showTimer = setTimeout(() => show(el), SHOW_DELAY_MS)
 }
 
-function bind(el: HTMLElement, value: TooltipValue): void {
-  const entry: Bound = {
-    options: normalize(value),
-    onEnter: (e) => {
-      if (e.pointerType === 'touch') return
-      scheduleShow(el)
-    },
-    onLeave: () => hide(el),
-    onFocus: (e) => {
-      if (Date.now() - lastTouchAt < TOUCH_FOCUS_WINDOW_MS) return
-      const target = e.target instanceof Element ? e.target : el
-      let visible = false
-      try {
-        visible = target.matches(':focus-visible')
-      } catch {
-        visible = false
-      }
-      if (visible) show(el)
-    },
-    onBlur: () => hide(el),
-    onDown: () => hide(el),
+/**
+ * The nearest element from `node` up whose tooltip is on. An element whose tooltip is off (an
+ * undefined value) leaves the tooltip to an ancestor, e.g. PageHeader's tooltip for a compacted
+ * action button.
+ */
+function anchorOf(node: EventTarget | null): HTMLElement | null {
+  for (let el = node instanceof Element ? node : null; el; el = el.parentElement) {
+    if (el instanceof HTMLElement && bound.get(el)) return el
   }
-  bound.set(el, entry)
-  el.addEventListener('pointerenter', entry.onEnter)
-  el.addEventListener('pointerleave', entry.onLeave)
-  el.addEventListener('focusin', entry.onFocus)
-  el.addEventListener('focusout', entry.onBlur)
-  el.addEventListener('pointerdown', entry.onDown)
+  return null
+}
+
+function onPointerOver(e: PointerEvent): void {
+  if (e.pointerType === 'touch') return
+  const el = anchorOf(e.target)
+  if (el === hovered) return
+  if (hovered) hide(hovered)
+  hovered = el
+  if (el) scheduleShow(el)
+}
+
+function onPointerOut(e: PointerEvent): void {
+  // The pointer left the page; moves between elements are pointerover's.
+  if (e.relatedTarget || !hovered) return
+  hide(hovered)
+  hovered = null
+}
+
+function onPointerDown(e: PointerEvent): void {
+  if (e.pointerType === 'touch') lastTouchAt = Date.now()
+  const el = anchorOf(e.target)
+  if (el) hide(el)
+}
+
+function onFocusIn(e: FocusEvent): void {
+  if (Date.now() - lastTouchAt < TOUCH_FOCUS_WINDOW_MS) return
+  const el = anchorOf(e.target)
+  if (!el) return
+  const target = e.target instanceof Element ? e.target : el
+  let visible = false
+  try {
+    visible = target.matches(':focus-visible')
+  } catch {
+    visible = false
+  }
+  if (visible) show(el)
+}
+
+function onFocusOut(e: FocusEvent): void {
+  const el = anchorOf(e.target)
+  if (el) hide(el)
 }
 
 function unbind(el: HTMLElement): void {
-  const entry = bound.get(el)
-  if (!entry) return
-  if (tooltipState.anchor === el) hide()
-  el.removeEventListener('pointerenter', entry.onEnter)
-  el.removeEventListener('pointerleave', entry.onLeave)
-  el.removeEventListener('focusin', entry.onFocus)
-  el.removeEventListener('focusout', entry.onBlur)
-  el.removeEventListener('pointerdown', entry.onDown)
+  if (!bound.has(el)) return
   bound.delete(el)
+  if (hovered === el) hovered = null
+  if (tooltipState.anchor === el) hide()
 }
 
 if (typeof document !== 'undefined') {
-  document.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (e.pointerType === 'touch') lastTouchAt = Date.now()
-    },
-    { capture: true, passive: true },
-  )
+  const passive = { capture: true, passive: true }
+  document.addEventListener('pointerover', onPointerOver, passive)
+  document.addEventListener('pointerout', onPointerOut, passive)
+  document.addEventListener('pointerdown', onPointerDown, passive)
+  document.addEventListener('focusin', onFocusIn, true)
+  document.addEventListener('focusout', onFocusOut, true)
 }
 
 export const vTooltip: ObjectDirective<HTMLElement, TooltipValue> = {
   mounted(el, binding) {
-    bind(el, binding.value)
+    bound.set(el, normalize(binding.value))
   },
   updated(el, binding) {
-    const entry = bound.get(el)
-    if (!entry) return bind(el, binding.value)
-    entry.options = normalize(binding.value)
+    const options = normalize(binding.value)
+    bound.set(el, options)
     if (tooltipState.anchor === el) {
-      if (entry.options) {
-        tooltipState.text = entry.options.text
-        tooltipState.kbd = entry.options.kbd
-        tooltipState.placement = entry.options.placement ?? 'top'
-        setDescribedBy(el, squash(entry.options.text) !== squash(accessibleName(el)))
+      if (options) {
+        tooltipState.text = options.text
+        tooltipState.kbd = options.kbd
+        tooltipState.placement = options.placement ?? 'top'
+        setDescribedBy(el, squash(options.text) !== squash(accessibleName(el)))
       } else hide()
     }
   },

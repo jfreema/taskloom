@@ -94,4 +94,16 @@ function openFullPage(): void {
   gap: var(--space-0-5);
   flex-shrink: 0;
 }
+
+/* Touch (7.5): the buttons' 44px targets sit side by side without overlapping (40px buttons in the
+   sheet, 32px ones in the panel). */
+@media (pointer: coarse) {
+  .actions {
+    gap: var(--space-3);
+  }
+
+  .mode-sheet .actions {
+    gap: var(--space-1);
+  }
+}
 </style>

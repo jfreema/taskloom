@@ -1,55 +1,61 @@
 // Progressive mounting on the Board (S10): how many of a column's cards render. A few more cards than
 // last time (a new card, a move) render at once; when many appear together (opening a long list,
-// clearing a search, "Show all N"), the column mounts one batch more per frame, side by side with the
-// other columns, so the top of the board fills first: the first render mounts a screenful. Later
-// batches are the column's share of lib/mountBudget's, which follows what a card costs on this device
-// (each frame's step is timed).
-import { computed, nextTick, onScopeDispose, ref, watch, type Ref } from 'vue'
-import { boardCardBudget } from '../../lib/mountBudget'
-
-/** Cards a column's first render may mount, about a screenful, so the first paint is complete. */
-const FIRST_CARDS = 6
+// clearing a search, "Show all N"), the column mounts one batch more at a time, each in a task of its
+// own once the column has rendered the one before, side by side with the other columns, so the top of
+// the board fills first: the first render mounts the top of each column. lib/mountBudget sizes a batch
+// from what a card costs on this device (each batch is timed).
+import { computed, onScopeDispose, ref, type Ref } from 'vue'
+import { boardCardBudget, createMountStepper } from '../../lib/mountBudget'
 
 /**
- * `total` is how many cards the column shows; `columns` how many columns are open (they share a
- * batch).
+ * Cards a column's first render may mount: the top of the column, which the next batch completes.
+ * Never more than the column's share of a batch: that render also builds the board (and takes down
+ * the page before).
  */
-export function useMountedCards(total: () => number, columns: () => number): Readonly<Ref<number>> {
-  const tick = ref(0)
-  /** Cards the last evaluation let render, and how many more than before. Not reactive. */
-  let rendered = 0
-  let added = 0
-  let frame = 0
+const FIRST_CARDS = 3
 
-  const batch = () => Math.max(1, Math.ceil(boardCardBudget.batch() / Math.max(1, columns())))
+export interface MountedCards {
+  /** How many of the column's cards render now. */
+  count: Readonly<Ref<number>>
+  /** The column calls this after each render (mounted, updated): the next batch follows. */
+  rendered(): void
+}
+
+/**
+ * `total` is how many cards the column shows; `columns` how many columns are open. The column's own
+ * batch runs in a task of its own and takes a whole batch; growth that reaches every column in the
+ * same render (the first render, a cleared search) takes the column's share of one.
+ */
+export function useMountedCards(total: () => number, columns: () => number): MountedCards {
+  const tick = ref(0)
+  /** Cards the column last rendered, and the cards the last evaluation lets render. Not reactive. */
+  let mounted = 0
+  let cut = 0
+  /** The next evaluation is the column's own batch. Not reactive. */
+  let own = false
 
   const count = computed(() => {
     void tick.value
-    const n = Math.min(total(), rendered + (rendered === 0 ? Math.max(FIRST_CARDS, batch()) : batch()))
-    added = n - rendered
-    rendered = n
-    return n
+    const batch = boardCardBudget.batch()
+    const share = Math.max(1, Math.ceil(batch / Math.max(1, columns())))
+    const step = own ? batch : mounted === 0 ? Math.min(FIRST_CARDS, share) : share
+    own = false
+    cut = Math.min(total(), mounted + step)
+    return cut
   })
 
-  /** One frame's step: one batch more, timed until its render is done. */
-  function step(): void {
-    frame = 0
-    const at = performance.now()
-    added = 0
+  const stepper = createMountStepper(boardCardBudget, () => {
+    own = true
     tick.value++
-    void nextTick(() => boardCardBudget.record(added, performance.now() - at))
-  }
-
-  watch(
-    count,
-    (n) => {
-      if (n < total() && !frame) frame = requestAnimationFrame(step)
-    },
-    { flush: 'post', immediate: true },
-  )
-  onScopeDispose(() => {
-    if (frame) cancelAnimationFrame(frame)
   })
+  onScopeDispose(() => stepper.cancel())
 
-  return count
+  return {
+    count,
+    rendered() {
+      const added = cut - mounted
+      mounted = cut
+      stepper.rendered(added, cut < total())
+    },
+  }
 }

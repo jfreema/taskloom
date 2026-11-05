@@ -124,4 +124,16 @@ function save(value: string): void {
   gap: var(--space-0-5);
   margin-left: auto;
 }
+
+/* Touch (7.5): a 44px header, and the two 24px buttons far enough apart that their 44px targets
+   don't overlap. */
+@media (pointer: coarse) {
+  .column-header {
+    height: var(--touch-min);
+  }
+
+  .actions {
+    gap: var(--space-5);
+  }
+}
 </style>

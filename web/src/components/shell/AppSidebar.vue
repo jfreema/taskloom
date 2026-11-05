@@ -17,6 +17,7 @@ import UiSkeleton from '../ui/UiSkeleton.vue'
 import SidebarTree from './SidebarTree.vue'
 import UserMenu from './UserMenu.vue'
 import WorkspaceMenu from './WorkspaceMenu.vue'
+import { skeletonDelay } from './skeletonHandover'
 
 withDefaults(defineProps<{ inDrawer?: boolean }>(), { inDrawer: false })
 
@@ -28,7 +29,7 @@ const hasWorkspace = computed(() => !!workspaces.current)
 // The workspace trigger's placeholder keeps the row's height; its skeleton shows only while the
 // tree loads (after 200ms), never in the error state (the tree shows "Couldn't load spaces").
 const loadingTree = computed(() => !workspaces.loaded && !workspaces.error)
-const showWorkspaceSkeleton = useDelayedFlag(loadingTree)
+const showWorkspaceSkeleton = useDelayedFlag(loadingTree, skeletonDelay())
 const canEdit = computed(() => workspaces.canEdit())
 const onHome = computed(() => route.name === 'home')
 const keyShortcut = isApple ? 'Meta+K' : 'Control+K'
@@ -57,7 +58,7 @@ function newTask(): void {
         :icon="PanelLeft"
         label="Hide sidebar"
         kbd="["
-        size="md"
+        size="sm"
         @click="ui.toggleSidebar()"
       />
     </div>
@@ -148,6 +149,7 @@ function newTask(): void {
 
 /* A button styled as an input (3.4). */
 .search {
+  position: relative;
   display: flex;
   flex: 1;
   align-items: center;
@@ -237,6 +239,19 @@ function newTask(): void {
 @media (max-width: 639px) {
   .search-kbd {
     display: none;
+  }
+}
+
+/* Touch (7.5): the 32px search field keeps its look beside the pen button and grows its hit area. */
+@media (pointer: coarse) {
+  .search::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--touch-min);
+    transform: translateY(-50%);
   }
 }
 </style>

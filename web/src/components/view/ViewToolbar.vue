@@ -22,10 +22,13 @@ let mutations: MutationObserver | null = null
 onMounted(() => {
   const el = scroller.value
   if (!el) return
-  update()
+  // The observer's first report comes after the first layout and before the first paint, so
+  // mounting the toolbar forces no layout of its own.
   if (typeof ResizeObserver !== 'undefined') {
     resize = new ResizeObserver(update)
     resize.observe(el)
+  } else {
+    update()
   }
   // Views teleport their controls in after mount, and chips come and go with the filters.
   if (typeof MutationObserver !== 'undefined') {

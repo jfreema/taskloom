@@ -47,6 +47,12 @@ withDefaults(
   color: var(--danger-text);
 }
 
+/* Balanced lines, as in UiEmptyState. */
+.title,
+.message {
+  text-wrap: balance;
+}
+
 .title {
   max-width: 360px;
   font-size: var(--fs-lg);

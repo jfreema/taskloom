@@ -3,7 +3,9 @@
 // Entries that share a group and label are one row whose keys read "Delete or Mod+Backspace"; a
 // label ending in "(also Space)" shows that key as an alternative too. When single-key shortcuts
 // are off (Settings › Appearance), a note says so.
-import { computed } from 'vue'
+// Focus starts on the dialog itself, with no ring, and the scroll keys scroll the list from there;
+// Tab reaches the close button and then the list, which shows its inset ring.
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Info } from '@lucide/vue'
 import { shortcutsEnabled } from '../../composables/useShortcut'
@@ -61,6 +63,39 @@ const groups = computed<{ name: ShortcutGroup; rows: Row[] }[]>(() => {
   return [...out.entries()].map(([name, rows]) => ({ name, rows }))
 })
 
+const scroller = ref<HTMLElement | null>(null)
+
+/** While the dialog itself has focus, the arrow keys, Page Up/Down, Space, Home and End scroll the list. */
+function onKeydown(e: KeyboardEvent): void {
+  const list = scroller.value
+  const active = document.activeElement
+  if (!list || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return
+  if (!(active instanceof HTMLElement) || active.getAttribute('aria-modal') !== 'true' || !active.contains(list)) return
+  const page = Math.max(list.clientHeight - 40, 40)
+  const steps: Record<string, number> = {
+    ArrowDown: 40,
+    ArrowUp: -40,
+    PageDown: page,
+    PageUp: -page,
+    ' ': e.shiftKey ? -page : page,
+  }
+  if (e.key === 'Home') list.scrollTo({ top: 0 })
+  else if (e.key === 'End') list.scrollTo({ top: list.scrollHeight })
+  else if (e.key in steps) list.scrollBy({ top: steps[e.key] })
+  else return
+  e.preventDefault()
+}
+
+watch(
+  open,
+  (on) => {
+    if (on) window.addEventListener('keydown', onKeydown)
+    else window.removeEventListener('keydown', onKeydown)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+
 function openSettings(): void {
   ui.shortcutsOpen = false
   void router.push('/settings/appearance').catch(noop)
@@ -68,9 +103,9 @@ function openSettings(): void {
 </script>
 
 <template>
-  <UiDialog v-model:open="open" title="Keyboard shortcuts" size="lg">
-    <!-- The list scrolls in its own region, which takes focus first so arrow keys scroll it. -->
-    <div class="shortcuts-scroll" tabindex="0" role="region" aria-label="Shortcut list">
+  <UiDialog v-model:open="open" title="Keyboard shortcuts" size="lg" body="fill" focus-panel>
+    <!-- The list scrolls in its own region; Tab reaches it after the close button. -->
+    <div ref="scroller" class="shortcuts-scroll" tabindex="0" role="region" aria-label="Shortcut list">
       <p v-if="!shortcutsEnabled" class="note">
         <UiIcon class="note-icon" :icon="Info" :size="16" />
         <span>
@@ -99,25 +134,15 @@ function openSettings(): void {
 </template>
 
 <style scoped>
-/* The dialog body doesn't scroll; the region inside it does (UiDialog has no prop for this). The
-   body's 8px top padding holds the region's focus ring, which the body would otherwise clip. */
-:global(.ui-dialog-root .panel > .body:has(> .shortcuts-scroll)) {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding-top: var(--space-2);
-  padding-right: 0;
-  padding-bottom: 0;
-}
-
-/* The text keeps the body's left edge; the region reaches 8px past it on the left and top and stops
-   8px short of the panel's right and bottom edges, so its focus ring clears the text and the corners. */
+/* The dialog body doesn't scroll ("fill"); this region does. Its text lines up with the title; the
+   region reaches 8px past that edge on the left and stops 8px short of the panel's right and bottom
+   edges, so its focus ring clears the text and the corners. */
 .shortcuts-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  margin: calc(-1 * var(--space-2)) var(--space-2) var(--space-2) calc(-1 * var(--space-2));
+  margin: 0 var(--space-2) var(--space-2) calc(var(--space-6) - var(--space-2));
   padding: var(--space-2) var(--space-4) var(--space-3) var(--space-2);
   border-radius: var(--radius-md);
 }
@@ -221,8 +246,10 @@ function openSettings(): void {
   }
 }
 
+/* Phones: the dialog's edges are 16px instead of 24px. */
 @media (max-width: 639px) {
   .shortcuts-scroll {
+    margin-left: calc(var(--space-4) - var(--space-2));
     padding-right: var(--space-2);
   }
 }

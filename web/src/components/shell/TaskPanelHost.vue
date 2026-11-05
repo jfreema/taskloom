@@ -54,11 +54,17 @@ let observer: ResizeObserver | null = null
 function measure(el: HTMLElement | null): void {
   observer?.disconnect()
   if (!el) return
-  contentWidth.value = el.getBoundingClientRect().width
-  measured.value = true
-  if (typeof ResizeObserver === 'undefined') return
+  if (typeof ResizeObserver === 'undefined') {
+    contentWidth.value = el.getBoundingClientRect().width
+    measured.value = true
+    return
+  }
+  // The first report comes after the first layout and before the first paint, so mounting the app
+  // forces no layout of its own.
   observer ??= new ResizeObserver(([entry]) => {
-    if (entry) contentWidth.value = entry.borderBoxSize?.[0]?.inlineSize ?? entry.target.getBoundingClientRect().width
+    if (!entry) return
+    contentWidth.value = entry.borderBoxSize?.[0]?.inlineSize ?? entry.target.getBoundingClientRect().width
+    measured.value = true
   })
   observer.observe(el)
 }

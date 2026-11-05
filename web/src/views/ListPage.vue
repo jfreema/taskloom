@@ -107,7 +107,7 @@ const viewComponent = computed(() => VIEWS[view.value])
 
     <template v-else>
       <PageHeader :title="fallbackTitle">
-        <h1 v-if="fallbackTitle" :class="phase === 'not-found' ? 'sr-only' : 'fallback-title truncate'">{{ fallbackTitle }}</h1>
+        <h1 v-if="fallbackTitle" class="fallback-title truncate">{{ fallbackTitle }}</h1>
       </PageHeader>
       <div class="view-area">
         <div v-if="phase === 'not-found'" class="state">

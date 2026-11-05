@@ -102,4 +102,11 @@ function idBase(item: MenuItem): string {
 .swatches .group-label {
   padding-left: var(--space-1);
 }
+
+/* Touch (7.5): the last swatch row's 44px hit areas end above the next item's. */
+@media (pointer: coarse) {
+  .swatches {
+    padding-bottom: var(--space-2);
+  }
+}
 </style>

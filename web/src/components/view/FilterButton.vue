@@ -99,4 +99,21 @@ const label = computed(() => (count.value ? `Filter, ${count.value} active` : 'F
   background: var(--bg-selected);
   color: var(--accent-text);
 }
+
+/* Touch (7.5): a 44px target around the 28px button (the toolbar clips it to its 43px row). */
+@media (pointer: coarse) {
+  .filter-button {
+    position: relative;
+  }
+
+  .filter-button::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+}
 </style>

@@ -3,6 +3,7 @@
 // focus return. The title is an h2 that labels the dialog. On phones it is a bottom sheet (the
 // panel is marked data-sheet, so toasts rise above it); `sheet="full"` makes that sheet fill the
 // screen (the palette and quick create, 8.11 and 8.12). `size="palette"` is the palette's 640px.
+// `body="fill"` hands the body to content that draws its own edges and scrolls itself.
 // No native <dialog>: its top layer would hide toasts and pickers.
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { X } from '@lucide/vue'
@@ -26,6 +27,8 @@ const props = withDefaults(
     dismissible?: boolean
     /** CSS selector; default is the first focusable element in the body. */
     initialFocus?: string
+    /** Focus goes to the panel itself on open (no ring): long read-only content starts at its top. */
+    focusPanel?: boolean
     role?: 'dialog' | 'alertdialog'
     /** 'top' = 12vh from the top (the palette). */
     position?: 'center' | 'top'
@@ -33,6 +36,11 @@ const props = withDefaults(
     hideHeader?: boolean
     /** false hides the header's close button while Esc and the scrim still dismiss (confirms). */
     closeButton?: boolean
+    /**
+     * 'scroll': the padded body scrolls. 'fill': no padding and no scrolling; the content fills the
+     * body (a flex column) and scrolls itself (the palette, the shortcuts list).
+     */
+    body?: 'scroll' | 'fill'
   }>(),
   {
     description: undefined,
@@ -40,10 +48,12 @@ const props = withDefaults(
     sheet: 'auto',
     dismissible: true,
     initialFocus: undefined,
+    focusPanel: false,
     role: 'dialog',
     position: 'center',
     hideHeader: false,
     closeButton: true,
+    body: 'scroll',
   },
 )
 
@@ -54,7 +64,7 @@ const titleId = `${id}-title`
 const descId = `${id}-desc`
 const root = ref<HTMLElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
-const body = ref<HTMLElement | null>(null)
+const bodyEl = ref<HTMLElement | null>(null)
 const footer = ref<HTMLElement | null>(null)
 let pendingReason: DialogCloseReason | null = null
 let downOnScrim = false
@@ -82,8 +92,9 @@ const rootStyle = computed(() => ({ zIndex: layer.z.value }))
 function placeInitialFocus(): void {
   const p = panel.value
   if (!p) return
+  if (props.focusPanel) return p.focus({ preventScroll: true })
   if (props.initialFocus && p.querySelector(props.initialFocus)) return focusFirst(p, props.initialFocus)
-  if (body.value && tabbables(body.value).length) return focusFirst(body.value)
+  if (bodyEl.value && tabbables(bodyEl.value).length) return focusFirst(bodyEl.value)
   if (footer.value && tabbables(footer.value).length) return focusFirst(footer.value)
   p.focus({ preventScroll: true })
 }
@@ -145,7 +156,7 @@ function onScrimClick(e: MouseEvent): void {
               />
             </div>
           </div>
-          <div v-if="$slots.default" ref="body" class="body" :class="{ 'no-header': hideHeader }"><slot /></div>
+          <div v-if="$slots.default" ref="bodyEl" class="body" :class="{ 'no-header': hideHeader, 'body--fill': body === 'fill' }"><slot /></div>
           <div v-if="$slots.footer" ref="footer" class="footer"><slot name="footer" /></div>
         </div>
       </div>
@@ -252,6 +263,13 @@ function onScrimClick(e: MouseEvent): void {
   padding-top: var(--space-5);
 }
 
+.body.body--fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
 .footer {
   display: flex;
   align-items: center;
@@ -327,6 +345,12 @@ function onScrimClick(e: MouseEvent): void {
     border: 0;
     border-radius: 0;
     padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Toasts keep their place over a full-screen sheet: a field scrolled into view stays clear of
+     them (9.6). Content that scrolls itself (body="fill") does the same. */
+  .ui-dialog-root .panel.sheet-full .body {
+    scroll-padding-bottom: 88px;
   }
 }
 

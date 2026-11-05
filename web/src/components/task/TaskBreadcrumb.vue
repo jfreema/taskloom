@@ -89,4 +89,13 @@ const loc = computed(() => workspaces.findList(props.task.listId))
 .parent {
   flex-shrink: 2;
 }
+
+/* Touch (7.5): the links are 44px targets. They truncate (overflow: hidden would clip an ::after),
+   so their padding grows instead and negative margins keep the row's height. */
+@media (pointer: coarse) {
+  .link {
+    padding-block: calc((var(--touch-min) - var(--lh-sm)) / 2);
+    margin-block: calc((var(--touch-min) - var(--lh-sm)) / -2 + var(--space-0-5));
+  }
+}
 </style>

@@ -48,12 +48,18 @@ function measure(): void {
 
 let observer: ResizeObserver | null = null
 onMounted(() => {
-  measure()
-  requestAnimationFrame(() => (ready.value = true))
-  if (nav.value && typeof ResizeObserver !== 'undefined') {
-    observer = new ResizeObserver(() => measure())
-    observer.observe(nav.value)
+  if (!nav.value || typeof ResizeObserver === 'undefined') {
+    measure()
+    requestAnimationFrame(() => (ready.value = true))
+    return
   }
+  // The first report comes after the first layout and before the first paint, so mounting the page
+  // forces no layout of its own; the bar then slides from the next frame on.
+  observer = new ResizeObserver(() => {
+    measure()
+    if (!ready.value) requestAnimationFrame(() => (ready.value = true))
+  })
+  observer.observe(nav.value)
 })
 onBeforeUnmount(() => observer?.disconnect())
 watch(
@@ -174,6 +180,28 @@ const barStyle = computed(() =>
 .is-segmented .tab[aria-current="page"] {
   background: var(--bg-card);
   box-shadow: var(--shadow-2), 0 0 0 1px var(--border-subtle);
+}
+
+/* Touch (7.5): each tab is a 44px target. The segmented tabs (36px) and the top bar's tabs (32px)
+   reach it with an ::after; icon-only tabs are spaced so their targets don't overlap. */
+@media (pointer: coarse) {
+  .tab {
+    position: relative;
+  }
+
+  .tab::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+
+  .view-tabs.is-compact {
+    gap: var(--space-3);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,7 +2,9 @@
 // One row of the Members table (8.13): avatar and name ("(you)" for me), email, an "Invited" badge
 // with a "Copy sign-in link for <name>" button for pending people, the role and Remove. The role
 // is a select and Remove shows only for Admin+, and never on the Owner's row or your own (5.5),
-// which show the role as text. Below 640px the row stacks: name and email, then role and Remove.
+// which show the role as text. In a narrow table (under 680px, a 1100px window) the email goes under
+// the name and the badge follows the name, so short names and emails are never cut. Below 640px the
+// row stacks: name and email, then role and Remove.
 import { computed } from 'vue'
 import { Link, Trash2 } from '@lucide/vue'
 import { ROLE_DESCRIPTION, ROLE_LABEL, type AssignableRole, type Member } from '../../types'
@@ -38,19 +40,18 @@ function onRole(value: string | null): void {
   <tr class="member" role="row">
     <td class="cell name-cell" role="cell">
       <div class="identity">
-        <UiAvatar :user="user" :size="28" :pending="member.pending" decorative />
+        <span class="avatar"><UiAvatar :user="user" :size="28" :pending="member.pending" decorative /></span>
         <span v-tooltip="{ text: member.displayName, overflowOnly: true }" class="name truncate">{{ member.displayName }}</span>
         <span v-if="isMe" class="you">(you)</span>
       </div>
     </td>
-    <td class="cell email-cell" role="cell">
+    <!-- Without an invitation the email also takes the Invitation column, so it isn't cut beside an empty cell. -->
+    <td class="cell email-cell" role="cell" :colspan="member.pending ? undefined : 2">
       <span v-tooltip="{ text: member.email, overflowOnly: true }" class="email truncate">{{ member.email }}</span>
     </td>
-    <td class="cell status-cell" role="cell">
-      <template v-if="member.pending">
-        <UiBadge tone="info">Invited</UiBadge>
-        <UiIconButton v-if="canCopy" :icon="Link" :label="`Copy sign-in link for ${member.displayName}`" size="xs" @click="emit('copyLink')" />
-      </template>
+    <td v-if="member.pending" class="cell status-cell" role="cell">
+      <UiBadge tone="info">Invited</UiBadge>
+      <UiIconButton v-if="canCopy" :icon="Link" :label="`Copy sign-in link for ${member.displayName}`" size="xs" @click="emit('copyLink')" />
     </td>
     <td class="cell role-cell" role="cell">
       <UiSelect
@@ -88,9 +89,10 @@ function onRole(value: string | null): void {
   padding-right: var(--space-3);
 }
 
+/* Names are usually shorter than emails, so the email gets the larger share. */
 .name-cell {
   max-width: 0;
-  width: 40%;
+  width: 34%;
 }
 
 .identity {
@@ -98,6 +100,11 @@ function onRole(value: string | null): void {
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+}
+
+.avatar {
+  display: flex;
+  flex: none;
 }
 
 .name {
@@ -112,7 +119,7 @@ function onRole(value: string | null): void {
 
 .email-cell {
   max-width: 0;
-  width: 34%;
+  width: 40%;
 }
 
 .email {
@@ -157,18 +164,109 @@ function onRole(value: string | null): void {
   color: var(--danger-text);
 }
 
+/* Narrow tables: two lines per person. The avatar is centred on both; the name, the "(you)" and the
+   Invited badge share the first line, the email is the second, and the role and Remove sit on the
+   right across both. */
+@container members (width < 680px) {
+  .member {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, max-content) auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "name status . role actions"
+      "email email email role actions";
+    align-items: center;
+    column-gap: var(--space-2);
+    padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-4) + 28px + var(--space-3));
+  }
+
+  .member + .member {
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .member + .member .cell {
+    border-top: 0;
+  }
+
+  .cell,
+  .cell:first-child,
+  .cell:last-child {
+    height: auto;
+    padding: 0;
+  }
+
+  .avatar {
+    position: absolute;
+    top: 50%;
+    left: var(--space-4);
+    transform: translateY(-50%);
+  }
+
+  .name-cell {
+    grid-area: name;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .email-cell {
+    grid-area: email;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .email {
+    font-size: var(--fs-sm);
+    line-height: var(--lh-sm);
+  }
+
+  .status-cell {
+    grid-area: status;
+    display: flex;
+    align-items: center;
+    width: auto;
+  }
+
+  .role-cell {
+    grid-area: role;
+    width: auto;
+    margin-left: var(--space-2);
+  }
+
+  .role-text {
+    min-width: 0;
+  }
+
+  .actions-cell {
+    grid-area: actions;
+    width: auto;
+  }
+}
+
 /* Phones: name and email, then role and Remove. */
 @media (max-width: 639px) {
   .member {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
     grid-template-areas:
-      "name status"
-      "email email"
-      "role actions";
+      "name status status"
+      "email email email"
+      "role role actions";
     align-items: center;
     padding: var(--space-3) var(--space-4);
     row-gap: var(--space-1);
+    column-gap: var(--space-2);
+  }
+
+  .avatar {
+    position: static;
+    transform: none;
+  }
+
+  .email {
+    font-size: var(--fs-md);
+    line-height: var(--lh-md);
   }
 
   .member + .member {
@@ -209,6 +307,7 @@ function onRole(value: string | null): void {
   .role-cell {
     grid-area: role;
     width: auto;
+    margin-left: 0;
     padding-left: calc(28px + var(--space-2));
   }
 

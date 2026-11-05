@@ -52,7 +52,7 @@ function onDue(v: IsoDate | null): void {
       :label="task.title"
       :color="color"
       :readonly="!ctx.canEdit.value"
-      @toggle="tasks.toggleComplete(task.id)"
+      @toggle="void tasks.toggleComplete(task.id)"
     />
     <button v-tooltip="{ text: task.title, overflowOnly: true }" type="button" class="title truncate" @click="ctx.openTask(task.id)">
       {{ task.title }}
@@ -90,10 +90,12 @@ function onDue(v: IsoDate | null): void {
 </template>
 
 <style scoped>
+/* A subgrid of SubtasksSection's .rows: the columns (and their gap) are shared by every row. */
 .subtask-row {
-  display: flex;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: var(--space-2);
   min-height: var(--row-list);
   padding: 0 var(--space-1) 0 var(--space-2);
   margin: 0 calc(var(--space-2) * -1);
@@ -105,7 +107,6 @@ function onDue(v: IsoDate | null): void {
 }
 
 .title {
-  flex: 1;
   min-width: 0;
   padding: var(--space-1) 0;
   border: 0;
@@ -125,32 +126,37 @@ function onDue(v: IsoDate | null): void {
 }
 
 .is-done .title {
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
-/* Fixed columns, right-aligned, so avatars and dates line up from row to row whether or not a
-   row has them (an empty one is only revealed on hover). */
+/* Shared columns (see SubtasksSection), right-aligned, so avatars and dates line up from row to row
+   whether or not a row has them (an empty one is only revealed on hover). */
 .cell {
-  display: inline-flex;
+  display: flex;
   justify-content: flex-end;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .cell-assignees {
   min-width: 48px;
 }
 
-.cell-due {
-  min-width: 96px;
+/* Touch (7.5): the title button takes the row's full 44px height; the wider column gap (the
+   section's) keeps the 44px targets of the toggle, the avatars and the date chip apart. */
+@media (pointer: coarse) {
+  .title {
+    align-self: stretch;
+  }
 }
 
-/* Touch screens never reveal the empty controls, so they give their room to the title. */
+/* Touch screens never reveal the empty controls, so they give their room to the title. The field
+   triggers are rendered by the field components, hence :deep. */
 @media (hover: none) {
-  .cell {
+  .cell-assignees {
     min-width: 0;
   }
 
-  .cell > .reveal:not(.reveal-touch) {
+  .cell > :deep(.reveal:not(.reveal-touch)) {
     display: none;
   }
 }

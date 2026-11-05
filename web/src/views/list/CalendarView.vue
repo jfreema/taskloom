@@ -43,8 +43,11 @@ let observer: ResizeObserver | null = null
 onMounted(() => {
   const el = root.value
   if (!el) return
-  width.value = el.getBoundingClientRect().width || width.value
-  if (typeof ResizeObserver === 'undefined') return
+  if (typeof ResizeObserver === 'undefined') {
+    width.value = el.getBoundingClientRect().width || width.value
+    return
+  }
+  // The first report comes after the first layout and before the first paint (no forced layout).
   observer = new ResizeObserver(([entry]) => {
     if (entry) width.value = entry.borderBoxSize?.[0]?.inlineSize ?? entry.contentRect.width
   })
@@ -148,13 +151,17 @@ watchEffect(() => {
   scroll-padding-bottom: var(--fab-room, 0px);
 }
 
+/* The grid and the tray share the height that is left under the header. The body never gets
+   shorter than the grid's own height (5 or 6 rows of at least 112px: min-height auto), so on a
+   short window the view scrolls; the tray never adds height of its own (contain: size, see
+   below), so a long To schedule list scrolls inside the tray instead of stretching the rows. */
 .body {
   position: relative;
   display: flex;
   align-items: stretch;
   gap: var(--space-3);
-  flex: 1 0 auto;
-  min-height: 0;
+  flex: 1 1 0;
+  min-height: auto;
   padding-bottom: var(--space-4);
 }
 
@@ -164,6 +171,7 @@ watchEffect(() => {
 
 .tray {
   flex: none;
+  contain: size;
 }
 
 /* Below 900px: the tray floats over the grid's right edge. */

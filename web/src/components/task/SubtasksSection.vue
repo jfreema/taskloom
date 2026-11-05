@@ -83,6 +83,7 @@ function onBlur(): void {
     <ul v-else-if="known && subtasks.length" class="rows">
       <SubtaskRow v-for="s in subtasks" :key="s.id" :task="s" />
     </ul>
+    <p v-else-if="known && !ctx.canEdit.value" class="none">No subtasks</p>
     <div v-if="ctx.canEdit.value" class="add">
       <UiInput
         v-if="adding"
@@ -129,12 +130,21 @@ function onBlur(): void {
   max-width: 160px;
 }
 
+/* One grid shared by every row (each SubtaskRow is a subgrid), so the avatars, dates and menus line up
+   from row to row whatever each row shows: toggle, title, assignees, due date, menu. */
 .rows {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  column-gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+@media (pointer: coarse) {
+  .rows {
+    column-gap: var(--space-3);
+  }
 }
 
 .skeleton {
@@ -142,6 +152,13 @@ function onBlur(): void {
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-2) 0;
+}
+
+.none {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-tertiary);
 }
 
 .add {
@@ -152,5 +169,13 @@ function onBlur(): void {
 .add-field {
   flex: 1;
   margin-left: var(--space-2);
+}
+
+/* Touch (7.5): a 44px row, so the button's 44px target stays clear of the last subtask's. */
+@media (pointer: coarse) {
+  .add {
+    align-items: center;
+    min-height: var(--touch-min);
+  }
 }
 </style>

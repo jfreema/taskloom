@@ -30,6 +30,8 @@ const holdsFocus = (locator: Locator): Promise<boolean> => locator.evaluate((el)
 async function gotoList(page: Page, listId: string): Promise<void> {
   await page.goto(`/l/${listId}/list`)
   await expect(listRow(page, 'Write onboarding guide')).toBeVisible()
+  // Rows mount in batches (S10): the grid is aria-busy until they all have.
+  await expect(page.getByRole('treegrid')).not.toHaveAttribute('aria-busy', 'true')
 }
 
 /** Opens a task in the panel by clicking its row's title, and waits for the detail to load. */

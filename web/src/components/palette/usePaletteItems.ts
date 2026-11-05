@@ -1,9 +1,11 @@
 // What the palette lists (8.11). An empty query shows Recent (5 tasks, 3 lists of this workspace)
-// and every action; a typed one shows the server's tasks (8, or up to 20 after "Show all N
-// results"), the matching lists and spaces (6 together), the matching actions (6) and, last,
-// "Create task “…”" (the actions come from usePaletteActions). Every option knows how to activate
-// itself; all but "Show all" and "Try again" close the palette first.
-import { computed, type Component, type ComputedRef, type Ref } from 'vue'
+// and every action, with up to 5 "Switch to <workspace>" items (typing finds the others); a typed
+// one shows the server's tasks (8, or up to 20 after "Show all N results"), the matching lists and
+// spaces (6 together), the matching actions (6) and, last, "Create task “…”" (the actions come from
+// usePaletteActions). Every option knows how to activate itself; all but "Show all" and "Try again"
+// close the palette first. While the palette is open (`active`), the local index (the list, space
+// and action names it matches) is folded in idle time, so the first keystroke only compares strings.
+import { computed, onScopeDispose, watch, type Component, type ComputedRef, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CircleAlert, ChevronDown, History, Plus } from '@lucide/vue'
 import { useTaskPanel } from '../../composables/useTaskPanel'
@@ -13,11 +15,14 @@ import { useTasks } from '../../stores/tasks'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { IsoDate, Space, Status, Task, Uuid } from '../../types'
-import { matches, startsWord } from './paletteMatch'
+import { matches, prepare, startsWord } from './paletteMatch'
 import { usePaletteActions, type PaletteAction } from './usePaletteActions'
 import type { PaletteSearch } from './usePaletteSearch'
 
 export const TASKS_SHOWN = 8
+
+/** "Switch to <workspace>" items on an empty query: someone in many workspaces types to find the others. */
+const SWITCHES_SHOWN = 5
 const LOCAL_MAX = 6
 const RECENT_TASKS = 5
 const RECENT_LISTS = 3
@@ -52,11 +57,23 @@ export interface PaletteGroup {
   options: PaletteOption[]
 }
 
+/** Runs `fn` once the browser is idle (within 200ms at the latest); returns a cancel. */
+function whenIdle(fn: () => void): () => void {
+  if (typeof requestIdleCallback === 'function') {
+    const id = requestIdleCallback(fn, { timeout: 200 })
+    return () => cancelIdleCallback(id)
+  }
+  const id = setTimeout(fn, 0)
+  return () => clearTimeout(id)
+}
+
 export function usePaletteItems(o: {
   query: Ref<string>
   expanded: Ref<boolean>
   search: PaletteSearch
   close(): void
+  /** The palette is open: its local index is prepared then. */
+  active?: Ref<boolean>
 }): { groups: ComputedRef<PaletteGroup[]>; noResults: ComputedRef<boolean>; trimmed: ComputedRef<string> } {
   const ui = useUi()
   const tasks = useTasks()
@@ -68,6 +85,33 @@ export function usePaletteItems(o: {
   const actions = usePaletteActions()
 
   const trimmed = computed(() => o.query.value.trim())
+
+  // ---- Local index ----
+
+  /** The texts a typed query matches locally: list and space names, action labels and keywords. */
+  function localTexts(): string[] {
+    const out: string[] = []
+    for (const { list } of workspaces.allLists) out.push(list.name)
+    for (const space of workspaces.current?.spaces ?? []) out.push(space.name)
+    for (const a of actions.value) {
+      out.push(a.label)
+      if (a.keywords) out.push(a.keywords)
+    }
+    return out
+  }
+
+  let cancelPrepare: (() => void) | null = null
+  if (o.active) {
+    watch(
+      o.active,
+      (on) => {
+        cancelPrepare?.()
+        cancelPrepare = on ? whenIdle(() => prepare(localTexts())) : null
+      },
+      { immediate: true },
+    )
+    onScopeDispose(() => cancelPrepare?.())
+  }
 
   function go(path: string): void {
     void router.push(path).catch(noop)
@@ -194,7 +238,9 @@ export function usePaletteItems(o: {
     if (!q) {
       const out: PaletteGroup[] = []
       if (recentGroup.value) out.push(recentGroup.value)
-      out.push({ key: 'actions', label: 'Actions', options: actions.value.map((a) => actionOption(a, false)) })
+      let switches = 0
+      const shown = actions.value.filter((a) => !a.key.startsWith('switch-') || switches++ < SWITCHES_SHOWN)
+      out.push({ key: 'actions', label: 'Actions', options: shown.map((a) => actionOption(a, false)) })
       return out
     }
     const out: PaletteGroup[] = []

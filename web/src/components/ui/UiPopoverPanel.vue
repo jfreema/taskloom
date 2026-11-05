@@ -161,6 +161,9 @@ defineExpose({ el, returnTarget })
 </template>
 
 <style scoped>
+/* When the content is taller than the room (a long menu on a phone, capped at 60dvh), a shade at
+   the cut-off edge shows that more follows: the two covers scroll with the content and hide the
+   shades at its ends. */
 .ui-popover {
   display: flex;
   flex-direction: column;
@@ -170,7 +173,12 @@ defineExpose({ el, returnTarget })
   max-height: var(--popover-max-h, calc(100dvh - 16px));
   overflow: auto;
   overscroll-behavior: contain;
-  background: var(--bg-raised);
+  background:
+    linear-gradient(var(--bg-raised) 40%, transparent) top / 100% 24px no-repeat local,
+    linear-gradient(transparent, var(--bg-raised) 60%) bottom / 100% 24px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, var(--scroll-shade), transparent) top / 100% 14px no-repeat,
+    radial-gradient(farthest-side at 50% 100%, var(--scroll-shade), transparent) bottom / 100% 14px no-repeat,
+    var(--bg-raised);
   border: 1px solid var(--border-floating);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-3);

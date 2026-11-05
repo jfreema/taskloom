@@ -17,6 +17,7 @@ import UiIconButton from '../ui/UiIconButton.vue'
 import UiSkeleton from '../ui/UiSkeleton.vue'
 import SidebarSpace from './SidebarSpace.vue'
 import { useSidebarState } from './sidebarState'
+import { skeletonDelay } from './skeletonHandover'
 
 const workspaces = useWorkspaces()
 const ui = useUi()
@@ -29,7 +30,7 @@ const tree = ref<HTMLElement | null>(null)
 const spaces = computed(() => [...(workspaces.current?.spaces ?? [])].sort((a, b) => a.position - b.position))
 const canEdit = computed(() => workspaces.canEdit())
 const loading = computed(() => !workspaces.loaded && !workspaces.error)
-const showSkeleton = useDelayedFlag(loading)
+const showSkeleton = useDelayedFlag(loading, skeletonDelay())
 const failed = computed(() => !workspaces.loaded && !!workspaces.error)
 
 const activeListId = computed(() => {
@@ -135,6 +136,13 @@ function onKeydown(e: KeyboardEvent): void {
   min-height: var(--control-xs);
   padding: 0 var(--space-1) 0 var(--space-2);
   margin-bottom: var(--space-0-5);
+}
+
+/* Touch (7.5): the label row is a full 44px row, so "New space" keeps its 44px hit area. */
+@media (pointer: coarse) {
+  .section-head {
+    min-height: var(--touch-min);
+  }
 }
 
 .section-label {

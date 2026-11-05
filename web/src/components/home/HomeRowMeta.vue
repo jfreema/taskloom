@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // A Home row's details (8.5): the location link (SpaceTile 16 and "Space / List", max 200px), the
 // due date, the flag (only if set) and the people, or "Unassigned" when the row shows only because
-// I created it. On one-line rows they sit in fixed columns; below 640px of page width (container
+// I created it. On one-line rows they sit in fixed columns, the people right-aligned in theirs, so
+// every row ends at the same edge; below 640px of page width (container
 // `page`) they form the row's second line, "location · due · flag · people", and the location shows
 // only the list name (the tile stands for the space).
 import { computed } from 'vue'
@@ -115,9 +116,31 @@ a.location:hover {
   min-width: 0;
 }
 
+/* The people (or "Unassigned") end at the row's right edge. */
+.people {
+  justify-self: end;
+}
+
 .sep {
   display: none;
   color: var(--text-tertiary);
+}
+
+/* Touch (7.5): on a one-line row (44px) the link's hit area is the row's full height. */
+@media (pointer: coarse) {
+  a.location {
+    position: relative;
+  }
+
+  a.location::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--touch-min);
+    transform: translateY(-50%);
+  }
 }
 
 /* Narrow pages: the row's second line. */
@@ -153,6 +176,15 @@ a.location:hover {
 
   .sep {
     display: inline;
+  }
+
+  /* Touch, two-line rows: the location is a 16px line under the title, too close to it for a 44px
+     target of its own, so a tap on it opens the task like the rest of the row. The link stays for
+     the keyboard and screen readers, and the list is a tap away in the panel and the drawer. */
+  @media (pointer: coarse) {
+    a.location {
+      pointer-events: none;
+    }
   }
 }
 </style>

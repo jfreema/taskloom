@@ -20,9 +20,16 @@ const row = (scope: Page | Locator, title: string): Locator =>
 /** The top-level task rows of a group (or the whole List), in order. */
 const topRows = (scope: Locator): Locator => scope.locator('[role="row"][data-task-row][aria-level="1"]')
 
-/** The titles of the top-level task rows, in order. */
-const titlesOf = (scope: Locator): Promise<string[]> =>
-  topRows(scope).evaluateAll((rows) => rows.map((r) => r.getAttribute('aria-label') ?? ''))
+/** Rows mount in batches (S10): the grid is aria-busy until they all have. */
+async function mounted(page: Page, list = LIST): Promise<void> {
+  await expect(grid(page, list)).not.toHaveAttribute('aria-busy', 'true')
+}
+
+/** The titles of the top-level task rows, in order, once they have all mounted. */
+async function titlesOf(scope: Locator): Promise<string[]> {
+  await mounted(scope.page())
+  return topRows(scope).evaluateAll((rows) => rows.map((r) => r.getAttribute('aria-label') ?? ''))
+}
 
 const notifications = (page: Page): Locator => page.getByRole('region', { name: 'Notifications' })
 
@@ -38,6 +45,7 @@ const focusedRow = (page: Page): Promise<string | null> =>
 async function gotoList(page: Page, seeded: Seeded, list = LIST): Promise<void> {
   await page.goto(`/l/${seeded.lists[list].id}/list`)
   await expect(topRows(grid(page, list)).first()).toBeVisible()
+  await mounted(page, list)
 }
 
 /** The list's tasks as the server has them. */
@@ -460,6 +468,7 @@ test.describe('List', () => {
       await expect(grid(page).locator('[aria-selected="true"]')).toHaveCount(0)
       await rows.nth(1).focus()
       await page.keyboard.press(`${MOD}+A`)
+      await mounted(page)
       const visible = await rows.count()
       await expect(grid(page).locator('[aria-selected="true"]')).toHaveCount(visible)
       await stageC(`the bulk bar says "${visible} selected"`, async () => {

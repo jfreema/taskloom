@@ -74,6 +74,7 @@ const label = computed(() => (props.view.hasHeader ? props.view.group.label : un
         :selected="row.level === 1 && selection.ids.has(row.task.id)"
         :current="panel.openId.value === row.task.id"
         :flash="table.flashIds.value.has(row.task.id)"
+        :moved="table.movedKey.value === row.key"
         :renaming="table.renamingId.value === row.task.id"
         :drop="dropFor(row.key)"
       />
@@ -129,7 +130,7 @@ const label = computed(() => (props.view.hasHeader ? props.view.group.label : un
   display: flex;
   flex: 1 1 auto;
   align-items: center;
-  padding-left: calc(var(--gutter-w) + 20px + var(--space-1-5) + var(--control-xs));
+  padding-left: calc(var(--gutter-w) + 20px + var(--space-1-5) + var(--control-xs) + var(--touch-shift, 0px));
 }
 
 .more-button {
@@ -153,6 +154,23 @@ const label = computed(() => (props.view.hasHeader ? props.view.group.label : un
 @container page (width < 560px) {
   .more-row {
     padding-left: var(--space-3);
+  }
+}
+
+/* Touch (7.5): "Show N more" is a 44px target, the height of the row. */
+@media (pointer: coarse) {
+  .more-button {
+    position: relative;
+  }
+
+  .more-button::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--touch-min);
+    transform: translateY(-50%);
   }
 }
 </style>

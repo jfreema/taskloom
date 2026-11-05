@@ -151,9 +151,28 @@ textarea.task-title:focus-visible {
   white-space: pre-wrap;
 }
 
+/* Touch (7.5): the field is a 44px target; the extra padding is taken back by margins, so the
+   title doesn't move. It grows 4px up (the status row's 44px targets reach to 4px above it) and
+   the rest down. */
+@media (pointer: coarse) {
+  textarea.task-title {
+    --title-lh: var(--lh-2xl);
+    padding-top: var(--space-1-5);
+    padding-bottom: max(var(--space-0-5), calc(var(--touch-min) - var(--title-lh) - var(--space-1-5)));
+    margin-top: calc(var(--space-1) * -1);
+    margin-bottom: min(0px, calc(var(--space-0-5) + var(--space-1-5) + var(--title-lh) - var(--touch-min)));
+  }
+
+  textarea.task-title.size-page {
+    --title-lh: var(--lh-3xl);
+  }
+}
+
 /* Phones: the page title is 22/28 like the panel's. */
 @media (max-width: 639px) {
-  .task-title.size-page {
+  .task-title.size-page,
+  textarea.task-title.size-page {
+    --title-lh: var(--lh-2xl);
     font-size: var(--fs-2xl);
     --field-font-size: var(--fs-2xl);
     line-height: var(--lh-2xl);

@@ -72,6 +72,16 @@ function onKeydown(e: KeyboardEvent): void {
   else if (e.key === 'Escape') emit('escape', e)
 }
 
+/** A press on the frame (its padding, icon or the touch margin) focuses the field, keeping the caret
+ *  where it was; presses on the field itself and on buttons inside keep their own behaviour. */
+function onFrameMousedown(e: MouseEvent): void {
+  const t = e.target
+  if (!(t instanceof Element) || t === el.value || t.closest('button, a, input, [role="button"]')) return
+  if (props.disabled) return
+  e.preventDefault()
+  el.value?.focus()
+}
+
 function onFocus(e: FocusEvent): void {
   if (props.selectOnFocus) el.value?.select()
   emit('focus', e)
@@ -102,6 +112,7 @@ defineExpose({ focus, select, el })
     class="ui-input"
     :class="[`ui-input--${size}`, { 'is-invalid': invalid, 'is-disabled': disabled, 'is-readonly': readonly }]"
     v-bind="frameAttrs"
+    @mousedown="onFrameMousedown"
   >
     <span v-if="$slots.prefix" class="affix"><slot name="prefix" /></span>
     <UiIcon v-else-if="icon" class="lead-icon" :icon="icon" :size="size === 'lg' ? 20 : 16" />
@@ -235,5 +246,38 @@ defineExpose({ focus, select, el })
 
 .clear {
   margin-right: calc(var(--space-1) * -1);
+}
+
+/* Touch (7.5): fields are 44px tall. The small size keeps its 28px look for toolbars and grows its
+   hit area instead: the margin below the field (z-index -1 inside the frame's own stacking context,
+   so the field itself stays on top and keeps caret placement) focuses it. */
+@media (pointer: coarse) {
+  .ui-input,
+  .ui-input--lg {
+    height: var(--touch-min);
+  }
+
+  /* The field reaches over the frame's top and bottom border (it is transparent), so the whole
+     44px takes a tap as the field's own. */
+  .ui-input:not(.ui-input--sm) .control {
+    height: calc(100% + 2px);
+    margin: -1px 0;
+  }
+
+  .ui-input--sm {
+    isolation: isolate;
+    height: var(--control-sm);
+  }
+
+  .ui-input--sm::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    left: -1px;
+    right: -1px;
+    top: 50%;
+    height: var(--touch-min);
+    transform: translateY(-50%);
+  }
 }
 </style>

@@ -195,7 +195,9 @@ table {
 
 /*
  * Hover-only controls (8.1). Opacity, not visibility, so keyboard focus still reaches them.
- * An open menu or popover keeps its trigger visible.
+ * An open menu or popover keeps its trigger visible. Keyboard focus (:focus-visible) in a row
+ * reveals them too; focus a mouse action moved there in code (the next row after a completion)
+ * doesn't, so only the hovered row shows them.
  */
 .reveal {
   opacity: 0;
@@ -203,7 +205,8 @@ table {
 }
 
 [data-row]:hover .reveal,
-[data-row]:focus-within .reveal,
+[data-row]:focus-visible .reveal,
+[data-row]:has(:focus-visible) .reveal,
 .reveal:focus-visible,
 .reveal[aria-expanded="true"] {
   opacity: 1;

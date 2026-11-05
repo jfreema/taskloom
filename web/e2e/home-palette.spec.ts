@@ -8,6 +8,8 @@ async function gotoHome(page: Page): Promise<void> {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening)/ })).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Today' })).toBeVisible()
+  // Rows mount in batches (S10): the page is aria-busy until they all have.
+  await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0)
 }
 
 /** A Home section's rows: the list named by its heading. */

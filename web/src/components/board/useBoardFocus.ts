@@ -5,6 +5,8 @@
 //   hands focus to the next card of its column, else the previous one, else the column's "+".
 //   Each render keeps a snapshot of the columns' cards, so the rescue knows where the card was.
 // - Focus that moves on elsewhere, or a click on the page, is left alone.
+// - remembered() is the card that last held focus, while it is still on the board: the entry keys
+//   pressed outside the board go back to it (useBoardKeyboard).
 // Bind onFocusIn and onFocusOut to the board element.
 import { nextTick, watch, type Ref } from 'vue'
 import type { Uuid } from '../../types'
@@ -13,6 +15,7 @@ import type { BoardModel } from './useBoardModel'
 
 export interface BoardFocus {
   refocus(target: FocusTarget): void
+  remembered(): Uuid | null
   onFocusIn(e: FocusEvent): void
   onFocusOut(e: FocusEvent): void
 }
@@ -26,6 +29,8 @@ export function useBoardFocus(root: Ref<HTMLElement | null>, model: BoardModel):
   let pending: FocusTarget | null = null
   /** The card that holds focus (or a control inside it), and each column's cards at the last render. */
   let focusedId: Uuid | null = null
+  /** The card that last held focus, kept after focus leaves the board. */
+  let lastId: Uuid | null = null
   let snapshot: { statusId: Uuid; ids: Uuid[] }[] = []
 
   function applyPending(): void {
@@ -71,6 +76,11 @@ export function useBoardFocus(root: Ref<HTMLElement | null>, model: BoardModel):
   function onFocusIn(e: FocusEvent): void {
     const card = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-card]') : null
     focusedId = card?.dataset.taskRow ?? null
+    if (focusedId) lastId = focusedId
+  }
+
+  function remembered(): Uuid | null {
+    return lastId && snapshot.some((c) => c.ids.includes(lastId as Uuid)) ? lastId : null
   }
 
   function onFocusOut(e: FocusEvent): void {
@@ -85,5 +95,5 @@ export function useBoardFocus(root: Ref<HTMLElement | null>, model: BoardModel):
     })
   }
 
-  return { refocus, onFocusIn, onFocusOut }
+  return { refocus, remembered, onFocusIn, onFocusOut }
 }

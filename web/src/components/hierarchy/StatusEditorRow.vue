@@ -149,4 +149,17 @@ function onKeydown(e: KeyboardEvent): void {
   color: var(--text-tertiary);
   white-space: nowrap;
 }
+
+/* Touch (7.5): the name takes at least a 44px-wide tap that starts clear of the colour button's hit
+   area, and the menu button's hit area keeps its full width at the end of the row. */
+@media (pointer: coarse) {
+  .row {
+    gap: var(--space-3);
+    padding-right: var(--space-2);
+  }
+
+  .name :deep(.view) {
+    min-width: var(--touch-min);
+  }
+}
 </style>

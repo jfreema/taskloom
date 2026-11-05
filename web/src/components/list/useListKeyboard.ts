@@ -8,7 +8,11 @@
 // - Enter opens, X (and Space on the row) toggles the selection, Mod+A selects every visible
 //   top-level task, Esc clears the selection, then lets a docked panel close, then leaves the grid.
 // - Mod+Enter, S/A/D/P, F2, Shift+F10, Delete and Alt+Up/Down act on the focused task.
+// - Getting in: Up/Down and J/K pressed elsewhere on the page (or on the body, after a reload)
+//   focus the remembered row (the last focused one), else the open task's row, else the first
+//   task row.
 import { nextTick, type ComputedRef, type Ref } from 'vue'
+import { focusOutsideGrids } from '../shell/shellContext'
 import { useShortcut } from '../../composables/useShortcut'
 import { useTaskActions, type PickField } from '../../composables/useTaskActions'
 import { useTaskPanel } from '../../composables/useTaskPanel'
@@ -25,12 +29,19 @@ export interface ListKeyboardDeps {
   canReorder: ComputedRef<boolean>
   startRename(id: Uuid): void
   pick(id: Uuid, field: PickField): void
+  /** The nav key of the row that last held focus (useListFocus), for getting back into the grid. */
+  remembered?: () => string | null
 }
 
 /** The element that takes focus for a row. */
 export function navOf(row: Element): HTMLElement | null {
   if (row instanceof HTMLElement && row.matches('[data-nav]')) return row
   return row.querySelector<HTMLElement>('[data-nav]')
+}
+
+/** The first task row's nav key, else the first row's (a group header's). */
+export function firstNavKey(keys: string[]): string | null {
+  return keys.find((k) => k.startsWith('t:')) ?? keys[0] ?? null
 }
 
 /** Focuses a row's focus target and scrolls it into view (scroll-padding keeps it clear of the sticky headers). */
@@ -105,6 +116,24 @@ export function useListKeyboard(d: ListKeyboardDeps): void {
   useShortcut(['ArrowUp', 'k'], () => move(-1), grid)
   useShortcut('Home', () => move('first'), grid)
   useShortcut('End', () => move('last'), grid)
+
+  // ---- Getting in ----
+
+  /** The remembered row, else the open task's row, else the first task row (only rendered rows). */
+  function enter(): boolean {
+    const keys = d.model.navKeys.value
+    const open = panel.openId.value
+    const candidates = [d.remembered?.() ?? null, open ? taskKey(open) : null]
+    for (const k of candidates) if (k && keys.includes(k) && focusRow(d.root.value, k)) return true
+    const first = firstNavKey(keys)
+    return !!first && focusRow(d.root.value, first)
+  }
+
+  // Global scope with a condition rather than 'view': it also works with focus on the body. A modal
+  // layer or an open popover still takes these keys first (useShortcut).
+  useShortcut(['ArrowDown', 'j', 'ArrowUp', 'k'], enter, {
+    when: () => focusOutsideGrids() && !d.root.value?.contains(document.activeElement),
+  })
 
   useShortcut(
     'ArrowRight',

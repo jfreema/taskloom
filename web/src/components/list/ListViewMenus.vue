@@ -257,4 +257,24 @@ function toggleExpanded(): void {
   background: var(--bg-selected);
   color: var(--accent-text);
 }
+
+/* Touch (7.5): every tool is at least 44px wide, so the targets of neighbouring icon tools never
+   overlap, and an ::after makes it 44px tall (the toolbar clips that to its 43px row). */
+@media (pointer: coarse) {
+  .tool,
+  .is-phone .tool {
+    position: relative;
+    min-width: var(--touch-min);
+  }
+
+  .tool::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: max(100%, var(--touch-min));
+    transform: translateY(-50%);
+  }
+}
 </style>

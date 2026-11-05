@@ -3,8 +3,9 @@
 //   One Esc closes at most one layer: if the top layer closed itself while the key went down, the
 //   layer below stays open.
 // - Outside clicks close non-modal layers above the clicked layer.
-// - While any modal layer is open, #app is inert and body scrolling is locked; modal layers must
-//   teleport into #overlay-root, the sibling of #app that index.html provides.
+// - While any modal layer is open, #app is inert and body scrolling is locked (from one frame after
+//   the first one opens); modal layers must teleport into #overlay-root, the sibling of #app that
+//   index.html provides.
 // - When a layer closes, focus returns to the element that had focus when it opened, if that
 //   element is still in the document (else to the opener of the layer it was opened from), and
 //   otherwise to the layer's returnFocusTo fallback.
@@ -111,16 +112,41 @@ function unlockScroll(): void {
   html.style.paddingRight = ''
 }
 
-/** Applied synchronously, so focus can return to the app in the same tick a modal closes. */
+// When the first modal layer opens, #app turns inert and the page stops scrolling one frame after
+// the layer's first paint (a frame, then a task): restyling the whole app then never delays that
+// paint, the task drawer's above all. Meanwhile the layer already holds focus (its trap) and its
+// scrim takes the pointer. When the last one closes both are undone at once, so focus can return
+// to the app in the same tick.
+let applyFrame: number | null = null
+let applyTimer: ReturnType<typeof setTimeout> | null = null
+
+function cancelApply(): void {
+  if (applyFrame !== null) cancelAnimationFrame(applyFrame)
+  if (applyTimer !== null) clearTimeout(applyTimer)
+  applyFrame = null
+  applyTimer = null
+}
+
+function applyModalState(): void {
+  cancelApply()
+  if (!hasModal.value) return
+  document.getElementById('app')?.setAttribute('inert', '')
+  lockScroll()
+}
+
 function syncModalState(): void {
-  const app = document.getElementById('app')
   if (hasModal.value) {
-    app?.setAttribute('inert', '')
-    lockScroll()
-  } else {
-    app?.removeAttribute('inert')
-    unlockScroll()
+    if (scrollLocked || applyFrame !== null || applyTimer !== null) return
+    if (typeof requestAnimationFrame === 'undefined') return applyModalState()
+    applyFrame = requestAnimationFrame(() => {
+      applyFrame = null
+      applyTimer = setTimeout(applyModalState, 0)
+    })
+    return
   }
+  cancelApply()
+  document.getElementById('app')?.removeAttribute('inert')
+  unlockScroll()
 }
 
 // The top layer when the current Esc went down (recorded in the capture phase). A widget can close

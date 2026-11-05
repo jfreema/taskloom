@@ -185,4 +185,16 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
   align-items: center;
   gap: var(--space-1);
 }
+
+/* Touch (7.5): the field is 44px tall, and "Close" keeps its whole 44px target clear of "Add task". */
+@media (pointer: coarse) {
+  .field {
+    min-height: var(--touch-min);
+    padding-block: calc((var(--touch-min) - var(--lh-md)) / 2);
+  }
+
+  .actions {
+    gap: var(--space-3);
+  }
+}
 </style>

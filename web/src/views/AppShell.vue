@@ -7,9 +7,11 @@
 // - Below 1024px the sidebar is a modal left drawer that closes on navigation, Esc or the scrim.
 // - Start-up (8.2): the router guard has loaded the session; this loads the workspace tree, then
 //   members and tags of the current workspace, registers the global shortcuts, installs the
-//   pagehide flush of pending deletes and the focus refresh of the tree.
-// - States: a page skeleton while the tree loads (after 200ms), an error with retry, and "You're
-//   not in a workspace yet." when the user has no workspace (profile and appearance still work).
+//   pagehide flush of pending deletes and the focus refresh of the tree. After a reload, #main
+//   takes focus once the first page has rendered.
+// - States: a page skeleton while the tree loads (after 200ms, or at once when App.vue's boot
+//   frame was showing), an error with retry, and "You're not in a workspace yet." when the user
+//   has no workspace (profile and appearance still work).
 //   The error and no-workspace states render a bare PageHeader, so the sidebar's button ("Open
 //   navigation" below 1024px, "Show sidebar" when collapsed) still reaches the user menu.
 // - The skip link is the first focusable element; the global dialogs and the FAB mount here.
@@ -19,6 +21,7 @@ import { Building2, Plus } from '@lucide/vue'
 import { useBreakpoint } from '../composables/useBreakpoint'
 import { useDelayedDelete } from '../composables/useDelayedDelete'
 import { useDelayedFlag } from '../composables/useDelayedFlag'
+import { useLayerStack } from '../composables/useLayerStack'
 import { useMembers } from '../stores/members'
 import { useTags } from '../stores/tags'
 import { useUi } from '../stores/ui'
@@ -26,14 +29,15 @@ import { useWorkspaces } from '../stores/workspaces'
 import AppSidebar from '../components/shell/AppSidebar.vue'
 import NewTaskFab from '../components/shell/NewTaskFab.vue'
 import PageHeader from '../components/shell/PageHeader.vue'
+import PageSkeleton from '../components/shell/PageSkeleton.vue'
 import TaskPanelHost from '../components/shell/TaskPanelHost.vue'
+import { skeletonDelay } from '../components/shell/skeletonHandover'
 import { PANEL_ROUTE_NAMES, WORKSPACE_FREE_ROUTES, contentPanelKey } from '../components/shell/shellContext'
 import { useShellShortcuts } from '../components/shell/useShellShortcuts'
 import UiButton from '../components/ui/UiButton.vue'
 import UiDrawer from '../components/ui/UiDrawer.vue'
 import UiEmptyState from '../components/ui/UiEmptyState.vue'
 import UiErrorState from '../components/ui/UiErrorState.vue'
-import UiSkeleton from '../components/ui/UiSkeleton.vue'
 import CommandPalette from '../components/palette/CommandPalette.vue'
 import QuickCreateDialog from '../components/quick-create/QuickCreateDialog.vue'
 import ShortcutsDialog from '../components/shortcuts/ShortcutsDialog.vue'
@@ -49,6 +53,7 @@ const members = useMembers()
 const tags = useTags()
 const route = useRoute()
 const { isDesktop, isPhone } = useBreakpoint()
+const layers = useLayerStack()
 
 const contentPanel = ref<HTMLElement | null>(null)
 provide(contentPanelKey, contentPanel)
@@ -90,11 +95,29 @@ onBeforeUnmount(() => {
 // ---- States ----
 
 const loading = computed(() => !workspaces.loaded && !workspaces.error)
-const showSkeleton = useDelayedFlag(loading)
+const showSkeleton = useDelayedFlag(loading, skeletonDelay())
 const failed = computed(() => !workspaces.loaded && !!workspaces.error)
 const needsWorkspace = computed(() => typeof route.name !== 'string' || !WORKSPACE_FREE_ROUTES.has(route.name))
 const noWorkspace = computed(() => workspaces.loaded && !workspaces.current && needsWorkspace.value)
 const showPage = computed(() => (workspaces.loaded || !needsWorkspace.value) && !noWorkspace.value)
+
+// After a reload focus is on <body>, outside every shortcut scope. Once the first page has
+// rendered, #main takes it, as after a route change (9.6), so the view's keys work at once; a
+// page, panel or dialog that took focus first keeps it.
+let firstPageSeen = false
+watch(
+  showPage,
+  (on) => {
+    if (!on || firstPageSeen) return
+    firstPageSeen = true
+    void nextTick(() => {
+      const a = document.activeElement
+      if ((a && a !== document.body) || layers.hasModal.value) return
+      document.getElementById('main')?.focus({ preventScroll: true })
+    })
+  },
+  { immediate: true },
+)
 
 // ---- Sidebar ----
 
@@ -181,18 +204,7 @@ function skipToContent(): void {
               </UiEmptyState>
             </div>
           </template>
-          <div v-else-if="showSkeleton" class="page-skeleton" aria-hidden="true">
-            <div class="skeleton-header">
-              <UiSkeleton variant="rect" width="18px" height="18px" />
-              <UiSkeleton width="180px" />
-            </div>
-            <div class="skeleton-rows">
-              <div v-for="(w, i) in ['46%', '62%', '38%', '55%', '70%', '42%', '58%', '34%']" :key="i" class="skeleton-row">
-                <UiSkeleton variant="circle" width="16px" height="16px" />
-                <UiSkeleton :width="w" />
-              </div>
-            </div>
-          </div>
+          <PageSkeleton v-else-if="showSkeleton" />
         </main>
       </div>
       <TaskPanelHost />
@@ -308,35 +320,6 @@ function skipToContent(): void {
 .state {
   margin: auto;
   padding: var(--space-8) var(--space-4);
-}
-
-.page-skeleton {
-  display: flex;
-  flex-direction: column;
-}
-
-.skeleton-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: var(--topbar-h);
-  padding: 0 var(--space-4);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.skeleton-rows {
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-3) var(--space-4);
-}
-
-.skeleton-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  height: var(--row-list);
-  padding: 0 var(--space-2);
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 @media (max-width: 639px) {

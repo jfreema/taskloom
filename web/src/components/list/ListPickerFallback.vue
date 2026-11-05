@@ -3,7 +3,7 @@
 // or the Tags and Status columns at narrow widths, 8.7): anchored to the row, with no trigger of
 // its own. ListTable opens it with `open(id, field, row)`.
 import { computed, ref, shallowRef, watch } from 'vue'
-import { useTaskActions, type PickField } from '../../composables/useTaskActions'
+import type { PickField } from '../../composables/useTaskActions'
 import { noop } from '../../lib/async'
 import { useTasks } from '../../stores/tasks'
 import type { IsoDate, TaskPatch, Uuid } from '../../types'
@@ -11,9 +11,10 @@ import AssigneePicker from '../fields/AssigneePicker.vue'
 import DateField from '../fields/DateField.vue'
 import PriorityPicker from '../fields/PriorityPicker.vue'
 import StatusPicker from '../fields/StatusPicker.vue'
+import { useListTable } from './listTable'
 
 const tasks = useTasks()
-const actions = useTaskActions()
+const table = useListTable()
 
 const target = shallowRef<{ id: Uuid; field: PickField; anchor: HTMLElement } | null>(null)
 const isOpen = ref(false)
@@ -56,7 +57,7 @@ defineExpose({ open })
       :anchor="target.anchor"
       :model-value="task.statusId"
       :list-id="task.listId"
-      @update:model-value="actions.setStatus(task.id, $event)"
+      @update:model-value="table.setStatus(task.id, $event)"
     />
     <AssigneePicker
       v-else-if="target.field === 'assignees'"

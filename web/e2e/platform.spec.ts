@@ -54,6 +54,8 @@ async function gotoHome(page: Page): Promise<void> {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening)/ })).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Today' })).toBeVisible()
+  // Rows mount in batches (S10): the page is aria-busy until they all have.
+  await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0)
 }
 
 /** Opens a list's List view (optionally with a task's panel open) and waits for its rows. */
@@ -62,6 +64,7 @@ async function gotoList(page: Page, seeded: Seeded, o: { list?: string; task?: s
   const query = o.task ? `?task=${seeded.tasks[o.task].id}` : ''
   await page.goto(`/l/${seeded.lists[list].id}/list${query}`)
   await expect(taskRows(page, list).first()).toBeVisible()
+  await expect(page.getByRole('treegrid', { name: `${list} tasks` })).not.toHaveAttribute('aria-busy', 'true')
   if (o.task) await panelLoaded(page, o.task)
 }
 
@@ -69,6 +72,7 @@ async function gotoList(page: Page, seeded: Seeded, o: { list?: string; task?: s
 async function gotoBoard(page: Page, seeded: Seeded, list = LIST): Promise<void> {
   await page.goto(`/l/${seeded.lists[list].id}/board`)
   await expect(board(page).getByRole('article').first()).toBeVisible()
+  await expect(board(page).locator('[aria-busy="true"]')).toHaveCount(0)
 }
 
 /** Opens a list's Calendar: the month grid, or the agenda below 640px of page width. */

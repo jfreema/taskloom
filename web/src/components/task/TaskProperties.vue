@@ -249,8 +249,20 @@ defineExpose({ openPicker })
 
 @media (max-width: 639px) {
   .prop {
-    min-height: 44px;
     grid-template-columns: 96px minmax(0, 1fr);
+  }
+}
+
+/* Touch (7.5): 44px property rows whose triggers fill them. */
+@media (max-width: 639px), (pointer: coarse) {
+  .prop {
+    min-height: var(--touch-min);
+  }
+}
+
+@media (pointer: coarse) {
+  .value :deep(.field-trigger--ghost) {
+    min-height: var(--touch-min);
   }
 }
 </style>

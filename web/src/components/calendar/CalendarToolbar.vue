@@ -41,6 +41,7 @@ function toggle(): void {
 }
 
 .tool {
+  position: relative;
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -78,5 +79,18 @@ function toggle(): void {
   border-color: var(--accent);
   background: var(--bg-selected);
   color: var(--accent-text);
+}
+
+/* Touch (7.5): a 44px hit area around the 28px control. */
+@media (pointer: coarse) {
+  .tool::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--touch-min);
+    height: var(--touch-min);
+    transform: translate(-50%, -50%);
+  }
 }
 </style>

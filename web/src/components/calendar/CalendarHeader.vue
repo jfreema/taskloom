@@ -82,6 +82,7 @@ const count = computed(() => props.model.trayCount.value)
 }
 
 .tray-toggle {
+  position: relative;
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -138,5 +139,27 @@ const count = computed(() => props.model.trayCount.value)
 
 .is-compact .tray-label {
   display: none;
+}
+
+/* Touch (7.5): the 28px month arrows sit 16px apart, so their 44px hit areas don't overlap, and the
+   To schedule chip grows its hit area to 44px. */
+@media (pointer: coarse) {
+  .nav {
+    gap: var(--space-4);
+  }
+
+  .today {
+    margin-left: 0;
+  }
+
+  .tray-toggle::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--touch-min);
+    transform: translateY(-50%);
+  }
 }
 </style>

@@ -32,13 +32,18 @@ export interface ListTableContext {
   renamingId: Ref<Uuid | null>
   /** Tasks created a moment ago in this view: their rows flash once. */
   flashIds: Ref<ReadonlySet<Uuid>>
+  /** The row just followed into another group (a status change from the row): highlighted for 1s. */
+  movedKey: Readonly<Ref<string | null>>
   openTask(id: Uuid): void
   /** Checkbox click: Shift selects the range from the anchor in visible order. */
   check(id: Uuid, shift: boolean): void
   startRename(id: Uuid): void
   endRename(): void
   rename(id: Uuid, title: string): void
-  /** A status change from the row (picker or menu): the row keeps focus in its new place. */
+  /**
+   * A status change from the row (picker or menu): the row keeps focus in its new place, and one
+   * that lands in another group scrolls into view, highlighted.
+   */
   setStatus(id: Uuid, statusId: Uuid): void
   /** Opens the add row under a top-level task's subtasks. */
   addSubtask(parentId: Uuid): void

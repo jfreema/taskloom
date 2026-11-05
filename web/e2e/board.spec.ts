@@ -94,6 +94,7 @@ const bulkBar = (page: Page): Locator => page.getByRole('toolbar', { name: 'Bulk
 async function gotoList(page: Page, seeded: Seeded): Promise<void> {
   await page.goto(`/l/${seeded.lists[LIST].id}/list`)
   await expect(topRows(grid(page)).first()).toBeVisible()
+  await expect(grid(page)).not.toHaveAttribute('aria-busy', 'true')
 }
 
 /** Ticks the rows' "Select <title>" checkboxes. */
@@ -127,14 +128,17 @@ const columnNamed = (page: Page, status: string, count: number): Locator =>
 /** A card by its title. */
 const card = (scope: Locator, title: string): Locator => scope.getByRole('article', { name: title, exact: true })
 
-/** The titles of a column's cards, in order. */
-const cardTitles = (scope: Locator): Promise<string[]> =>
-  scope.locator('article[data-card]').evaluateAll((cards) => cards.map((c) => c.getAttribute('aria-label') ?? ''))
+/** The titles of a column's cards, in order, once they have all mounted (the column is aria-busy until then, S10). */
+async function cardTitles(scope: Locator): Promise<string[]> {
+  await expect(scope).not.toHaveAttribute('aria-busy', 'true')
+  return scope.locator('article[data-card]').evaluateAll((cards) => cards.map((c) => c.getAttribute('aria-label') ?? ''))
+}
 
 /** Opens Website refresh in the Board view and waits for its cards. */
 async function gotoBoard(page: Page, seeded: Seeded): Promise<void> {
   await page.goto(`/l/${seeded.lists[LIST].id}/board`)
   await expect(board(page).getByRole('article').first()).toBeVisible()
+  await expect(board(page).locator('[aria-busy="true"]')).toHaveCount(0)
 }
 
 /** Opens a column's menu and picks an item. */

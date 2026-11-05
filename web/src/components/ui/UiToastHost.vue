@@ -11,7 +11,10 @@
 // - On phones dialogs are bottom sheets (UiDialog, and UiDrawer from the bottom; both mark their
 //   panel data-sheet). While one is open the toasts rise above it when they fit there, so they
 //   never cover its fields; above a full-height sheet there is no room and they keep their place.
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+// - Focus return: a toast that leaves while it holds focus (its action ran, it was dismissed)
+//   gives focus back to where it was before it entered the toasts; if that element is gone, to
+//   the same task row rendered anew, else to #main.
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { CircleAlert, CircleCheck, X } from '@lucide/vue'
 import { useBreakpoint } from '../../composables/useBreakpoint'
 import { useLayerStack } from '../../composables/useLayerStack'
@@ -28,6 +31,37 @@ useShortcut('Mod+Z', () => undoLatest())
 function onFocusOut(e: FocusEvent): void {
   const region = e.currentTarget as HTMLElement
   if (!(e.relatedTarget instanceof Node) || !region.contains(e.relatedTarget)) resumeAll('focus')
+}
+
+// ---- Focus return ----
+
+/** Where focus was before it entered the toasts, and that element's task row. */
+let returnTo: HTMLElement | null = null
+let returnRow: string | null = null
+
+function onFocusIn(e: FocusEvent): void {
+  pauseAll('focus')
+  const region = e.currentTarget as HTMLElement
+  const from = e.relatedTarget
+  if (from instanceof Node && region.contains(from)) return
+  returnTo = from instanceof HTMLElement ? from : null
+  returnRow = returnTo?.closest<HTMLElement>('[data-task-row]')?.dataset.taskRow ?? null
+}
+
+function restoreFocus(): void {
+  const a = document.activeElement
+  // The action moved focus on its own (it opened something): leave it there.
+  if (a && a !== document.body && !host.value?.contains(a)) return
+  const row = returnRow ? document.querySelector<HTMLElement>(`[data-task-row="${CSS.escape(returnRow)}"]`) : null
+  const target = (returnTo?.isConnected ? returnTo : null) ?? row ?? document.getElementById('main')
+  returnTo = null
+  returnRow = null
+  target?.focus({ preventScroll: true })
+}
+
+function onBeforeLeave(el: Element): void {
+  // After the update, so an undone row is back in the page.
+  if (el.contains(document.activeElement)) void nextTick(restoreFocus)
 }
 
 const SHEET_GAP = 8
@@ -98,10 +132,10 @@ const hostStyle = computed(() => (lift.value === null ? undefined : { bottom: `$
       data-layer-allow
       @pointerenter="pauseAll('hover')"
       @pointerleave="resumeAll('hover')"
-      @focusin="pauseAll('focus')"
+      @focusin="onFocusIn"
       @focusout="onFocusOut"
     >
-      <TransitionGroup name="toast" tag="div" class="list">
+      <TransitionGroup name="toast" tag="div" class="list" @before-leave="onBeforeLeave">
         <div
           v-for="t in toasts"
           :key="t.id"

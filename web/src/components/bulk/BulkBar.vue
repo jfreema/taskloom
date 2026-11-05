@@ -108,16 +108,19 @@ watch(
       lift.value = 0
       return
     }
-    if (typeof ResizeObserver !== 'undefined') {
-      pageObserver = new ResizeObserver(measurePage)
-      const main = mainEl()
-      if (main) pageObserver.observe(main)
-      const host = toastHost()
-      toastObserver = new ResizeObserver(measureLift)
-      if (host) toastObserver.observe(host)
-    }
     window.addEventListener('resize', measurePage, { passive: true })
-    measurePage()
+    // The observer's first report measures the page after the frame's own layout, before its paint:
+    // measuring here would force a layout of the whole list in the task that selected (Mod+A).
+    const main = mainEl()
+    if (typeof ResizeObserver === 'undefined' || !main) {
+      measurePage()
+      return
+    }
+    pageObserver = new ResizeObserver(measurePage)
+    pageObserver.observe(main)
+    const host = toastHost()
+    toastObserver = new ResizeObserver(measureLift)
+    if (host) toastObserver.observe(host)
   },
   { flush: 'post', immediate: true },
 )

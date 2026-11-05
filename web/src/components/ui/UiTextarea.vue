@@ -178,4 +178,14 @@ defineExpose({ focus, el })
   color: var(--text-tertiary);
   opacity: 1;
 }
+
+/* Touch (7.5): a one-row field is 44px tall (the autosize reads this padding). The field reaches
+   over the frame's top and bottom border (it is transparent), so the whole 44px takes a tap. */
+@media (pointer: coarse) {
+  .control {
+    margin: -1px 0;
+    padding-top: calc((var(--touch-min) - var(--lh-md)) / 2);
+    padding-bottom: calc((var(--touch-min) - var(--lh-md)) / 2);
+  }
+}
 </style>

@@ -127,6 +127,12 @@ function onBlur(): void {
   color: var(--text-primary);
 }
 
+@media (pointer: coarse) {
+  .add {
+    height: var(--touch-min);
+  }
+}
+
 .editor {
   display: flex;
   flex-direction: column;

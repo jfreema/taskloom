@@ -122,11 +122,25 @@ useShortcut(
   margin-right: auto;
 }
 
+/* Touch (7.5): wrapped chip rows sit 16px apart, so the 28px chips keep separate 44px hit areas. */
+@media (pointer: coarse) {
+  .chips {
+    row-gap: var(--space-4);
+  }
+}
+
 /* Phones: the switch takes its own line above the two buttons. */
 @media (max-width: 639px) {
   .more {
     flex: 1 0 100%;
     margin: 0 0 var(--space-1);
+  }
+}
+
+/* Touch phones: 20px between the switch and the buttons, so their 44px hit areas do not overlap. */
+@media (max-width: 639px) and (pointer: coarse) {
+  .more {
+    margin-bottom: var(--space-3);
   }
 }
 </style>

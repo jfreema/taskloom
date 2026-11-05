@@ -2,7 +2,7 @@
 // The description toolbar (8.10): Bold, Italic, Bulleted list, Numbered list, Checklist and Link.
 // Buttons keep the editor's selection (mousedown.prevent) and show aria-pressed for what is active
 // at the caret. Link opens a small popover with a URL field: Enter applies it, an empty URL removes
-// the link.
+// the link. DescriptionSection places it in the Description label row and shows or hides it.
 import { computed, ref, watch, type Component } from 'vue'
 import { Bold, Italic, Link as LinkIcon, List, ListChecks, ListOrdered } from '@lucide/vue'
 import type { Editor } from '@tiptap/vue-3'
@@ -91,7 +91,7 @@ function onLinkClose(reason: PopoverCloseReason): void {
 </script>
 
 <template>
-  <div class="editor-toolbar" role="group" aria-label="Formatting">
+  <div class="editor-toolbar" data-editor-toolbar role="group" aria-label="Formatting">
     <UiIconButton
       v-for="b in buttons"
       :key="b.key"
@@ -119,10 +119,15 @@ function onLinkClose(reason: PopoverCloseReason): void {
 .editor-toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: var(--space-0-5);
-  padding: var(--space-1);
-  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Touch (7.5): 44px buttons, so neighbouring targets never overlap. */
+@media (pointer: coarse) {
+  .editor-toolbar :deep(.ui-icon-button) {
+    width: var(--touch-min);
+    height: var(--touch-min);
+  }
 }
 
 .link-form {

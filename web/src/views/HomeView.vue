@@ -19,6 +19,7 @@ import PageHeader from '../components/shell/PageHeader.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiEmptyState from '../components/ui/UiEmptyState.vue'
 import UiErrorState from '../components/ui/UiErrorState.vue'
+import { skeletonDelay } from '../components/shell/skeletonHandover'
 import { useBreakpoint } from '../composables/useBreakpoint'
 import { useDelayedFlag } from '../composables/useDelayedFlag'
 import { useTaskPanel } from '../composables/useTaskPanel'
@@ -45,7 +46,7 @@ const { sections, collapsed, scope, ready } = data
 
 const canEdit = computed(() => workspaces.canEdit())
 const firstList = computed(() => workspaces.allLists[0] ?? null)
-const skeleton = useDelayedFlag(data.loading, 200)
+const skeleton = useDelayedFlag(data.loading, skeletonDelay())
 
 const firstRun = computed(() => ready.value && !data.hasAnyTask.value)
 const caughtUp = computed(() => ready.value && data.hasAnyTask.value && data.openCount.value === 0 && sections.value.completed.length > 0)
@@ -77,8 +78,8 @@ function showMore(key: HomeSectionKey): void {
   limits.value = { ...limits.value, [key]: limitOf(key) + PAGE }
 }
 
-/** The rows rendering now: many at once mount a batch per frame (useHomeMounting). */
-const mountedCounts = useHomeMounting(
+/** The rows rendering now: many at once mount in batches, the next once the sections have rendered the one before (useHomeMounting). */
+const homeRows = useHomeMounting(
   computed(() => visibleKeys.value.filter((key) => !collapsed.value[key])),
   (key) => shown(key).length,
   () => [scope.value, workspaces.currentId],
@@ -86,7 +87,7 @@ const mountedCounts = useHomeMounting(
 
 function mounted(key: HomeSectionKey): Task[] {
   const rows = shown(key)
-  const n = mountedCounts.value[key] ?? 0
+  const n = homeRows.counts.value[key] ?? 0
   return n >= rows.length ? rows : rows.slice(0, n)
 }
 
@@ -94,6 +95,9 @@ function mounted(key: HomeSectionKey): Task[] {
 const order = computed<Uuid[]>(() => visibleKeys.value.flatMap((key) => (collapsed.value[key] ? [] : shown(key).map((t) => t.id))))
 
 const sectionsEl = ref<HTMLElement | null>(null)
+watch(sectionsEl, (el) => {
+  if (!el) homeRows.detached()
+})
 
 function rowEl(id: Uuid): HTMLElement | null {
   return sectionsEl.value?.querySelector<HTMLElement>(`[data-task-row="${CSS.escape(id)}"]`) ?? null
@@ -178,7 +182,7 @@ function onCreated(id: Uuid): void {
 
 <template>
   <PageHeader :bare="!isPhone" title="Home" title-tag="p" />
-  <div class="home" :aria-busy="data.loading.value ? 'true' : undefined">
+  <div class="home" :aria-busy="data.loading.value || homeRows.mounting.value ? 'true' : undefined">
     <HomeHeader
       v-model:scope="scope"
       :due-today="data.dueTodayCount.value"
@@ -226,6 +230,7 @@ function onCreated(id: Uuid): void {
             :empty-text="key === 'today' ? 'Nothing due today' : undefined"
             @toggle="data.toggleSection(key)"
             @more="showMore(key)"
+            @rendered="homeRows.rendered()"
           >
             <template v-if="key === 'overdue' && canEdit && overdueOpen.length > 0" #actions>
               <UiButton class="reveal reveal-touch" variant="ghost" size="sm" @click="moveAllToToday">Move all to today</UiButton>

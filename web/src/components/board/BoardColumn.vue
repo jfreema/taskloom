@@ -4,12 +4,13 @@
 //   auto-scrolls near its edges during a drag.
 // - The add card opens at the top (header "+") or the bottom ("+ Add task", which stays in view at
 //   the bottom of a long column).
-// - The first 20 (Done) or 50 cards render, then "Show all N". Many cards at once mount a batch per
-//   frame (useMountedCards); "Show all N" waits until they all have.
+// - The first 20 (Done) or 50 cards render, then "Show all N". Many cards at once mount in batches
+//   (useMountedCards), the next once the column has rendered the one before; "Show all N" waits
+//   until they all have.
 // - An empty column shows a dashed "No tasks" area.
 // - Drops: the whole column appends; the header puts the card at the top; cards take the edge the
 //   pointer is closest to. The column gets a --bg-hover tint while it is the target.
-import { computed, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import { computed, nextTick, onMounted, onUpdated, ref, watch, type ComponentPublicInstance } from 'vue'
 import { Plus } from '@lucide/vue'
 import { activeDrag, useAutoScroll, useDropTarget, type DragData } from '../../composables/useDnd'
 import { pluralize } from '../../lib/format'
@@ -44,12 +45,14 @@ const statusId = computed(() => props.column.status.id)
 const count = computed(() => props.column.tasks.length)
 const label = computed(() => `${props.column.status.name}, ${pluralize(count.value, 'task')}`)
 const shown = computed(() => props.column.shown)
-const mountedCount = useMountedCards(
+const cards = useMountedCards(
   () => shown.value.length,
   () => board.model.columns.value.reduce((n, c) => n + (c.collapsed ? 0 : 1), 0),
 )
 /** The cards rendered so far (progressive mounting). */
-const mounted = computed(() => (mountedCount.value >= shown.value.length ? shown.value : shown.value.slice(0, mountedCount.value)))
+const mounted = computed(() => (cards.count.value >= shown.value.length ? shown.value : shown.value.slice(0, cards.count.value)))
+onMounted(cards.rendered)
+onUpdated(cards.rendered)
 const dragActive = computed(() => activeDrag.value !== null)
 const showFooter = computed(() => board.canEdit.value && addAt.value !== 'bottom')
 
@@ -131,6 +134,7 @@ defineExpose({ openTop })
     class="board-column"
     :class="{ 'is-over': over && dragActive }"
     :aria-label="label"
+    :aria-busy="mounted.length < shown.length ? 'true' : undefined"
     :data-column="column.status.id"
   >
     <BoardColumnHeader ref="header" :status="column.status" :count="count" @add="openTop" @collapse="collapse" />
@@ -294,5 +298,13 @@ defineExpose({ openTop })
 .add-task:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+/* Touch (7.5): a 44px target. The button itself grows (not an ::after), so the sticky footer's
+   background covers exactly the area that takes the tap. */
+@media (pointer: coarse) {
+  .add-task {
+    height: var(--touch-min);
+  }
 }
 </style>

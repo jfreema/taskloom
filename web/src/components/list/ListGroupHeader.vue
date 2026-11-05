@@ -15,9 +15,9 @@ import PriorityFlag from '../fields/PriorityFlag.vue'
 import StatusIcon from '../fields/StatusIcon.vue'
 import UiCheckbox from '../ui/UiCheckbox.vue'
 import UiIcon from '../ui/UiIcon.vue'
+import LazyMenu from '../fields/LazyMenu.vue'
 import UiIconButton from '../ui/UiIconButton.vue'
 import UiInlineEdit from '../ui/UiInlineEdit.vue'
-import UiMenu from '../ui/UiMenu.vue'
 import { useListTable } from './listTable'
 import { headerKey, type GroupView } from './useListModel'
 
@@ -167,9 +167,10 @@ function saveName(name: string): void {
           :tabindex="inner"
           @click="addTop"
         />
-        <UiMenu
+        <LazyMenu
           v-if="status && table.canEdit.value"
           v-model:open="menuOpen"
+          lazy
           :items="statusMenu"
           :aria-label="`Actions for ${label}`"
           placement="bottom-end"
@@ -184,7 +185,7 @@ function saveName(name: string): void {
               :tabindex="inner"
             />
           </template>
-        </UiMenu>
+        </LazyMenu>
       </span>
     </div>
   </div>
@@ -308,6 +309,32 @@ function saveName(name: string): void {
     radial-gradient(circle at 3px 3px, var(--accent) 3px, transparent 3.5px),
     linear-gradient(var(--accent), var(--accent)) 0 2px / 100% 2px no-repeat;
   pointer-events: none;
+}
+
+/* Touch (7.5): a 44px header whose disclosure is a 44px target; the icon and label move with the
+   rows' status icons and titles (--touch-shift, set by ListTable). */
+@media (pointer: coarse) {
+  .group-header {
+    height: var(--touch-min);
+  }
+
+  .disclosure {
+    position: relative;
+  }
+
+  .disclosure::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--touch-min);
+    transform: translateY(-50%);
+  }
+
+  .chev {
+    margin-right: var(--touch-shift, 0px);
+  }
 }
 
 /* Phones: no gutter (no selection); the chevron, icon and label still line up with the rows. */

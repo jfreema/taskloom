@@ -217,4 +217,17 @@ function onDue(v: IsoDate | null): void {
     padding-left: 0;
   }
 }
+
+/* Touch phones: the second line's 20px fields can't each have a 44px target, so they aren't
+   targets there: a tap on them opens the task, whose sheet has 44px property rows (7.5). They
+   stay in the tab order for a keyboard. */
+@media (pointer: coarse) {
+  @container page (width < 560px) {
+    .cell--due :deep(.field-trigger),
+    .cell--priority :deep(.field-trigger),
+    .cell--assignees :deep(.field-trigger) {
+      pointer-events: none;
+    }
+  }
+}
 </style>

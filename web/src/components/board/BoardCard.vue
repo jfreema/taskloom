@@ -188,6 +188,23 @@ function onFocusOut(e: FocusEvent): void {
   transition: box-shadow var(--dur-1) var(--ease-out);
 }
 
+/* Cards far from the viewport skip style, layout and paint (S10, as the List's rows do), so changes
+   to the whole document (a modal's inert, the theme) restyle only the cards on screen. A skipped
+   card keeps its last rendered height; one never rendered counts as a one-line card. A card clips
+   what it paints, so one that shows a drop indicator (it crosses the card's edge) renders in full,
+   and touch screens, where the menu's 44px target crosses the card's corner, don't skip at all. */
+@media (pointer: fine) {
+  .board-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 68px;
+  }
+
+  .board-card.drop-top,
+  .board-card.drop-bottom {
+    content-visibility: visible;
+  }
+}
+
 .board-card.is-current {
   --card-bg: var(--bg-selected);
   box-shadow:
@@ -250,8 +267,11 @@ function onFocusOut(e: FocusEvent): void {
   transition: opacity var(--dur-1) var(--ease-out);
 }
 
+/* Keyboard focus reveals it, focus a mouse action moved here in code doesn't (X2, as base.css's
+   .reveal): only the hovered card then shows its controls. */
 .board-card:hover .toggle,
-.board-card:focus-within .toggle,
+.board-card:focus-visible .toggle,
+.board-card:has(:focus-visible) .toggle,
 .board-card.is-done .toggle {
   opacity: 1;
 }

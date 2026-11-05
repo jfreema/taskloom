@@ -108,11 +108,28 @@ export function formatMonthTitle(s: IsoDate): string {
   return formatter({ month: 'long', year: 'numeric' }).format(d)
 }
 
+/** formatDue's texts for `dueTextDay`: long views show the same few dates on many rows (S10). */
+let dueTextDay = ''
+const dueText = new Map<IsoDate, string>()
+
 /**
  * Due-date text: "Today", "Tomorrow", "Yesterday", a weekday for 2 to 6 days ahead ("Fri"),
  * otherwise "Nov 12", or "Nov 12, 2027" outside the current year.
  */
 export function formatDue(s: IsoDate, today: IsoDate): string {
+  if (dueTextDay !== today) {
+    dueTextDay = today
+    dueText.clear()
+  }
+  let text = dueText.get(s)
+  if (text === undefined) {
+    text = dueTextOf(s, today)
+    dueText.set(s, text)
+  }
+  return text
+}
+
+function dueTextOf(s: IsoDate, today: IsoDate): string {
   const diff = diffDays(s, today)
   if (Number.isNaN(diff)) return ''
   if (diff === 0) return 'Today'

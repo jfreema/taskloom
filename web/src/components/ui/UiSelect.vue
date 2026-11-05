@@ -157,4 +157,27 @@ function pick(value: string | string[] | null, close: () => void): void {
 .chevron {
   color: var(--text-tertiary);
 }
+
+/* Touch (7.5): like UiInput, the default size is 44px tall; the small size keeps its look and
+   grows its hit area to 44px. */
+@media (pointer: coarse) {
+  .ui-select {
+    position: relative;
+    height: var(--touch-min);
+  }
+
+  .ui-select--sm {
+    height: var(--control-sm);
+  }
+
+  .ui-select--sm::after {
+    content: "";
+    position: absolute;
+    left: -1px;
+    right: -1px;
+    top: 50%;
+    height: var(--touch-min);
+    transform: translateY(-50%);
+  }
+}
 </style>

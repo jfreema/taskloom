@@ -12,19 +12,22 @@ import {
   Link,
   ListTree,
   Maximize2,
+  PanelRight,
   Pencil,
   SquareCheck,
   Trash2,
   Undo2,
   UserRoundPlus,
 } from '@lucide/vue'
+import { h, type FunctionalComponent } from 'vue'
+import StatusIcon from '../components/fields/StatusIcon.vue'
 import type { MenuItem } from '../components/ui/menu'
 import { handled, noop } from '../lib/async'
 import { useSelection } from '../stores/selection'
 import { useTasks } from '../stores/tasks'
 import { useUi } from '../stores/ui'
 import { useWorkspaces } from '../stores/workspaces'
-import type { Task, Uuid } from '../types'
+import type { Status, Task, Uuid } from '../types'
 import { appRouter } from './appRouter'
 import { useAnnouncer } from './useAnnouncer'
 import { useBreakpoint } from './useBreakpoint'
@@ -56,6 +59,13 @@ const MOVE_LABEL: Record<ReorderWhere, string> = {
   bottom: 'Moved to bottom',
 }
 
+/** A status's StatusIcon as a menu item's icon (menus render item icons through UiIcon). */
+function statusGlyph(s: Status): FunctionalComponent {
+  const glyph: FunctionalComponent = () => h(StatusIcon, { status: s, size: 16 })
+  glyph.displayName = 'StatusGlyph'
+  return glyph
+}
+
 export function useTaskActions(): {
   toggleComplete(id: Uuid): Promise<void>
   setStatus(id: Uuid, statusId: Uuid): Promise<void>
@@ -76,9 +86,9 @@ export function useTaskActions(): {
   const panel = useTaskPanel()
   const { coarse, isPhone } = useBreakpoint()
 
-  /** Complete or reopen, with the undo toast and the completion hold. */
+  /** Complete or reopen, with the undo toast and the completion hold. A failure has its toast already. */
   function toggleComplete(id: Uuid): Promise<void> {
-    return tasks.toggleComplete(id)
+    return handled(tasks.toggleComplete(id))
   }
 
   /** A status picker change: no toast (9.2). */
@@ -149,7 +159,7 @@ export function useTaskActions(): {
 
   function rowMenuItems(t: Task, o: RowMenuOptions): MenuItem[] {
     const variant = o.variant
-    const items: MenuItem[] = [{ id: 'open', label: 'Open', onSelect: () => panel.open(t.id) }]
+    const items: MenuItem[] = [{ id: 'open', label: 'Open', icon: PanelRight, onSelect: () => panel.open(t.id) }]
     if (variant === 'subtask') {
       if (workspaces.canEdit() && !tasks.isPendingDelete(t.id)) {
         items.push({ kind: 'separator', id: 'sep-delete' })
@@ -193,6 +203,7 @@ export function useTaskActions(): {
           kind: 'radio' as const,
           id: `status-${s.id}`,
           label: s.name,
+          icon: statusGlyph(s),
           checked: s.id === t.statusId,
           onSelect: () => moveToStatus(t, s.id),
         })),

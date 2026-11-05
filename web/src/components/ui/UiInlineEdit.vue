@@ -283,4 +283,15 @@ textarea.field {
   resize: none;
   overflow: hidden;
 }
+
+/* Touch (7.5): the view button takes a 44px-tall tap. The text truncates inside it, so the button
+   itself grows (more padding above and below, taken back by its margin, so nothing moves) rather
+   than carrying an ::after. */
+@media (pointer: coarse) {
+  button.view {
+    --tap-pad: max(var(--space-0-5), calc((var(--touch-min) - 1lh) / 2));
+    margin-block: calc(var(--tap-pad) * -1);
+    padding-block: var(--tap-pad);
+  }
+}
 </style>

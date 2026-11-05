@@ -221,5 +221,28 @@ watch(
   .content {
     padding: 0 var(--space-4);
   }
+
+  /* Touch (7.5): the 32px pills get 44px hit areas; the row is padded so its scroll box doesn't
+     clip them. */
+  @media (pointer: coarse) {
+    .nav {
+      padding-top: calc((var(--touch-min) - var(--control-md)) / 2);
+      padding-bottom: calc((var(--touch-min) - var(--control-md)) / 2);
+    }
+
+    .nav-link {
+      position: relative;
+    }
+
+    .nav-link::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: var(--touch-min);
+      transform: translateY(-50%);
+    }
+  }
 }
 </style>

@@ -5,33 +5,34 @@
 // - Content is only ever loaded with setContent(html, { emitUpdate: false }) outside the undo
 //   history, so loading a task never counts as an edit and Mod+Z can't undo a load.
 // - Files dropped or pasted on the editor go to the uploader, never into the text.
-// - The toolbar shows while the editor (or the toolbar) has focus, and on hover while it is empty.
-// - Emits `change` with the HTML ("" when empty) and `active` when focus enters or leaves it.
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+// - Emits `change` with the HTML ("" when empty). DescriptionSection owns the toolbar (it sits in
+//   the label row, so showing it never moves the text) and tracks focus; `active` only styles the box.
+// - No trailing node: a description that ends in a list or heading has no empty paragraph after
+//   it, so nothing appears or disappears below the text when it gains or loses focus. Enter twice
+//   leaves a final list, as in most editors.
+import { watch } from 'vue'
 import StarterKit from '@tiptap/starter-kit'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { Placeholder } from '@tiptap/extensions'
 import { EditorContent, useEditor, type Editor } from '@tiptap/vue-3'
-import EditorToolbar from './EditorToolbar.vue'
 import { filesOf, pastedFiles } from './useFileDrop'
 
 const PLACEHOLDER = 'Add a description, or type [ ] for a checklist'
 
-const props = defineProps<{ html: string; editable: boolean }>()
+const props = defineProps<{ html: string; editable: boolean; active?: boolean }>()
 const emit = defineEmits<{
   ready: [html: string]
   change: [html: string]
-  active: [active: boolean]
   files: [files: File[]]
 }>()
 
-const root = ref<HTMLElement | null>(null)
-const focusWithin = ref(false)
-const hovering = ref(false)
-const linkOpen = ref(false)
-
 function htmlOf(e: Editor): string {
   return e.isEmpty ? '' : e.getHTML()
+}
+
+/** Empty paragraphs at the end are blank space, not content (the old trailing node saved some). */
+function withoutTrailingBlanks(html: string): string {
+  return html.replace(/(?:<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>)+$/i, '')
 }
 
 /** Guests can't tick checklist items: their checkboxes are disabled, not just inert. */
@@ -41,7 +42,7 @@ function syncCheckboxes(e: Editor): void {
 }
 
 function loadInto(e: Editor, html: string): string {
-  e.chain().setMeta('addToHistory', false).setContent(html, { emitUpdate: false }).run()
+  e.chain().setMeta('addToHistory', false).setContent(withoutTrailingBlanks(html), { emitUpdate: false }).run()
   syncCheckboxes(e)
   return htmlOf(e)
 }
@@ -59,6 +60,7 @@ const editor = useEditor({
         defaultProtocol: 'https',
       },
       dropcursor: { color: 'var(--accent)', width: 2 },
+      trailingNode: false,
     }),
     TaskList,
     TaskItem.configure({
@@ -128,26 +130,6 @@ watch(
   },
 )
 
-const empty = computed(() => editor.value?.isEmpty ?? true)
-const active = computed(() => focusWithin.value || linkOpen.value)
-const toolbarShown = computed(() => props.editable && (active.value || (hovering.value && empty.value)))
-
-watch(active, (on) => emit('active', on))
-
-function onFocusIn(): void {
-  focusWithin.value = true
-}
-
-function onFocusOut(e: FocusEvent): void {
-  const next = e.relatedTarget
-  if (next instanceof Node && root.value?.contains(next)) return
-  focusWithin.value = false
-}
-
-onBeforeUnmount(() => {
-  if (active.value) emit('active', false)
-})
-
 /** Loads server HTML (when the caller allows it) and returns the editor's own rendering of it. */
 function load(html: string): string {
   const e = editor.value
@@ -155,9 +137,9 @@ function load(html: string): string {
 }
 
 /**
- * "Add checklist": a checklist at the end of the description, after any text already there. The
- * description usually ends with empty paragraphs (the trailing node keeps one there, and Enter on an
- * empty list item leaves one more): the first of them becomes the checklist, else a new one at the end.
+ * "Add checklist": a checklist at the end of the description, after any text already there. Empty
+ * paragraphs at the end (Enter on an empty list item leaves one) become the checklist, else a new
+ * one is added at the end; a checklist that ends the description just gets one more item.
  */
 function addChecklist(): void {
   const e = editor.value
@@ -187,20 +169,11 @@ function focusEnd(): void {
   editor.value?.commands.focus('end')
 }
 
-defineExpose({ load, addChecklist, focusEnd })
+defineExpose({ load, addChecklist, focusEnd, editor })
 </script>
 
 <template>
-  <div
-    ref="root"
-    class="description-editor"
-    :class="{ 'is-editable': editable, 'is-active': active, 'has-toolbar': toolbarShown }"
-    @focusin="onFocusIn"
-    @focusout="onFocusOut"
-    @mouseenter="hovering = true"
-    @mouseleave="hovering = false"
-  >
-    <EditorToolbar v-if="editable && editor" v-show="toolbarShown" :editor="editor" @link-open="(v: boolean) => (linkOpen = v)" />
+  <div class="description-editor" data-description-editor :class="{ 'is-editable': editable, 'is-active': active }">
     <EditorContent v-if="editor" :editor="editor" class="content" />
   </div>
 </template>
@@ -283,6 +256,27 @@ defineExpose({ load, addChecklist, focusEnd })
 
 .content :deep(.ProseMirror input[type="checkbox"]:focus-visible) {
   outline-offset: -2px;
+}
+
+/* Touch (7.5): each checklist item is a 44px row and its box a 44px target, still drawn at 16px. */
+@media (pointer: coarse) {
+  .content :deep(.ProseMirror li[data-type="taskItem"]) {
+    min-height: var(--touch-min);
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .content :deep(.ProseMirror li[data-type="taskItem"] > label) {
+    margin-top: 0;
+  }
+
+  .content :deep(.ProseMirror input[type="checkbox"]) {
+    width: var(--touch-min);
+    height: var(--touch-min);
+    margin: -14px;
+    border-width: 14px;
+    border-radius: calc(var(--radius-xs) + 14px);
+  }
 }
 
 .content :deep(.ProseMirror-selectednode) {

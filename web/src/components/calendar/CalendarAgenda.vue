@@ -90,7 +90,7 @@ function onRowClick(e: MouseEvent, id: Uuid): void {
             :label="t.title"
             :color="model.status(t)?.color"
             :readonly="!model.canEdit.value"
-            @toggle="actions.toggleComplete(t.id)"
+            @toggle="void actions.toggleComplete(t.id)"
           />
           <button type="button" class="open" :data-task-row="t.id" @click="emit('open', t.id, $event)">
             <span class="title truncate">{{ t.title }}</span>

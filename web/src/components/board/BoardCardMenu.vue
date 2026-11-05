@@ -59,8 +59,8 @@ function items() {
   border-radius: var(--radius-sm);
 }
 
-.board-card:is(:hover, :active) .corner,
-.board-card:focus-within .corner,
+.board-card:is(:hover, :active, :focus-visible) .corner,
+.board-card:has(:focus-visible) .corner,
 .corner:has([aria-expanded="true"]) {
   background: linear-gradient(var(--card-tint), var(--card-tint)), var(--card-bg);
 }

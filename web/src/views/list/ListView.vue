@@ -108,9 +108,17 @@ useShortcut(
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  /* Keyboard focus never lands under the sticky headers or the bulk bar (9.6, WCAG 2.4.11). */
-  scroll-padding-top: calc(32px + 40px);
+  /* Keyboard focus never lands under the sticky headers or the bulk bar (9.6, WCAG 2.4.11). The
+     group headers are 44px on touch screens (ListGroupHeader). */
+  --group-head-h: 40px;
+  scroll-padding-top: calc(32px + var(--group-head-h));
   scroll-padding-bottom: var(--fab-room, 0px);
+}
+
+@media (pointer: coarse) {
+  .list-view {
+    --group-head-h: var(--touch-min);
+  }
 }
 
 .list-view.has-bulk-bar {
@@ -138,7 +146,7 @@ useShortcut(
 
 @container page (width < 560px) {
   .list-view {
-    scroll-padding-top: 40px;
+    scroll-padding-top: var(--group-head-h);
   }
 
   .hidden-note {

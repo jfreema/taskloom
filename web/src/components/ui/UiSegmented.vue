@@ -63,16 +63,23 @@ function onKeydown(e: KeyboardEvent, i: number): void {
 
 let observer: ResizeObserver | null = null
 onMounted(() => {
-  measure()
-  if (typeof ResizeObserver !== 'undefined' && root.value) {
-    observer = new ResizeObserver(() => measure())
-    observer.observe(root.value)
-    for (const b of segments()) observer.observe(b)
-  }
   // Enable the slide only after the first measurement, so the thumb doesn't fly in on mount.
-  requestAnimationFrame(() => {
-    ready.value = true
+  const settle = () => {
+    if (!ready.value) requestAnimationFrame(() => (ready.value = true))
+  }
+  if (typeof ResizeObserver === 'undefined' || !root.value) {
+    measure()
+    settle()
+    return
+  }
+  // The observer's first report comes after layout and before the first paint: the thumb is in
+  // place without forcing a layout of its own while the page mounts.
+  observer = new ResizeObserver(() => {
+    measure()
+    settle()
   })
+  observer.observe(root.value)
+  for (const b of segments()) observer.observe(b)
 })
 onBeforeUnmount(() => observer?.disconnect())
 watch(
@@ -208,7 +215,13 @@ watch(
   line-height: var(--lh-xs);
 }
 
+/* Touch (7.5): every segment is at least 44px wide (a short label such as "All" would be narrower),
+   and its hit area 44px tall. */
 @media (pointer: coarse) {
+  .segment {
+    min-width: var(--touch-min);
+  }
+
   .segment::after {
     content: "";
     position: absolute;

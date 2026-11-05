@@ -14,6 +14,7 @@ import UiButton from '../../components/ui/UiButton.vue'
 import UiEmptyState from '../../components/ui/UiEmptyState.vue'
 import UiErrorState from '../../components/ui/UiErrorState.vue'
 import UiSkeleton from '../../components/ui/UiSkeleton.vue'
+import { skeletonDelay } from '../../components/shell/skeletonHandover'
 import { useAnnouncer } from '../../composables/useAnnouncer'
 import { useClipboard } from '../../composables/useClipboard'
 import { useConfirm } from '../../composables/useConfirm'
@@ -58,7 +59,7 @@ const state = computed<'loading' | 'error' | 'alone' | 'table'>(() => {
   return rows.value.length === 1 ? 'alone' : 'table'
 })
 
-const showSkeleton = useDelayedFlag(computed(() => state.value === 'loading'))
+const showSkeleton = useDelayedFlag(computed(() => state.value === 'loading'), skeletonDelay())
 
 const description = computed(() => {
   const name = workspaces.current?.name ?? 'this workspace'
@@ -168,7 +169,9 @@ async function remove(m: Member): Promise<void> {
 </template>
 
 <style scoped>
+/* MemberRow lays out against this width (two lines per person below 680px). */
 .frame {
+  container: members / inline-size;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--bg-surface);

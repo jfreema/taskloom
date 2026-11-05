@@ -54,10 +54,11 @@ const rendered = computed(() => !props.bare || showSidebarButton.value)
 
 let observer: ResizeObserver | null = null
 
+// The observer's first report comes after the first layout and before the first paint, so mounting
+// the header forces no layout of its own.
 function observe(el: HTMLElement | null): void {
   observer?.disconnect()
   if (!el || typeof ResizeObserver === 'undefined') return
-  width.value = el.getBoundingClientRect().width || Number.POSITIVE_INFINITY
   observer ??= new ResizeObserver(([entry]) => {
     if (entry) width.value = entry.borderBoxSize?.[0]?.inlineSize ?? entry.contentRect.width
   })

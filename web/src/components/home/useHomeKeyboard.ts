@@ -4,8 +4,11 @@
 // row's menu. One roving tab stop. When the focused row leaves (completed after its hold,
 // rescheduled into another section, deleted) focus moves to the next row, else the previous one,
 // else a section header. The panel follows the visible order and the open row scrolls into view.
+// From elsewhere on the page (or the body), Up/Down or J/K focus the remembered row (the last
+// focused one, else the open task's), else the first row.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { useShortcut } from '../../composables/useShortcut'
+import { focusOutsideGrids } from '../shell/shellContext'
 import { useTaskActions } from '../../composables/useTaskActions'
 import { useTaskPanel } from '../../composables/useTaskPanel'
 import type { Uuid } from '../../types'
@@ -114,6 +117,19 @@ export function useHomeKeyboard(o: {
     if (!button) return false
     button.click()
   }, grid)
+
+  // Getting in: the keys the grid owns, pressed outside it.
+  useShortcut(
+    ['ArrowDown', 'j', 'ArrowUp', 'k'],
+    () => {
+      const ids = o.order.value
+      const remembered = [activeId.value, panel.openId.value].find((id): id is Uuid => !!id && ids.includes(id))
+      const target = remembered ?? ids[0]
+      if (!target) return false
+      focusRow(rowEl(target))
+    },
+    { when: () => focusOutsideGrids() && !o.container.value?.contains(document.activeElement) },
+  )
 
   // ---- Focus bookkeeping ----
 

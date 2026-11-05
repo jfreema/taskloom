@@ -146,7 +146,12 @@ function onKeydown(e: KeyboardEvent, i: number): void {
   outline-offset: 6px;
 }
 
+/* Touch (7.5): swatches sit 44px apart, centre to centre, so their 44px hit areas don't overlap. */
 @media (pointer: coarse) {
+  .ui-color-swatches {
+    gap: calc(var(--touch-min) - var(--swatch));
+  }
+
   .swatch::after {
     content: "";
     position: absolute;
