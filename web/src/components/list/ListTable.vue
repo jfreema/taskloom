@@ -62,8 +62,12 @@ const selectable = computed(() => canEdit.value && !isPhone.value && (!coarse.va
 const canReorder = computed(() => canEdit.value && config.value.sort.field === 'manual' && config.value.groupBy === 'status')
 const dragEnabled = computed(() => canReorder.value && !isPhone.value)
 
-/** Two-line phone rows below 560px of page width (the CSS switches on the same width). */
-const phoneRows = ref(false)
+/**
+ * Two-line phone rows below 560px of page width (the CSS switches on the same width). The window's
+ * width is the first guess; the observer's first report, which comes before the first paint, settles
+ * it without forcing a layout while the rows mount.
+ */
+const phoneRows = ref(window.innerWidth < 560)
 let resize: ResizeObserver | null = null
 onMounted(() => {
   const el = root.value?.parentElement
@@ -71,11 +75,12 @@ onMounted(() => {
   const measure = () => {
     phoneRows.value = el.clientWidth < 560
   }
-  measure()
-  if (typeof ResizeObserver !== 'undefined') {
-    resize = new ResizeObserver(measure)
-    resize.observe(el)
+  if (typeof ResizeObserver === 'undefined') {
+    measure()
+    return
   }
+  resize = new ResizeObserver(measure)
+  resize.observe(el)
 })
 onBeforeUnmount(() => resize?.disconnect())
 

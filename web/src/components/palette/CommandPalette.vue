@@ -5,6 +5,7 @@
 // `ui.openPalette(q)` prefills the query; it clears when the palette has closed.
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { Search } from '@lucide/vue'
+import { useBreakpoint } from '../../composables/useBreakpoint'
 import { useUi } from '../../stores/ui'
 import UiButton from '../ui/UiButton.vue'
 import UiDialog from '../ui/UiDialog.vue'
@@ -32,6 +33,10 @@ const query = computed({
     ui.paletteQuery = v
   },
 })
+
+/** The full placeholder fits from 385px; narrower phones get a shorter one (the input's name stays the same). */
+const { width } = useBreakpoint()
+const placeholder = computed(() => (width.value < 385 ? 'Search or type a command…' : 'Search tasks or type a command…'))
 
 /** "Show all N results" was chosen for this query. */
 const expanded = ref(false)
@@ -115,7 +120,7 @@ const liveText = computed(() => {
           aria-autocomplete="list"
           :aria-controls="listboxId"
           :aria-activedescendant="active ? domId(active) : undefined"
-          placeholder="Search tasks or type a command…"
+          :placeholder="placeholder"
           autocomplete="off"
           autocapitalize="off"
           spellcheck="false"

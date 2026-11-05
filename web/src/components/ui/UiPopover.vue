@@ -5,10 +5,12 @@
 // - The content teleports to #overlay-root (so scroll containers never clip it) and exists only
 //   while open. It registers a non-modal layer (7.7): Esc closes the top layer, outside clicks
 //   close it, and focus returns to the opener.
+// - A closed popover renders only its trigger: the Teleport and the Transition mount when it opens
+//   and go away once the fade-out ends, so long views with many closed pickers stay cheap.
 // - Floating UI flips and shifts it at the viewport edges and caps its height to the space left.
 // - Attributes (class, aria-labelledby, @keydown…) go to the floating panel.
 // role 'listbox' puts no role on the panel: the UiListbox inside it is the listbox.
-import { computed, shallowRef, useId, watch, type ComponentPublicInstance } from 'vue'
+import { computed, ref, shallowRef, useId, watch, type ComponentPublicInstance } from 'vue'
 import type { Placement } from '@floating-ui/vue'
 import UiPopoverPanel from './UiPopoverPanel.vue'
 import { toElement, type PopoverAnchor, type PopoverCloseReason, type PopoverRole, type PopoverTriggerProps } from './popover'
@@ -94,6 +96,21 @@ watch(open, (on, was) => {
   }
 })
 
+// The Teleport and the Transition exist from the moment the popover opens until its fade-out ends.
+// `appear` plays the enter animation on the render that mounts them.
+const mounted = ref(open.value)
+watch(
+  open,
+  (on) => {
+    if (on) mounted.value = true
+  },
+  { flush: 'sync' },
+)
+
+function onAfterLeave(): void {
+  if (!open.value) mounted.value = false
+}
+
 const haspopup = computed(() => (props.role === 'none' ? undefined : props.role))
 
 const triggerProps = computed<PopoverTriggerProps>(() => ({
@@ -125,8 +142,8 @@ defineExpose({
 
 <template>
   <slot name="trigger" :open="open" :toggle="toggle" :props="triggerProps" />
-  <Teleport to="#overlay-root">
-    <Transition name="ui-popover">
+  <Teleport v-if="mounted" to="#overlay-root">
+    <Transition name="ui-popover" appear @after-leave="onAfterLeave">
       <UiPopoverPanel
         v-if="open"
         :id="contentId"

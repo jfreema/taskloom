@@ -4,7 +4,7 @@
 // another month, every day of it with tasks. "No due date" ends the list. Day headings are sticky
 // ("Today", "Thu, Nov 5"). Rows: CompleteToggle in the status colour, the title, PriorityFlag and
 // avatars; a tap opens the task. Nothing drags here: rescheduling is the task's due date picker.
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import { CalendarDays } from '@lucide/vue'
 import { useTaskActions } from '../../composables/useTaskActions'
 import { formatDateMedium, monthGrid } from '../../lib/dates'
@@ -21,6 +21,8 @@ const emit = defineEmits<{ open: [id: Uuid, e: MouseEvent] }>()
 
 const actions = useTaskActions()
 const members = useMembers()
+/** Prefix of the section heading ids, unique to this agenda. */
+const uid = useId()
 
 interface Section {
   key: string
@@ -70,8 +72,8 @@ function onRowClick(e: MouseEvent, id: Uuid): void {
 
 <template>
   <div class="agenda">
-    <section v-for="s in sections" :key="s.key" class="section" :aria-labelledby="`agenda-${s.key}`">
-      <h3 :id="`agenda-${s.key}`" class="heading" :class="{ 'is-danger': s.tone === 'danger' }">
+    <section v-for="s in sections" :key="s.key" class="section" :aria-labelledby="`${uid}-agenda-${s.key}`">
+      <h3 :id="`${uid}-agenda-${s.key}`" class="heading" :class="{ 'is-danger': s.tone === 'danger' }">
         {{ s.heading }}<span v-if="s.tasks.length" class="count tabular" aria-hidden="true">{{ s.tasks.length }}</span>
       </h3>
       <ul v-if="s.tasks.length" class="rows" role="list">

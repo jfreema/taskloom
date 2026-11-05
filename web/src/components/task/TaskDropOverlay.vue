@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // "Drop files to upload" over the task detail while files are dragged over it (8.10). In the panel
 // it covers the panel. On the page (`fixed`) the detail can be taller than the window, so it covers
-// the visible part of the area that scrolls it (the main area), measured when the drag comes in.
-import { onMounted, ref } from 'vue'
+// the visible part of the area that scrolls it (the main area), measured when the drag comes in and
+// again whenever the window resizes or anything scrolls during the drag.
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { Upload } from '@lucide/vue'
 import UiIcon from '../ui/UiIcon.vue'
 
@@ -18,14 +19,26 @@ function scrollParent(node: HTMLElement): HTMLElement {
   return document.documentElement
 }
 
-onMounted(() => {
-  if (!props.fixed || !el.value) return
+function measure(): void {
+  if (!el.value) return
   const r = scrollParent(el.value).getBoundingClientRect()
   const top = Math.max(r.top, 0)
   const left = Math.max(r.left, 0)
   const width = Math.min(r.right, window.innerWidth) - left
   const height = Math.min(r.bottom, window.innerHeight) - top
   frame.value = { top: `${top}px`, left: `${left}px`, width: `${width}px`, height: `${height}px`, right: 'auto', bottom: 'auto' }
+}
+
+onMounted(() => {
+  if (!props.fixed) return
+  measure()
+  window.addEventListener('resize', measure, { passive: true })
+  window.addEventListener('scroll', measure, { passive: true, capture: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measure)
+  window.removeEventListener('scroll', measure, { capture: true })
 })
 </script>
 

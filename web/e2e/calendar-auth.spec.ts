@@ -220,7 +220,7 @@ test.describe('Sign-in and settings', () => {
       await expect(page).toHaveURL((url) => url.pathname === '/settings/appearance')
       const theme = page.getByRole('radiogroup', { name: 'Theme' })
       await expect(theme.getByRole('radio', { name: 'Dark' })).toBeChecked()
-      await theme.getByText('System', { exact: true }).click()
+      await theme.getByRole('radio', { name: 'System' }).check()
       await expect(theme.getByRole('radio', { name: 'System' })).toBeChecked()
       await expect.poll(() => page.evaluate(() => document.documentElement.hasAttribute('data-theme'))).toBe(false)
     })

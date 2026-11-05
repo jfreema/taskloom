@@ -51,9 +51,10 @@ const titleId = `${useId()}-title`
 }
 
 .settings-page .page-title {
-  font-size: var(--fs-lg);
-  line-height: var(--lh-lg);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
   font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   overflow-wrap: anywhere;
 }

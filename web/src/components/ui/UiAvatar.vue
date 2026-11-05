@@ -80,7 +80,7 @@ const box = computed(() => ({
   flex-shrink: 0;
   border-radius: var(--radius-full);
   background: var(--avatar-bg);
-  /* White initials in both themes: --danger-fg is #FFFFFF in light and dark (7.2: at least 5.3:1 on every avatar colour). */
+  /* White initials in both themes: --danger-fg is pure white in light and dark (7.2: at least 5.3:1 on every avatar colour). */
   color: var(--danger-fg);
   font-weight: var(--fw-semibold);
   line-height: 1;

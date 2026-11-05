@@ -229,7 +229,12 @@ function removeLayer(id: string, o?: { returnFocus?: boolean }): void {
   const wantsReturn = (o?.returnFocus ?? layer.returnFocus) !== false
   if (!wantsReturn || !focusInside) return
   const target = returnTargetOf(layer)
-  if (!target) return
+  if (!target) {
+    // Opened with nothing focused (N pressed on the page): focus goes back to the page at once, so
+    // keys pressed while the layer fades out don't land in it and shortcuts work again.
+    if (active instanceof HTMLElement && active !== document.body && active.isConnected) active.blur()
+    return
+  }
   if (enterDown) swallowEnterPress()
   target.focus({ preventScroll: true })
 }

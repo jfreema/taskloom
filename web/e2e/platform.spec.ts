@@ -173,7 +173,7 @@ test.describe('Guest', () => {
       await page.getByRole('button', { name: 'Invite people' }).click()
       const dialog = page.getByRole('dialog', { name: 'Invite people' })
       await dialog.getByRole('textbox', { name: 'Email addresses' }).fill(guestEmail)
-      await dialog.getByText('Guest', { exact: true }).click()
+      await dialog.getByRole('radio', { name: 'Guest' }).check()
       await expect(dialog.getByRole('radio', { name: /^Guest/ })).toBeChecked()
       await dialog.getByRole('button', { name: 'Add 1 person' }).click()
       await expect(dialog).toBeHidden()

@@ -12,11 +12,14 @@
 // - Rows carry only what changes rarely; the components read the task itself, so an edit to one
 //   task re-renders one row.
 // - Progressive mounting: when many rows appear at once (opening a long list, clearing a search,
-//   "Show N more", Expand all), at most RENDER_STEP more task rows render per frame, so no single
-//   long task builds hundreds of rows (S10). The rest follow frame by frame, in display order.
-import { computed, onScopeDispose, reactive, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue'
+//   "Show N more", Expand all), one batch of task rows more renders per frame, so no single long
+//   task builds hundreds of rows (S10). The rest follow frame by frame, in display order. The first
+//   render mounts a screenful; later batches follow what a row costs on this device (lib/mountBudget),
+//   timing each frame's step.
+import { computed, nextTick, onScopeDispose, reactive, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue'
 import { useListPageContext } from '../../composables/useListPageContext'
 import { useToday } from '../../composables/useToday'
+import { listRowBudget } from '../../lib/mountBudget'
 import { groupTasks, sortTasks, type TaskGroup } from '../../lib/taskQuery'
 import { useSession } from '../../stores/session'
 import { useTasks } from '../../stores/tasks'
@@ -26,8 +29,8 @@ import type { CreateTaskRequest, Task, Uuid } from '../../types'
 /** Top-level rows each group renders before "Show N more", and how many more each click shows. */
 export const GROUP_LIMIT = 100
 
-/** Task rows that may mount in one frame beyond those already rendered (progressive mounting). */
-const RENDER_STEP = 20
+/** Task rows a list's first render may mount, about a screenful, so its first paint is complete. */
+const FIRST_ROWS = 20
 
 export interface TaskRowItem {
   kind: 'task'
@@ -137,7 +140,7 @@ export function useListModel(canEdit: ComputedRef<boolean>): ListModel {
   /** Tasks added from an add row, kept where they were added (see Pins above), by add order. */
   const pins = reactive(new Map<Uuid, { groupKey: string; top: boolean; parentId: Uuid | null; seq: number }>())
   let pinSeq = 0
-  /** Task rows the last `groups` evaluation rendered; the next may render RENDER_STEP more. Not reactive. */
+  /** Task rows the last `groups` evaluation rendered; the next may render one batch more. Not reactive. */
   let renderedRows = 0
 
   watch([() => ctx.config.value.groupBy, () => ctx.config.value.sort.field], () => pins.clear())
@@ -318,11 +321,14 @@ export function useListModel(canEdit: ComputedRef<boolean>): ListModel {
   let behind = false
   const step = ref(0)
   let frame = 0
+  /** Task rows the last `groups` evaluation added. Not reactive. */
+  let added = 0
 
   /** The groups as rendered: fullGroups, cut after the task rows this frame may mount. */
   const groups = computed<GroupView[]>(() => {
     void step.value
-    const limit = renderedRows + RENDER_STEP
+    const batch = listRowBudget.batch()
+    const limit = renderedRows + (renderedRows === 0 ? Math.max(FIRST_ROWS, batch) : batch)
     let n = 0
     let cut = false
     const out = fullGroups.value.map((g) => {
@@ -345,19 +351,25 @@ export function useListModel(canEdit: ComputedRef<boolean>): ListModel {
       cut = true
       return { ...g, rows }
     })
+    added = n - renderedRows
     renderedRows = n
     behind = cut
     return out
   })
 
+  /** One frame's step: one batch more, timed until its render is done. */
+  function nextStep(): void {
+    frame = 0
+    const at = performance.now()
+    added = 0
+    step.value++
+    void nextTick(() => listRowBudget.record(added, performance.now() - at))
+  }
+
   watch(
     groups,
     () => {
-      if (!behind || frame) return
-      frame = requestAnimationFrame(() => {
-        frame = 0
-        step.value++
-      })
+      if (behind && !frame) frame = requestAnimationFrame(nextStep)
     },
     { flush: 'post', immediate: true },
   )

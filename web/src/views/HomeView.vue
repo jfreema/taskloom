@@ -14,6 +14,7 @@ import HomeTaskRow from '../components/home/HomeTaskRow.vue'
 import { HOME_SECTIONS, HOME_SECTION_LABEL, type HomeSectionKey } from '../components/home/homeSections'
 import { useHomeData } from '../components/home/useHomeData'
 import { useHomeKeyboard } from '../components/home/useHomeKeyboard'
+import { useHomeMounting } from '../components/home/useHomeMounting'
 import PageHeader from '../components/shell/PageHeader.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiEmptyState from '../components/ui/UiEmptyState.vue'
@@ -76,7 +77,20 @@ function showMore(key: HomeSectionKey): void {
   limits.value = { ...limits.value, [key]: limitOf(key) + PAGE }
 }
 
-/** The rendered rows in order (collapsed sections render none): the grid and the panel follow it. */
+/** The rows rendering now: many at once mount a batch per frame (useHomeMounting). */
+const mountedCounts = useHomeMounting(
+  computed(() => visibleKeys.value.filter((key) => !collapsed.value[key])),
+  (key) => shown(key).length,
+  () => [scope.value, workspaces.currentId],
+)
+
+function mounted(key: HomeSectionKey): Task[] {
+  const rows = shown(key)
+  const n = mountedCounts.value[key] ?? 0
+  return n >= rows.length ? rows : rows.slice(0, n)
+}
+
+/** The rows in order, mounted or still to mount (collapsed sections have none): the grid and the panel follow it. */
 const order = computed<Uuid[]>(() => visibleKeys.value.flatMap((key) => (collapsed.value[key] ? [] : shown(key).map((t) => t.id))))
 
 const sectionsEl = ref<HTMLElement | null>(null)
@@ -217,7 +231,7 @@ function onCreated(id: Uuid): void {
               <UiButton class="reveal reveal-touch" variant="ghost" size="sm" @click="moveAllToToday">Move all to today</UiButton>
             </template>
             <HomeTaskRow
-              v-for="t in shown(key)"
+              v-for="t in mounted(key)"
               :key="t.id"
               :task="t"
               :tab-stop="t.id === tabStopId"

@@ -2,6 +2,8 @@
 // Radio cards (spec 7.10): native radio inputs inside label cards, so arrow keys and forms work
 // natively. The selected card has a 2px accent border and an accent-subtle background.
 // Used for theme cards and status presets; the `preview` slot draws a picture above the label.
+// Each native radio is transparent and covers its whole card, so a pointer on the card (and
+// tools that click the radio itself) reach it directly.
 import { useId } from 'vue'
 
 export interface RadioCardOption {
@@ -36,7 +38,7 @@ const id = useId()
     >
       <input
         v-model="model"
-        class="sr-only"
+        class="native"
         type="radio"
         :name="name"
         :value="option.value"
@@ -95,6 +97,19 @@ const id = useId()
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
   background: var(--accent-subtle);
+}
+
+/* The radio itself: invisible, above the card's content, and as large as the card. */
+.native {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  appearance: none;
+  cursor: pointer;
 }
 
 .card:has(input:focus-visible) {

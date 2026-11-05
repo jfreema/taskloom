@@ -4,7 +4,8 @@
 //   auto-scrolls near its edges during a drag.
 // - The add card opens at the top (header "+") or the bottom ("+ Add task", which stays in view at
 //   the bottom of a long column).
-// - The first 20 (Done) or 50 cards render, then "Show all N".
+// - The first 20 (Done) or 50 cards render, then "Show all N". Many cards at once mount a batch per
+//   frame (useMountedCards); "Show all N" waits until they all have.
 // - An empty column shows a dashed "No tasks" area.
 // - Drops: the whole column appends; the header puts the card at the top; cards take the edge the
 //   pointer is closest to. The column gets a --bg-hover tint while it is the target.
@@ -20,6 +21,7 @@ import BoardColumnHeader from './BoardColumnHeader.vue'
 import BoardInlineAdd from './BoardInlineAdd.vue'
 import { useBoard, type DropAt } from './boardContext'
 import type { BoardColumnView } from './useBoardModel'
+import { useMountedCards } from './useMountedCards'
 
 const props = defineProps<{
   column: BoardColumnView
@@ -42,6 +44,12 @@ const statusId = computed(() => props.column.status.id)
 const count = computed(() => props.column.tasks.length)
 const label = computed(() => `${props.column.status.name}, ${pluralize(count.value, 'task')}`)
 const shown = computed(() => props.column.shown)
+const mountedCount = useMountedCards(
+  () => shown.value.length,
+  () => board.model.columns.value.reduce((n, c) => n + (c.collapsed ? 0 : 1), 0),
+)
+/** The cards rendered so far (progressive mounting). */
+const mounted = computed(() => (mountedCount.value >= shown.value.length ? shown.value : shown.value.slice(0, mountedCount.value)))
 const dragActive = computed(() => activeDrag.value !== null)
 const showFooter = computed(() => board.canEdit.value && addAt.value !== 'bottom')
 
@@ -138,9 +146,14 @@ defineExpose({ openTop })
 
       <div v-if="!shown.length && addAt === null" class="empty" :class="{ 'is-target': target !== null }">No tasks</div>
 
-      <BoardCard v-for="t in shown" :key="t.id" :task="t" :column="column.status" :drop-hint="hintFor(t.id)" />
+      <BoardCard v-for="t in mounted" :key="t.id" :task="t" :column="column.status" :drop-hint="hintFor(t.id)" />
 
-      <button v-if="column.capped" type="button" class="show-all" @click="board.model.showAll(column.status.id)">
+      <button
+        v-if="column.capped && mounted.length === shown.length"
+        type="button"
+        class="show-all"
+        @click="board.model.showAll(column.status.id)"
+      >
         Show all <span class="tabular">{{ count }}</span>
       </button>
 

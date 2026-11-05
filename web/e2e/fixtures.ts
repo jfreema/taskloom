@@ -303,7 +303,7 @@ export interface TaskloomFixtures {
   allowConsoleErrors: ConsolePattern[]
   /** Signed in as a fresh user (a unique email per test) whose first workspace holds the 11.3 dataset. */
   seeded: Seeded
-  /** The console rule (automatic): the test fails on a page error or a console error that isn't exempt. */
+  /** The console rule (automatic): the test fails on a page error, a console error or a Vue warning that isn't exempt. */
   consoleRule: void
 }
 
@@ -321,6 +321,10 @@ export const test = base.extend<TaskloomFixtures>({
         page.on('pageerror', (error) => record('pageerror', `${error.name}: ${error.message}`))
         page.on('console', (message) => {
           if (message.type() === 'error') record('console.error', message.text(), message.location().url || undefined)
+          // Vue warns only in development (the Vite dev server); a warning there is a defect too.
+          else if (message.type() === 'warning' && message.text().startsWith('[Vue warn]')) {
+            record('vue warning', message.text().split('\n')[0], message.location().url || undefined)
+          }
         })
       }
       context.pages().forEach(watch)
@@ -328,7 +332,7 @@ export const test = base.extend<TaskloomFixtures>({
       await use()
       if (problems.length) {
         throw new Error(
-          `The console rule (spec 11.1) failed this test: ${problems.length} page or console error(s). ` +
+          `The console rule (spec 11.1) failed this test: ${problems.length} page error(s), console error(s) or Vue warning(s). ` +
             `Exempt are "${RESOURCE_ERROR}…" and the test's allowConsoleErrors.\n  ${problems.join('\n  ')}`,
         )
       }
@@ -346,11 +350,6 @@ export const test = base.extend<TaskloomFixtures>({
 
 // ---- Accessibility ----
 
-// @axe-core/playwright types its page with the top-level playwright-core (an npm-installed peer, 1.64.1), while
-// @playwright/test brings its own 1.63.0, whose Page lacks two newer members. Axe uses only evaluate(), frames() and
-// context().newPage() (a blank page for its last step, closed again), so the cast is safe at runtime.
-type AxePage = ConstructorParameters<typeof AxeBuilder>[0]['page']
-
 /** Options of expectNoAxeViolations(): CSS selectors to limit the check to (default the whole page). */
 export interface AxeOptions {
   include?: string | string[]
@@ -361,7 +360,7 @@ export async function expectNoAxeViolations(page: Page, { include }: AxeOptions 
   await test.step(
     'no serious or critical axe violations',
     async () => {
-      let builder = new AxeBuilder({ page: page as unknown as AxePage }).withTags([...AXE_TAGS])
+      let builder = new AxeBuilder({ page }).withTags([...AXE_TAGS])
       for (const selector of include === undefined ? [] : [include].flat()) builder = builder.include(selector)
       const { violations } = await builder.analyze()
       const blocking = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')

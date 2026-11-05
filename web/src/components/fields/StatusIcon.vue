@@ -96,7 +96,7 @@ watch(
   fill: var(--c);
 }
 
-/* A white check in both themes (--danger-fg is #FFFFFF in light and dark). */
+/* A white check in both themes (--danger-fg is pure white in light and dark). */
 .check {
   stroke: var(--danger-fg);
   stroke-width: 1.75;
