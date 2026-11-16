@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // One row of the Members table (8.13): avatar and name ("(you)" for me), email, an "Invited" badge
-// with a "Copy sign-in link for <name>" button for pending people, the role and Remove. The role
+// with a "Copy sign-in link for <name>" button for pending people, or a "Turned off" badge for an
+// account a site admin turned off (no sign-in link: it couldn't be used), the role and Remove. The role
 // is a select and Remove shows only for Admin+, and never on the Owner's row or your own (5.5),
 // which show the role as text. In a narrow table (under 680px, a 1100px window) the email goes under
 // the name and the badge follows the name, so short names and emails are never cut. Below 640px the
@@ -29,6 +30,10 @@ const ROLES: AssignableRole[] = ['Admin', 'Member', 'Guest']
 const roleOptions: ListboxOption[] = ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r], description: ROLE_DESCRIPTION[r] }))
 
 const user = computed(() => ({ id: props.member.userId, displayName: props.member.displayName }))
+/** What the Status column shows: a turned-off account outranks a pending invitation. */
+const status = computed<'disabled' | 'pending' | null>(() =>
+  props.member.disabled ? 'disabled' : props.member.pending ? 'pending' : null,
+)
 const editable = computed(() => props.canManage && !props.isMe && props.member.role !== 'Owner')
 
 function onRole(value: string | null): void {
@@ -45,11 +50,14 @@ function onRole(value: string | null): void {
         <span v-if="isMe" class="you">(you)</span>
       </div>
     </td>
-    <!-- Without an invitation the email also takes the Invitation column, so it isn't cut beside an empty cell. -->
-    <td class="cell email-cell" role="cell" :colspan="member.pending ? undefined : 2">
+    <!-- Without a status the email also takes the Status column, so it isn't cut beside an empty cell. -->
+    <td class="cell email-cell" role="cell" :colspan="status ? undefined : 2">
       <span v-tooltip="{ text: member.email, overflowOnly: true }" class="email truncate">{{ member.email }}</span>
     </td>
-    <td v-if="member.pending" class="cell status-cell" role="cell">
+    <td v-if="status === 'disabled'" class="cell status-cell" role="cell">
+      <UiBadge tone="danger">Turned off</UiBadge>
+    </td>
+    <td v-else-if="status === 'pending'" class="cell status-cell" role="cell">
       <UiBadge tone="info">Invited</UiBadge>
       <UiIconButton v-if="canCopy" :icon="Link" :label="`Copy sign-in link for ${member.displayName}`" size="xs" @click="emit('copyLink')" />
     </td>

@@ -1,19 +1,44 @@
 // Settings, the hierarchy dialogs and the status editor (spec 11.1 scenarios 24, 25 and 26), plus two checks of the
 // same screens that 11.1 leaves out: the role guards of the settings pages (8.13, 9.4) and deleting a status that
-// tasks use. Every screen and dialog is checked with axe in both themes; saved values are checked through api(page)
+// tasks use. Security 1 (sections E and H) adds "Sign out other devices" in Profile and the site admins' People
+// page. Every screen and dialog is checked with axe in both themes; saved values are checked through api(page)
 // or after a reload.
 import type { Locator, Page, Response } from '@playwright/test'
-import { api, expect, expectNoAxeViolations, signIn, stageC, test, uniqueEmail, type Seeded, type Uuid } from './fixtures'
+import {
+  SITE_ADMIN_EMAIL,
+  api,
+  expect,
+  expectNoAxeViolations,
+  signIn,
+  stageC,
+  test,
+  uniqueEmail,
+  type Seeded,
+  type Uuid,
+} from './fixtures'
 
 const sidebar = (page: Page): Locator => page.getByRole('navigation', { name: 'Sidebar' })
 const settingsNav = (page: Page): Locator => page.getByRole('navigation', { name: 'Settings' })
 const notifications = (page: Page): Locator => page.getByRole('region', { name: 'Notifications' })
 const membersTable = (page: Page): Locator => page.getByRole('table', { name: 'Members' })
 const tagList = (page: Page): Locator => page.getByRole('list', { name: 'Tags' })
+const peopleList = (page: Page): Locator => page.getByRole('list', { name: 'People' })
 
 /** The Members row whose email cell shows `email`. */
 const memberRow = (page: Page, email: string): Locator =>
   membersTable(page).getByRole('row').filter({ has: page.getByRole('cell', { name: email, exact: true }) })
+
+/** The People row that shows `email`. */
+const personRow = (page: Page, email: string): Locator =>
+  peopleList(page).getByRole('listitem').filter({ has: page.getByText(email, { exact: true }) })
+
+/** Opens the "..." menu of a People row and returns the menu. */
+async function personMenu(page: Page, row: Locator, name: string): Promise<Locator> {
+  await row.getByRole('button', { name: `More actions for ${name}` }).click()
+  const menu = page.getByRole('menu', { name: `Actions for ${name}` })
+  await expect(menu).toBeVisible()
+  return menu
+}
 
 /** A space in the sidebar tree: the item holding its button and its lists. */
 const sidebarSpace = (page: Page, name: string): Locator =>
@@ -319,6 +344,249 @@ test.describe('Settings', () => {
       await expect(sidebar(page).getByRole('button', { name: 'New space' })).toHaveCount(0)
       await axeBothThemes(page)
     })
+  })
+})
+
+test.describe('Sessions and site admins', () => {
+  test('sign out other devices: another browser is signed out, this one stays signed in', async ({ page, browser }) => {
+    const email = uniqueEmail('settings sign out other devices')
+    const me = await signIn(page, { email })
+    // The same account in a second browser.
+    const other = await browser.newContext()
+    try {
+      const otherPage = await other.newPage()
+      await signIn(otherPage, { email })
+      await otherPage.goto('/')
+      await expect(sidebar(otherPage)).toBeVisible()
+
+      await page.goto('/settings/profile')
+      const block = page.getByRole('region', { name: 'Other devices' })
+      await expect(block).toContainText('Signed in on another browser or device you no longer use? Sign it out.')
+      await axeBothThemes(page)
+
+      await test.step('"Sign out other devices" says so in a toast', async () => {
+        await saved(page, 'POST', '/api/me/sign-out-others', () =>
+          block.getByRole('button', { name: 'Sign out other devices' }).click(),
+        )
+        await expect(notifications(page)).toContainText('Signed out of your other devices.')
+      })
+
+      await test.step('the other browser is signed out: its next request answers 401 and the app goes to sign-in', async () => {
+        expect((await api(otherPage).get('/api/me')).status()).toBe(401)
+        await otherPage.reload()
+        await expect(otherPage).toHaveURL((url) => url.pathname === '/login')
+        await expect(otherPage.getByRole('heading', { level: 1, name: 'Sign in to Taskloom' })).toBeVisible()
+      })
+
+      await test.step('this browser stays signed in, also after a reload', async () => {
+        expect((await api(page).me()).id).toBe(me.id)
+        await page.reload()
+        await expect(page).toHaveURL((url) => url.pathname === '/settings/profile')
+        await expect(block.getByRole('button', { name: 'Sign out other devices' })).toBeVisible()
+      })
+    } finally {
+      await other.close()
+    }
+  })
+
+  test('a sign-out the server refuses says why and keeps you signed in', async ({ page }) => {
+    const me = await signIn(page, { email: uniqueEmail('settings refused sign out') })
+    await page.goto('/settings/profile')
+    const signOut = page.getByRole('button', { name: 'Sign out', exact: true })
+
+    await test.step('a 429: the toast gives its detail, and Profile stays because the session still works', async () => {
+      // The server no longer limits signing out; a 5xx or a proxy's 429 can still refuse it.
+      await page.route('**/auth/logout', (route) =>
+        route.fulfill({
+          status: 429,
+          contentType: 'application/problem+json',
+          headers: { 'Retry-After': '60' },
+          body: JSON.stringify({ status: 429, title: 'Too Many Requests', detail: 'Too many requests. Wait a minute and try again.' }),
+        }),
+      )
+      await signOut.click()
+      await expect(notifications(page)).toContainText('Too many requests. Wait a minute and try again.')
+      await expect(page).toHaveURL((url) => url.pathname === '/settings/profile')
+      await expect(page.getByRole('heading', { level: 2, name: 'Profile' })).toBeVisible()
+      await expect(signOut).toBeEnabled()
+      expect((await api(page).me()).id).toBe(me.id)
+    })
+
+    await test.step('trying again once the server accepts it signs out', async () => {
+      await page.unroute('**/auth/logout')
+      await signOut.click()
+      await expect(page).toHaveURL((url) => url.pathname === '/login')
+      expect((await api(page).get('/api/me')).status()).toBe(401)
+    })
+  })
+
+  test('People: a site admin turns an account off and on and signs it out everywhere', async ({ page, browser }) => {
+    const target = { email: uniqueEmail('settings people target'), displayName: 'Tia Target' }
+    const owner = { email: uniqueEmail('settings people owner'), displayName: 'Olive Owner' }
+    const admin = { email: SITE_ADMIN_EMAIL, displayName: 'Site Admin' }
+
+    // The person to manage, signed in in a browser of their own.
+    const targetContext = await browser.newContext()
+    try {
+      const targetPage = await targetContext.newPage()
+      await signIn(targetPage, target)
+      // An owner whose workspace the target joins, so Members can show the turned-off account.
+      await signIn(page, owner)
+      const [ownerWorkspace] = await api(page).workspaces()
+      await api(page).json('POST', `/api/workspaces/${ownerWorkspace.id}/members`, { email: target.email, role: 'Member' })
+
+      await signIn(page, admin)
+      const me = await api(page).me()
+      expect(me.isSiteAdmin, `the e2e API run needs Auth__SiteAdmins__0=${SITE_ADMIN_EMAIL}`).toBe(true)
+      // The target joins the site admin's workspace too, so the admin's own Members page can follow their changes.
+      const [adminWorkspace] = await api(page).workspaces()
+      await api(page).json('POST', `/api/workspaces/${adminWorkspace.id}/members`, { email: target.email, role: 'Member' })
+
+      await test.step('the Admin group links to People, which lists every account with its status', async () => {
+        await page.goto('/settings/profile')
+        await settingsNav(page).getByRole('list', { name: 'Admin' }).getByRole('link', { name: 'People' }).click()
+        await expect(page).toHaveURL((url) => url.pathname === '/settings/people')
+        await expect(page.getByRole('heading', { level: 2, name: 'People' })).toBeVisible()
+        await expect(page.getByRole('region', { name: 'People' })).toContainText(
+          'Everyone who has signed in or been invited to Taskloom. Turning an account off signs the person out everywhere and stops them signing in.',
+        )
+
+        const mine = personRow(page, SITE_ADMIN_EMAIL)
+        await expect(mine).toContainText('(you)')
+        await expect(mine.getByText('Active', { exact: true })).toBeVisible()
+        await expect(mine.getByText('Site admin', { exact: true })).toBeVisible()
+
+        const row = personRow(page, target.email)
+        await expect(row).toContainText('Tia Target')
+        await expect(row.getByText('Active', { exact: true })).toBeVisible()
+        await expect(row.getByText('Site admin', { exact: true })).toHaveCount(0)
+        await expect(row).toContainText(/Last active (just now|\d+m ago)/)
+        await expect(row).toContainText('3 workspaces')
+        await axeBothThemes(page)
+      })
+
+      await test.step("your own account can't be turned off: the item is disabled with the reason", async () => {
+        const menu = await personMenu(page, personRow(page, SITE_ADMIN_EMAIL), me.displayName)
+        const off = menu.getByRole('menuitem', { name: 'Turn off account' })
+        await expect(off).toHaveAttribute('aria-disabled', 'true')
+        await expect(off).toHaveAccessibleDescription("You can't turn off your own account.")
+        await expect(menu.getByRole('menuitem', { name: 'Sign out everywhere' })).not.toHaveAttribute('aria-disabled', 'true')
+        await page.keyboard.press('Escape')
+        await expect(menu).toBeHidden()
+      })
+
+      await test.step('turn Tia Target off after the confirm: the row says Turned off and their browser is signed out', async () => {
+        const row = personRow(page, target.email)
+        const menu = await personMenu(page, row, target.displayName)
+        await menu.getByRole('menuitem', { name: 'Turn off account' }).click()
+        const confirm = page.getByRole('alertdialog', { name: "Turn off Tia Target's account?" })
+        await expect(confirm).toContainText(
+          "They'll be signed out everywhere and can't sign in until you turn their account back on. Their tasks and comments stay.",
+        )
+        await axeBothThemes(page, DIALOGS)
+        await saved(page, 'POST', /\/api\/admin\/users\/[^/]+\/disable$/, () =>
+          confirm.getByRole('button', { name: 'Turn off', exact: true }).click(),
+        )
+        await expect(confirm).toBeHidden()
+        await expect(notifications(page)).toContainText("Turned off Tia Target's account.")
+        await expect(row.getByText('Turned off', { exact: true })).toBeVisible()
+        await expect(row.getByText('Active', { exact: true })).toHaveCount(0)
+        expect((await api(page).adminUsers()).find((u) => u.email === target.email)?.disabled).toBe(true)
+        expect((await api(targetPage).get('/api/me')).status()).toBe(401)
+      })
+
+      await test.step("the admin's Members page, opened without a reload, shows Turned off at once", async () => {
+        await settingsNav(page).getByRole('link', { name: 'Members' }).click()
+        await expect(memberRow(page, target.email)).toContainText('Turned off')
+        await settingsNav(page).getByRole('link', { name: 'People' }).click()
+        await expect(personRow(page, target.email)).toBeVisible()
+      })
+
+      await test.step('signing in again is refused with the message', async () => {
+        await targetPage.goto('/login')
+        await targetPage.getByRole('textbox', { name: 'Email' }).fill(target.email)
+        await targetPage.getByRole('button', { name: 'Sign in', exact: true }).click()
+        await expect(
+          targetPage.getByRole('alert').filter({ hasText: 'This account has been turned off. Ask your Taskloom admin to turn it back on.' }),
+        ).toBeVisible()
+        await expect(targetPage).toHaveURL((url) => url.pathname === '/login')
+      })
+
+      await test.step('Members shows Turned off on that account to the people who share a workspace with it', async () => {
+        await signIn(page, owner)
+        await page.goto('/settings/members')
+        await expect(memberRow(page, target.email)).toContainText('Turned off')
+        await expect(memberRow(page, target.email)).not.toContainText('Invited')
+        expect((await api(page).members(ownerWorkspace.id)).find((m) => m.email === target.email)?.disabled).toBe(true)
+        await axeBothThemes(page)
+      })
+
+      await test.step('turn Tia Target back on, without a confirm: they can sign in again', async () => {
+        await signIn(page, admin)
+        await page.goto('/settings/people')
+        const row = personRow(page, target.email)
+        const menu = await personMenu(page, row, target.displayName)
+        await expect(menu.getByRole('menuitem', { name: 'Turn off account' })).toHaveCount(0)
+        await saved(page, 'POST', /\/api\/admin\/users\/[^/]+\/enable$/, () =>
+          menu.getByRole('menuitem', { name: 'Turn on account' }).click(),
+        )
+        await expect(notifications(page)).toContainText("Turned on Tia Target's account.")
+        await expect(row.getByText('Active', { exact: true })).toBeVisible()
+        // Members had loaded with the account off; without a reload it drops the chip.
+        await settingsNav(page).getByRole('link', { name: 'Members' }).click()
+        await expect(memberRow(page, target.email)).toBeVisible()
+        await expect(memberRow(page, target.email)).not.toContainText('Turned off')
+        await settingsNav(page).getByRole('link', { name: 'People' }).click()
+        await expect(personRow(page, target.email)).toBeVisible()
+        await signIn(targetPage, target)
+        expect((await api(targetPage).me()).email).toBe(target.email)
+      })
+
+      await test.step('"Sign out everywhere" ends their sessions; yours stays', async () => {
+        const row = personRow(page, target.email)
+        const menu = await personMenu(page, row, target.displayName)
+        await saved(page, 'POST', /\/api\/admin\/users\/[^/]+\/sign-out$/, () =>
+          menu.getByRole('menuitem', { name: 'Sign out everywhere' }).click(),
+        )
+        await expect(notifications(page)).toContainText('Signed Tia Target out everywhere.')
+        expect((await api(targetPage).get('/api/me')).status()).toBe(401)
+        expect((await api(page).me()).email).toBe(SITE_ADMIN_EMAIL)
+        await expect(page).toHaveURL((url) => url.pathname === '/settings/people')
+      })
+
+      await test.step('on a phone a row stacks name, email and activity, without side scrolling', async () => {
+        await page.setViewportSize({ width: 390, height: 844 })
+        // A fresh load starts at the top, as on a phone. Left scrolled down to the target's row, axe would measure
+        // whichever row's menu button sits half under the sticky app bar and call it too small (target-size).
+        await page.goto('/settings/people')
+        const row = personRow(page, target.email)
+        await expect(row).toBeVisible()
+        const name = await row.getByText(target.displayName, { exact: true }).boundingBox()
+        const email = await row.getByText(target.email, { exact: true }).boundingBox()
+        const activity = await row.locator('time').boundingBox()
+        expect(name && email && activity).toBeTruthy()
+        expect(email!.y).toBeGreaterThanOrEqual(name!.y + name!.height - 1)
+        expect(activity!.y).toBeGreaterThanOrEqual(email!.y + email!.height - 1)
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+        await axeBothThemes(page)
+        await page.setViewportSize({ width: 1440, height: 900 })
+      })
+    } finally {
+      await targetContext.close()
+    }
+  })
+
+  test('People is for site admins only: no Admin group, and its address opens Profile', async ({ page }) => {
+    await signIn(page, { email: uniqueEmail('settings people not an admin') })
+    expect((await api(page).me()).isSiteAdmin).toBe(false)
+    await page.goto('/settings/people')
+    await expect(page).toHaveURL((url) => url.pathname === '/settings/profile')
+    await expect(page.getByRole('heading', { level: 2, name: 'Profile' })).toBeVisible()
+    await expect(settingsNav(page).getByRole('list', { name: 'Workspace' })).toBeVisible()
+    await expect(settingsNav(page).getByRole('list', { name: 'Admin' })).toHaveCount(0)
+    await expect(settingsNav(page).getByRole('link', { name: 'People' })).toHaveCount(0)
+    // The API hides the routes as well.
+    expect((await api(page).get('/api/admin/users')).status()).toBe(404)
   })
 })
 

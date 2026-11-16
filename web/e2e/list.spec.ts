@@ -246,17 +246,24 @@ test.describe('List', () => {
     const groupButton = page.getByRole('button', { name: /^Group: / })
     const sortButton = page.getByRole('button', { name: /^Sort: / })
     const completed = page.getByRole('button', { name: 'Show completed tasks' })
+    // Both menus have a "Due date" item, so each item is looked up in its own menu, and the next menu opens only once
+    // the last one has closed: a menu still closing would otherwise take the click.
+    const groupMenu = page.getByRole('menu', { name: 'Group by' })
+    const sortMenu = page.getByRole('menu', { name: 'Sort by' })
 
     await test.step('group by Priority, sort by Due date descending, hide Tags, hide completed tasks', async () => {
       await groupButton.click()
-      await page.getByRole('menuitemradio', { name: 'Priority' }).click()
+      await groupMenu.getByRole('menuitemradio', { name: 'Priority' }).click()
+      await expect(groupMenu).toBeHidden()
       await expect(groupButton).toHaveAccessibleName('Group: Priority')
       await expect(group(page, 'Urgent')).toBeVisible()
       await sortButton.click()
-      await page.getByRole('menuitemradio', { name: 'Due date' }).click()
+      await sortMenu.getByRole('menuitemradio', { name: 'Due date' }).click()
+      await expect(sortMenu).toBeHidden()
       await expect(sortButton).toHaveAccessibleName('Sort: Due date')
       await sortButton.click()
-      await page.getByRole('menuitemradio', { name: 'Descending' }).click()
+      await sortMenu.getByRole('menuitemradio', { name: 'Descending' }).click()
+      await expect(sortMenu).toBeHidden()
       await page.getByRole('button', { name: 'Columns' }).click()
       await page.getByRole('menuitemcheckbox', { name: 'Tags' }).click()
       await page.keyboard.press('Escape')
@@ -279,8 +286,9 @@ test.describe('List', () => {
         .poll(() => titlesOf(group(page, 'Urgent')))
         .toEqual(['Review accessibility report', 'Fix sign-in redirect', 'Add structured data'])
       await sortButton.click()
-      await expect(page.getByRole('menuitemradio', { name: 'Descending' })).toHaveAttribute('aria-checked', 'true')
+      await expect(sortMenu.getByRole('menuitemradio', { name: 'Descending' })).toHaveAttribute('aria-checked', 'true')
       await page.keyboard.press('Escape')
+      await expect(sortMenu).toBeHidden()
     }
 
     await test.step('the same after a reload', async () => {

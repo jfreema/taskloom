@@ -1,12 +1,14 @@
 // The signed-in user (10.2). `load()` probes GET /api/me without triggering the unauthorized
-// handler, so the router guard decides where to go.
+// handler, so the router guard decides where to go. `user.isSiteAdmin` shows Settings › People.
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { api } from '../api'
+import { ApiError, api } from '../api'
 import { appRouter } from '../composables/appRouter'
 import { useDelayedDelete } from '../composables/useDelayedDelete'
+import { useToast } from '../composables/useToast'
 import { errorStatus, handled } from '../lib/async'
-import type { AuthProviders, DevLoginRequest, UpdateMeRequest, User } from '../types'
+import type { AuthProviders, DevLoginRequest, Me, UpdateMeRequest, User } from '../types'
+import { useAdminUsers } from './adminUsers'
 import { useMembers } from './members'
 import { useRecents } from './recents'
 import { useSelection } from './selection'
@@ -16,7 +18,8 @@ import { useUi } from './ui'
 import { useWorkspaces } from './workspaces'
 
 export const useSession = defineStore('session', () => {
-  const user = ref<User | null>(null)
+  const toast = useToast()
+  const user = ref<Me | null>(null)
   const loaded = ref(false)
   /** The last failure of `load()` other than a 401 (offline, 5xx); null after a successful load. */
   const error = ref<unknown>(null)
@@ -32,6 +35,7 @@ export const useSession = defineStore('session', () => {
     useWorkspaces().reset()
     useRecents().reset()
     useUi().reset()
+    useAdminUsers().reset()
   }
 
   /** GET /api/me. A 401 leaves `user` null; never rejects. */
@@ -39,7 +43,7 @@ export const useSession = defineStore('session', () => {
     if (loading) return loading
     loading = (async () => {
       try {
-        const me = await api.get<User>('/api/me', { ignoreUnauthorized: true })
+        const me = await api.get<Me>('/api/me', { ignoreUnauthorized: true })
         if (user.value && user.value.id !== me.id) resetStores()
         user.value = me
         error.value = null
@@ -59,10 +63,14 @@ export const useSession = defineStore('session', () => {
     return loading
   }
 
-  /** POST /auth/dev-login. Rejects with the ApiError (the sign-in form shows `detail` inline). */
+  /**
+   * POST /auth/dev-login. Rejects with the ApiError (the sign-in form shows `detail` inline).
+   * Dev login answers a plain User, so the site-admin flag comes from GET /api/me afterwards.
+   */
   function devLogin(r: DevLoginRequest): Promise<void> {
     return handled(
-      api.post<User>('/auth/dev-login', r).then((me) => {
+      api.post<User | Me>('/auth/dev-login', r).then(async (signedIn) => {
+        const me = await meAfterSignIn(signedIn)
         if (user.value && user.value.id !== me.id) resetStores()
         user.value = me
         loaded.value = true
@@ -71,7 +79,22 @@ export const useSession = defineStore('session', () => {
     )
   }
 
-  /** Commits pending deletes, signs out on the server, clears every store and goes to /login. */
+  async function meAfterSignIn(signedIn: User | Me): Promise<Me> {
+    if ('isSiteAdmin' in signedIn && typeof signedIn.isSiteAdmin === 'boolean') return signedIn
+    try {
+      return await api.get<Me>('/api/me', { ignoreUnauthorized: true })
+    } catch {
+      // Signed in all the same. Without the flag the Admin settings stay hidden until the next load().
+      return { ...signedIn, isSiteAdmin: false }
+    }
+  }
+
+  /**
+   * Commits pending deletes, signs out on the server, clears every store and goes to /login. When
+   * the server refuses (a 429, a 5xx), you stay signed in and a toast says why: the session and its
+   * HttpOnly cookie still work, so showing the sign-in page would only look like a sign-out, and the
+   * next person at this browser would be signed in as you. Never rejects.
+   */
   async function logout(): Promise<void> {
     try {
       await useDelayedDelete().flushAll()
@@ -80,8 +103,13 @@ export const useSession = defineStore('session', () => {
     }
     try {
       await api.post<void>('/auth/logout')
-    } catch {
-      // Signing out locally still works when the server can't be reached.
+    } catch (err) {
+      // A 401 means the session had already ended. A server that can't be reached can't be told
+      // anyway, so signing out locally at least clears the screen.
+      if (err instanceof ApiError && !err.isNetwork && err.status !== 401) {
+        toast.error(err, { retry: () => void logout() })
+        return
+      }
     }
     resetStores()
     user.value = null
@@ -101,7 +129,7 @@ export const useSession = defineStore('session', () => {
       members.renameLocal(previous.id, displayName)
     }
     return handled(
-      api.patch<User>('/api/me', { displayName }).then(
+      api.patch<Me>('/api/me', { displayName }).then(
         (me) => {
           user.value = me
           members.renameLocal(me.id, me.displayName)
@@ -117,6 +145,14 @@ export const useSession = defineStore('session', () => {
     )
   }
 
+  /**
+   * POST /api/me/sign-out-others: ends this account's sessions in every other browser and keeps
+   * this one. Rejects without a toast (the profile page words both outcomes).
+   */
+  function signOutOthers(): Promise<void> {
+    return handled(api.post<void>('/api/me/sign-out-others'))
+  }
+
   /** GET /auth/providers, cached for the page's lifetime (a failure is not cached). */
   function providers(): Promise<AuthProviders> {
     if (!providersCache) {
@@ -128,5 +164,5 @@ export const useSession = defineStore('session', () => {
     return handled(providersCache)
   }
 
-  return { user, loaded, error, load, devLogin, logout, updateMe, providers }
+  return { user, loaded, error, load, devLogin, logout, updateMe, signOutOthers, providers }
 })

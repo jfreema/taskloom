@@ -31,6 +31,12 @@ param entraClientSecret string = ''
 @description('Only these email domains may sign in, e.g. ["contoso.com"]. Empty allows any account the identity provider accepts.')
 param allowedEmailDomains array = []
 
+@description('Emails of the site admins, who see every user and can turn accounts off and sign people out everywhere, e.g. ["it@contoso.com"].')
+param siteAdminEmails array = []
+
+@description('Sign-in requests allowed per client address per minute. Each sign-in uses two (starting it and the provider callback), and everyone behind one office NAT address shares the budget, so size it for the office.')
+param signInPerMinute int = 120
+
 var placeholderImage = 'mcr.microsoft.com/k8se/quickstart:latest'
 // The placeholder image listens on 80; Taskloom listens on 8080.
 var port = image == placeholderImage ? 80 : 8080
@@ -187,6 +193,7 @@ var baseEnv = [
   { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
   { name: 'Auth__DevLogin__Enabled', value: 'false' }
+  { name: 'RateLimits__SignInPerMinute', value: string(signInPerMinute) }
 ]
 // The app derives the authority (https://login.microsoftonline.com/<tenant>/v2.0) from the tenant id and validates the issuer.
 var entraEnv = entraEnabled ? [
@@ -195,6 +202,7 @@ var entraEnv = entraEnabled ? [
   { name: 'Auth__Providers__microsoft__ClientSecret', secretRef: 'entra-client-secret' }
 ] : []
 var domainEnv = [for (d, i) in allowedEmailDomains: { name: 'Auth__AllowedEmailDomains__${i}', value: d }]
+var siteAdminEnv = [for (e, i) in siteAdminEmails: { name: 'Auth__SiteAdmins__${i}', value: e }]
 
 resource app 'Microsoft.App/containerApps@2024-03-01' = {
   name: names.app
@@ -233,7 +241,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: concat(baseEnv, entraEnv, domainEnv)
+          env: concat(baseEnv, entraEnv, domainEnv, siteAdminEnv)
           probes: [
             {
               type: 'Liveness'

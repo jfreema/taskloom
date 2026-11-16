@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Hosting;
 
 namespace Taskloom.Api.Tests;
 
@@ -11,6 +12,7 @@ namespace Taskloom.Api.Tests;
 public class TaskloomFactory : WebApplicationFactory<Program>
 {
     private readonly string _db = $"taskloom_test_{Guid.NewGuid():N}";
+    private bool _started;
 
     /// <summary>The server part of the connection string, without a database.</summary>
     public static string DatabaseServer => Environment.GetEnvironmentVariable("TASKLOOM_TEST_DB")
@@ -22,8 +24,15 @@ public class TaskloomFactory : WebApplicationFactory<Program>
     /// <summary>Dev login (and with it POST /api/dev/seed) is on unless a subclass turns it off.</summary>
     protected virtual bool DevLoginEnabled => true;
 
-    /// <summary>Extra configuration ("Auth:Microsoft:TenantId" and the like), read when the app starts.</summary>
-    public Dictionary<string, string?> Settings { get; } = [];
+    /// <summary>
+    /// Extra configuration ("Auth:Microsoft:TenantId" and the like), read when the app starts. It starts with sessions
+    /// checked on every request and rate limiting off; tests of those change or remove these two.
+    /// </summary>
+    public Dictionary<string, string?> Settings { get; } = new()
+    {
+        ["Auth:Session:RecheckSeconds"] = "0",
+        ["RateLimits:Enabled"] = "false",
+    };
 
     /// <summary>Service registrations applied after the app's own, for example a static OpenID Connect configuration.</summary>
     public Action<IServiceCollection>? TestServices { get; init; }
@@ -44,10 +53,19 @@ public class TaskloomFactory : WebApplicationFactory<Program>
         if (TestServices is not null) builder.ConfigureTestServices(TestServices);
     }
 
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        _started = true;
+        return host;
+    }
+
     public override async ValueTask DisposeAsync()
     {
-        using (var scope = Services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<Infrastructure.TaskloomDbContext>().Database.EnsureDeletedAsync();
+        // An app that refused to start (a test of a startup check) has no database to drop.
+        if (_started)
+            using (var scope = Services.CreateScope())
+                await scope.ServiceProvider.GetRequiredService<Infrastructure.TaskloomDbContext>().Database.EnsureDeletedAsync();
         await base.DisposeAsync();
         if (Directory.Exists(FilesRoot)) Directory.Delete(FilesRoot, recursive: true);
     }

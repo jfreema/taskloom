@@ -9,8 +9,22 @@ namespace Taskloom.Api;
 
 public record UserDto(Guid Id, string Email, string DisplayName);
 
+/// <summary>GET and PATCH /api/me: the signed-in user.</summary>
+/// <param name="IsSiteAdmin">Their email is in Auth:SiteAdmins, so the app shows Settings › People.</param>
+public record MeDto(Guid Id, string Email, string DisplayName, bool IsSiteAdmin);
+
 /// <param name="Pending">The user has no sign-in identity yet (invited, never signed in).</param>
-public record MemberDto(Guid UserId, string Email, string DisplayName, WorkspaceRole Role, bool Pending);
+/// <param name="Disabled">A site admin turned the account off; they stay a member.</param>
+public record MemberDto(Guid UserId, string Email, string DisplayName, WorkspaceRole Role, bool Pending, bool Disabled);
+
+/// <summary>A row of GET /api/admin/users (site admins only).</summary>
+/// <param name="Pending">No sign-in identity yet (invited, never signed in).</param>
+/// <param name="LastSeenAt">The latest check of any of their sessions; null when they never signed in since sessions existed.</param>
+/// <param name="ActiveSessions">Sessions neither signed out nor expired.</param>
+/// <param name="Workspaces">How many workspaces they are a member of.</param>
+public record AdminUserDto(
+    Guid Id, string Email, string DisplayName, bool Pending, bool Disabled, bool IsSiteAdmin,
+    DateTimeOffset CreatedAt, DateTimeOffset? LastSeenAt, int ActiveSessions, int Workspaces);
 
 public record StatusDto(Guid Id, Guid ListId, string Name, string Color, StatusCategory Category, double Position);
 public record ListSummaryDto(Guid Id, Guid SpaceId, string Name, double Position, List<StatusDto> Statuses);

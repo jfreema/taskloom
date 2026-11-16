@@ -44,6 +44,20 @@ az deployment group create -g taskloom-rg -f deploy/azure/main.bicep -p deploy/a
 
 Dev sign-in is always off in this template.
 
+## 4. Name the site admins
+
+Site admins see everyone who has signed in or been invited (Settings › People), can turn an account off (the
+person is signed out everywhere and can't sign in until it is turned back on) and can sign people out everywhere.
+List their emails in `siteAdminEmails`, in `main.bicepparam` or next to the other `-p` values of your redeploy
+(for example `siteAdminEmails='["it@yourorg.com"]'`). They become `Auth__SiteAdmins__0`, `Auth__SiteAdmins__1` and
+so on. A redeploy uses the defaults for the parameters it doesn't pass, so pass the image and Entra values again too.
+
+Sign-in sessions are checked against the database every minute, end after 14 days without use and 30 days after
+sign-in, and sign-in and API calls are rate limited per address and per user. The client address comes from the
+Container Apps ingress (`X-Forwarded-For`), so everyone behind one office NAT address shares the sign-in budget.
+This template sets it to 120 sign-in requests a minute per address (`signInPerMinute`; each sign-in uses two) instead
+of the app's default of 20. Raise it if a whole office signs in at once. The root README lists the other settings.
+
 ## Still to do before the org rollout
 
 - Move the Postgres password and Entra secret into Key Vault references.

@@ -64,6 +64,8 @@ public class AuthTests(AuthTests.Site factory) : IClassFixture<AuthTests.Site>
             noTenant.Settings["Auth:Providers:google:ClientId"] = "google-client";
             noTenant.Settings["Auth:Providers:dev:Authority"] = "https://dev.example";
             noTenant.Settings["Auth:Providers:dev:ClientId"] = "dev-client";
+            // Google without an allowlist would refuse to start (StartupTests).
+            noTenant.Settings["Auth:AllowAnyAccount"] = "true";
             var client = noTenant.CreateClient(new() { AllowAutoRedirect = false });
             var providers = await (await client.GetAsync("/auth/providers")).ReadAsync<AuthProvidersDto>();
             Assert.Equal(["google"], providers.Providers.Select(p => p.Key));

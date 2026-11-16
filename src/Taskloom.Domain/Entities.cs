@@ -7,6 +7,11 @@ public class User
     public required string Email { get; set; }
     public required string DisplayName { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    /// <summary>
+    /// Set when a site admin turned the account off: the person can't sign in and every session of theirs ends. They
+    /// stay a member and assignee wherever they were.
+    /// </summary>
+    public DateTimeOffset? DisabledAt { get; set; }
     /// <summary>Empty for a pending user: invited, never signed in.</summary>
     public List<UserIdentity> Identities { get; set; } = [];
 }
@@ -18,6 +23,28 @@ public class UserIdentity
     public Guid UserId { get; set; }
     public required string Provider { get; set; }
     public required string Subject { get; set; }
+}
+
+/// <summary>
+/// One sign-in on one browser. The cookie names its session, and the server checks the row again every few seconds,
+/// so signing out, turning an account off or taking someone off the allowlist ends a cookie even if it was copied.
+/// </summary>
+public class UserSession
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public User? User { get; set; }
+    /// <summary>How the person signed in: "dev", "google", "microsoft" or another provider's key.</summary>
+    public required string Provider { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    /// <summary>The last time the session was checked against the database (at most every Auth:Session:RecheckSeconds).</summary>
+    public DateTimeOffset LastSeenAt { get; set; }
+    /// <summary>CreatedAt + Auth:Session:MaxDays: the session ends then, however active it is.</summary>
+    public DateTimeOffset ExpiresAt { get; set; }
+    /// <summary>Set by signing out, "Sign out other devices", or a site admin.</summary>
+    public DateTimeOffset? RevokedAt { get; set; }
+    /// <summary>The browser's User-Agent at sign-in, without control characters, at most 300 characters.</summary>
+    public string? UserAgent { get; set; }
 }
 
 public enum WorkspaceRole { Owner = 0, Admin = 1, Member = 2, Guest = 3 }

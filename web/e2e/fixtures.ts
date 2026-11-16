@@ -13,8 +13,10 @@ import {
   type TestInfo,
 } from '@playwright/test'
 import type {
+  AdminUser,
   IsoDate,
   ListSummary,
+  Me,
   Member,
   ProblemDetails,
   Space,
@@ -45,6 +47,13 @@ export const MOD = 'ControlOrMeta'
 
 /** The display name that signIn() and the seeded fixture give a new user unless told otherwise. */
 export const DEFAULT_DISPLAY_NAME = 'Jared Doe'
+
+/**
+ * The site admin of the e2e API run: it starts with Auth__SiteAdmins__0 set to this address (README), so signing
+ * in with it gives Settings › People. Every test and worker shares this one account: never turn it off or sign it
+ * out everywhere, or the other tests signed in as it lose their sessions.
+ */
+export const SITE_ADMIN_EMAIL = 'e2e-site-admin@example.com'
 
 /** The axe-core rule tags that expectNoAxeViolations() runs (spec 11.1); wcag22aa includes target-size (24px). */
 export const AXE_TAGS: readonly string[] = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']
@@ -93,7 +102,7 @@ export interface Api {
   /** Sends `data` as JSON and returns the parsed answer (undefined for an empty one); throws ApiError on a non-2xx. */
   json<T = unknown>(method: ApiMethod, url: string, data?: unknown): Promise<T>
   /** GET /api/me */
-  me(): Promise<User>
+  me(): Promise<Me>
   /** GET /api/workspaces: every workspace tree the user can see, oldest first. */
   workspaces(): Promise<Workspace[]>
   /** GET /api/lists/{id}/tasks: all tasks of the list, subtasks included. */
@@ -106,6 +115,8 @@ export interface Api {
   members(workspaceId: Uuid): Promise<Member[]>
   /** GET /api/workspaces/{id}/tags */
   tags(workspaceId: Uuid): Promise<Tag[]>
+  /** GET /api/admin/users: every account, for a site admin (404 for anyone else). */
+  adminUsers(): Promise<AdminUser[]>
 }
 
 function withCsrf<O extends { headers?: { [key: string]: string } }>(options?: O): O {
@@ -130,13 +141,14 @@ export function api(page: Page): Api {
     head: (url, options) => request.head(url, withCsrf(options)),
     fetch: (urlOrRequest, options) => request.fetch(urlOrRequest, withCsrf(options)),
     json,
-    me: () => json<User>('GET', '/api/me'),
+    me: () => json<Me>('GET', '/api/me'),
     workspaces: () => json<Workspace[]>('GET', '/api/workspaces'),
     listTasks: (listId) => json<Task[]>('GET', `/api/lists/${listId}/tasks`),
     task: (id) => json<TaskDetail>('GET', `/api/tasks/${id}`),
     patchTask: (id, patch) => json<Task>('PATCH', `/api/tasks/${id}`, patch),
     members: (workspaceId) => json<Member[]>('GET', `/api/workspaces/${workspaceId}/members`),
     tags: (workspaceId) => json<Tag[]>('GET', `/api/workspaces/${workspaceId}/tags`),
+    adminUsers: () => json<AdminUser[]>('GET', '/api/admin/users'),
   }
 }
 

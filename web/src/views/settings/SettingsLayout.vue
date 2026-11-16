@@ -1,14 +1,21 @@
 <script setup lang="ts">
 // Settings frame (spec 8.13): the "Settings" h1 in the page header, an inner
 // <nav aria-label="Settings"> (220px) with the groups Account (Profile, Appearance) and Workspace
-// (General, Members, Tags), and the child page (max 720px). It stays beside the page while it
-// scrolls. Below 640px of page width the nav becomes one row of links that scrolls sideways, and
-// the active link is scrolled into view.
-import { nextTick, ref, watch } from 'vue'
+// (General, Members, Tags), plus Admin (People) for site admins only, and the child page (max
+// 720px). It stays beside the page while it scrolls. Below 640px of page width the nav becomes one
+// row of links that scrolls sideways, and the active link is scrolled into view.
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import PageHeader from '../../components/shell/PageHeader.vue'
+import { useSession } from '../../stores/session'
 
-const groups = [
+interface NavGroup {
+  id: string
+  label: string
+  links: readonly { name: string; label: string }[]
+}
+
+const BASE_GROUPS: readonly NavGroup[] = [
   {
     id: 'account',
     label: 'Account',
@@ -26,7 +33,14 @@ const groups = [
       { name: 'settings-tags', label: 'Tags' },
     ],
   },
-] as const
+]
+
+const ADMIN_GROUP: NavGroup = { id: 'admin', label: 'Admin', links: [{ name: 'settings-people', label: 'People' }] }
+
+const session = useSession()
+
+// Hidden rather than disabled: for everyone else the page doesn't exist (the API answers 404).
+const groups = computed<readonly NavGroup[]>(() => (session.user?.isSiteAdmin ? [...BASE_GROUPS, ADMIN_GROUP] : BASE_GROUPS))
 
 const route = useRoute()
 const nav = ref<HTMLElement | null>(null)
@@ -188,7 +202,7 @@ watch(
     flex-shrink: 0;
   }
 
-  /* A thin rule between the two groups stands in for their labels. */
+  /* A thin rule between the groups stands in for their labels. */
   .group + .group::before {
     content: "";
     flex-shrink: 0;

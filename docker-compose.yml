@@ -49,6 +49,10 @@ services:
       # Optional: Google or Microsoft sign-in. See README.
       Auth__Providers__google__ClientId: ${GOOGLE_CLIENT_ID:-}
       Auth__Providers__google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      # Google sign-in needs an allowlist (or the app won't start): the one email allowed to sign in. Empty is ignored.
+      Auth__AllowedEmails__0: ${TASKLOOM_ALLOWED_EMAIL:-}
+      # Optional: a site admin, who sees everyone in Settings > People and can turn accounts off.
+      Auth__SiteAdmins__0: ${TASKLOOM_ADMIN_EMAIL:-}
       # Microsoft sign-in is limited to one Entra tenant and stays off without its tenant id (a GUID).
       Auth__Microsoft__TenantId: ${ENTRA_TENANT_ID:-}
       Auth__Providers__microsoft__ClientId: ${ENTRA_CLIENT_ID:-}

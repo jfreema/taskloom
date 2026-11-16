@@ -5,3 +5,5 @@ param appName = 'taskloom'
 //   az deployment group create ... -p postgresAdminPassword=<value>
 param postgresAdminPassword = readEnvironmentVariable('TASKLOOM_PG_PASSWORD', '')
 param allowedEmailDomains = []
+param siteAdminEmails = []
+param signInPerMinute = 120

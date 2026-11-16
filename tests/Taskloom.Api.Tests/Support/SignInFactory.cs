@@ -65,13 +65,14 @@ public class SignInFactory : TaskloomFactory
         await options.Events.TokenValidated(context);
         if (context.Result?.Handled == true)
             return new TokenOutcome(null, http.Response.Headers.Location.ToString());
-        return new TokenOutcome(context.Principal, null);
+        return new TokenOutcome(context.Principal, null, context.Properties);
     }
 }
 
 /// <param name="Principal">The cookie principal to sign in with, when the sign-in was accepted.</param>
 /// <param name="Redirect">Where the browser was sent instead, when it was refused.</param>
-public record TokenOutcome(ClaimsPrincipal? Principal, string? Redirect)
+/// <param name="Properties">The properties the cookie would be issued with, when the sign-in was accepted.</param>
+public record TokenOutcome(ClaimsPrincipal? Principal, string? Redirect, AuthenticationProperties? Properties = null)
 {
     public Guid? UserId => Principal?.FindFirst(ClaimsExtensions.UserIdClaim)?.Value is { } id ? Guid.Parse(id) : null;
 

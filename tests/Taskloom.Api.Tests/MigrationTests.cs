@@ -5,10 +5,11 @@ using Taskloom.Infrastructure;
 
 namespace Taskloom.Api.Tests;
 
-/// <summary>The Redesign migration on rows the first draft wrote (spec 4.5), in a database of its own.</summary>
+/// <summary>Each migration on rows the versions before it wrote, in a database of its own.</summary>
 public class MigrationTests
 {
     private const string Initial = "20261103223954_Initial";
+    private const string Redesign = "20261104083442_Redesign";
 
     [Fact]
     public async Task Redesign_migration_preserves_assignees_descriptions_and_colours()
@@ -75,6 +76,53 @@ public class MigrationTests
             Assert.Equal(["#7A868C", "#3D7DF5", "#9B5DE5", "#2E9F5E", "#123abc"], statuses);
             var spaces = await db.Spaces.AsNoTracking().OrderBy(s => s.Position).Select(s => s.Color).ToListAsync();
             Assert.Equal(["#14998A", "#E5484D"], spaces);
+        }
+        finally
+        {
+            await db.Database.EnsureDeletedAsync();
+        }
+    }
+
+    [Fact]
+    public async Task SessionsAndDisabledUsers_migration_keeps_existing_users_and_starts_with_no_sessions()
+    {
+        var database = $"taskloom_mig_{Guid.NewGuid():N}";
+        var options = new DbContextOptionsBuilder<TaskloomDbContext>().UseNpgsql($"{TaskloomFactory.DatabaseServer};Database={database}").Options;
+        await using var db = new TaskloomDbContext(options);
+        try
+        {
+            await db.GetService<IMigrator>().MigrateAsync(Redesign);
+            Guid user = Guid.NewGuid(), identity = Guid.NewGuid(), workspace = Guid.NewGuid();
+            var created = new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero);
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO users ("Id", "Email", "DisplayName", "CreatedAt") VALUES ({user}, 'kept@example.com', 'Kept', {created})
+                """);
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO user_identities ("Id", "UserId", "Provider", "Subject") VALUES ({identity}, {user}, 'google', 'kept-sub')
+                """);
+            await db.Database.ExecuteSqlAsync($"""INSERT INTO workspaces ("Id", "Name", "CreatedAt") VALUES ({workspace}, 'Kept workspace', {created})""");
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO workspace_members ("WorkspaceId", "UserId", "Role", "JoinedAt") VALUES ({workspace}, {user}, 'Owner', {created})
+                """);
+
+            await db.GetService<IMigrator>().MigrateAsync();
+
+            // The user is untouched and on; nobody has a session yet (old cookies sign in again).
+            var kept = await db.Users.AsNoTracking().Include(u => u.Identities).SingleAsync();
+            Assert.Equal((user, "kept@example.com", "Kept", created, (DateTimeOffset?)null), (kept.Id, kept.Email, kept.DisplayName, kept.CreatedAt, kept.DisabledAt));
+            Assert.Equal(("google", "kept-sub"), (Assert.Single(kept.Identities).Provider, kept.Identities[0].Subject));
+            Assert.Equal(1, await db.WorkspaceMembers.CountAsync());
+            Assert.Equal(0, await db.UserSessions.CountAsync());
+
+            // Sessions can be stored, and go with their user.
+            db.UserSessions.Add(new Domain.UserSession
+            {
+                UserId = user, Provider = "google", CreatedAt = created, LastSeenAt = created, ExpiresAt = created.AddDays(30),
+                UserAgent = new string('u', 300),
+            });
+            await db.SaveChangesAsync();
+            await db.Users.Where(u => u.Id == user).ExecuteDeleteAsync();
+            Assert.Equal(0, await db.UserSessions.CountAsync());
         }
         finally
         {

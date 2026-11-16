@@ -100,7 +100,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         (await user.Client.SeedAsync(user.Workspace.Id, fillers: 0)).EnsureSuccessStatusCode();
 
         using var me = await GetJsonAsync(user.Client, "/api/me");
-        Assert.Equal(Sorted("id", "email", "displayName"), me.RootElement.Keys());
+        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin"), me.RootElement.Keys());
 
         using var tree = await GetJsonAsync(user.Client, "/api/workspaces");
         var ws = tree.RootElement[0];
@@ -116,7 +116,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         Assert.Equal(JsonValueKind.Number, status.GetProperty("position").ValueKind);
 
         using var members = await GetJsonAsync(user.Client, $"/api/workspaces/{user.Workspace.Id}/members");
-        Assert.All(members.RootElement.EnumerateArray(), m => Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending"), m.Keys()));
+        Assert.All(members.RootElement.EnumerateArray(), m => Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending", "disabled"), m.Keys()));
 
         var work = (await user.Client.TreeAsync()).Single().Spaces.Single(s => s.Name == "Work");
         var website = work.Lists.Single(l => l.Name == "Website refresh");
@@ -221,9 +221,9 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         using var statusPatched = await JsonAsync(await user.Client.PatchAsJsonAsync($"/api/statuses/{status.RootElement.GetProperty("id").GetString()}", new { name = "On hold" }));
         Assert.Equal(Sorted("id", "listId", "name", "color", "category", "position"), statusPatched.RootElement.Keys());
         using var member = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/workspaces/{user.Workspace.Id}/members", new { email = Builders.NewEmail(), role = "Member" }));
-        Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending"), member.RootElement.Keys());
+        Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending", "disabled"), member.RootElement.Keys());
         using var me = await JsonAsync(await user.Client.PatchAsJsonAsync("/api/me", new { displayName = "Me" }));
-        Assert.Equal(userKeys, me.RootElement.Keys());
+        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin"), me.RootElement.Keys());
         using var workspace = await JsonAsync(await user.Client.PostAsJsonAsync("/api/workspaces", new { name = "W" }));
         Assert.Equal(Sorted("id", "name", "role", "spaces"), workspace.RootElement.Keys());
         using (var form = new MultipartFormDataContent { { new ByteArrayContent("x"u8.ToArray()), "file", "x.txt" } })

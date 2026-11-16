@@ -148,6 +148,15 @@ const routes: RouteRecordRaw[] = [
             component: () => import('./views/settings/TagsSettings.vue'),
             meta: { title: 'Tags' },
           },
+          {
+            path: 'people',
+            name: 'settings-people',
+            component: () => import('./views/settings/PeopleSettings.vue'),
+            meta: { title: 'People' },
+            // Site admins only. The global guard has loaded the session by now. The API answers 404
+            // to anyone else as well; this only spares them an empty page.
+            beforeEnter: () => (useSession().user?.isSiteAdmin ? true : { name: 'settings-profile', replace: true }),
+          },
         ],
       },
     ],

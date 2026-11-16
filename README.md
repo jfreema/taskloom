@@ -36,17 +36,26 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
   "Create more" keeps it open, and pasting several lines offers one task per line.
 - **Undo:** completing, moving, rescheduling, bulk edits and deletes all show a toast with Undo (Mod+Z works too).
 - **Settings:**
-  - Profile: your display name.
+  - Profile: your display name, and "Sign out other devices" for browsers you no longer use.
   - Appearance: System, Light or Dark theme, and whether single-key shortcuts are on.
   - Workspace: rename or delete it.
-  - Members: invite several people at once, change roles, remove people, copy the sign-in link.
+  - Members: invite several people at once, change roles, remove people, copy the sign-in link. People whose
+    account is turned off are marked "Turned off".
+  - People (site admins only): everyone who has signed in or been invited, when they were last active and how many
+    workspaces they are in. Turn an account off or on, or sign someone out everywhere.
   - Tags: create, rename, recolour or delete them.
   - Statuses are edited per list from the list menu or the board. Spaces and lists can be created, recoloured,
     moved and deleted from the sidebar.
 - **Roles:** Owner, Admin, Member and Guest. Guests can read everything in the workspace and comment, but not
-  edit. Every API call is checked against the caller's workspace membership.
+  edit. Every API call is checked against the caller's workspace membership. Site admins (`Auth:SiteAdmins`) also
+  manage everyone's accounts in Settings › People: a turned-off account is signed out everywhere and can't sign in
+  until it is turned back on, but stays a member and assignee, and its tasks and comments stay.
 - **Sign-in:** Microsoft Entra ID (one tenant) and Google, using OpenID Connect and a cookie session. A dev-only
-  email sign-in is available for local testing. An email or domain allowlist limits who can sign in.
+  email sign-in is available for local testing. An email or domain allowlist limits who can sign in; Google needs
+  one (or `Auth:AllowAnyAccount=true`), and outside Development the app won't start without it. Each sign-in is a
+  session on the server that the cookie names and that is checked again every minute, so signing out, "Sign out
+  other devices", turning an account off or taking an email off the allowlist ends it, even for a copied cookie. A
+  session ends after 14 days without use and 30 days after sign-in. Sign-in and API calls are rate limited.
 - **Design:** the "Loom" design system with light and dark themes. Phone layouts use a drawer, a task sheet, an
   agenda calendar and a "+" button, with 44px touch targets. The app is keyboard-first and targets WCAG 2.2 AA;
   the end-to-end tests run axe on the screens in both themes.
@@ -140,6 +149,13 @@ docker compose exec -T db pg_restore -U taskloom -d taskloom < taskloom-before-i
 
 Run the version that matches the backup afterwards: starting this version again upgrades the restored data again.
 
+### Upgrading to server-side sessions (Security 1)
+
+This upgrade only adds to the database (a `user_sessions` table and a `DisabledAt` column on users), so existing
+data stays as it is. Sign-in cookies from before it have no session, so everyone signs in once more. If Google
+sign-in is on, set an allowlist first (`Auth__AllowedEmails__0` or `Auth__AllowedEmailDomains__0`, see
+Configuration) or `Auth__AllowAnyAccount=true`: without one the app refuses to start and says so.
+
 ## Run it locally
 
 You need **Docker**: Docker Desktop, or Colima with the Docker CLI on a Mac. That's all for option A.
@@ -193,13 +209,16 @@ Create an OAuth client (in the Google Cloud console, or as an Entra ID app regis
 `http://localhost:8080/auth/callback/google` or `.../auth/callback/microsoft` (use port 5173 for option B), then:
 
 ```bash
-GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... docker compose up --build
+GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... TASKLOOM_ALLOWED_EMAIL=you@gmail.com docker compose up --build
 ENTRA_TENANT_ID=<tenant GUID> ENTRA_CLIENT_ID=... ENTRA_CLIENT_SECRET=... docker compose up --build
 ```
 
-Microsoft sign-in accepts accounts from one Entra tenant only and stays off until `ENTRA_TENANT_ID` holds the
-tenant id (a GUID, from Entra ID › Overview). For option B, set the `Auth__...` settings below instead. A button
-for each configured provider appears on the sign-in page.
+Google signs in any Google account, so it needs an allowlist: `TASKLOOM_ALLOWED_EMAIL` lets that one address in
+(use the `Auth__AllowedEmails__<n>` and `Auth__AllowedEmailDomains__<n>` settings below for more). Without one the
+app refuses to start, except in Development, where it logs a warning. Microsoft sign-in accepts accounts from one
+Entra tenant only and stays off until `ENTRA_TENANT_ID` holds the tenant id (a GUID, from Entra ID › Overview).
+Add `TASKLOOM_ADMIN_EMAIL=you@...` to make yourself a site admin. For option B, set the `Auth__...` settings below
+instead. A button for each configured provider appears on the sign-in page.
 
 ## Tests
 
@@ -224,9 +243,13 @@ cd web && npm ci && npm run build                 # writes the app into src/Task
 npx playwright install chromium                   # once
 cd .. && ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 \
   ConnectionStrings__Taskloom="Host=localhost;Port=5432;Database=taskloom_e2e;Username=taskloom;Password=taskloom" \
-  Auth__DevLogin__Enabled=true dotnet run --project src/Taskloom.Api --no-launch-profile
+  Auth__DevLogin__Enabled=true Auth__SiteAdmins__0=e2e-site-admin@example.com \
+  dotnet run --project src/Taskloom.Api --no-launch-profile
 cd web && npm run e2e                             # in a second terminal
 ```
+
+`Auth__SiteAdmins__0` makes the address the tests sign in with for Settings › People a site admin; without it those
+tests fail.
 
 The API creates `taskloom_e2e` on its first start. Start each run on a fresh database, because one test expects
 the seeded invited people never to have signed in. Stop the API, drop the database, then start the API again:
@@ -248,12 +271,20 @@ The middle column is the variable `docker-compose.yml` reads for it, where there
 | --- | --- | --- | --- |
 | `ConnectionStrings__Taskloom` | | local database `taskloom` | PostgreSQL connection string |
 | `Database__MigrateOnStartup` | | `true` | Apply database migrations when the app starts (back up first, see above) |
-| `Auth__DevLogin__Enabled` | on | `true` in Development only | Type-any-email sign-in, plus `POST /api/dev/seed`. Never turn it on anywhere real |
+| `Auth__DevLogin__Enabled` | on | `true` in Development only | Type-any-email sign-in, plus `POST /api/dev/seed`. Never turn it on anywhere real. Turning it off also ends everyone's dev sign-in sessions, at their next check |
 | `Auth__Providers__google__ClientId` / `ClientSecret` | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | empty | Google sign-in |
 | `Auth__Microsoft__TenantId` | `ENTRA_TENANT_ID` | empty | The Entra tenant id, a GUID. Microsoft sign-in is limited to this tenant and is off without it |
 | `Auth__Providers__microsoft__ClientId` / `ClientSecret` | `ENTRA_CLIENT_ID` / `ENTRA_CLIENT_SECRET` | empty | The Entra app registration |
 | `Auth__Providers__<key>__Authority` / `ClientId` / `ClientSecret` | | | Any other OpenID Connect provider; its callback is `/auth/callback/<key>` |
-| `Auth__AllowedEmails__0`, `Auth__AllowedEmailDomains__0` | | empty (anyone) | Limit who can sign in |
+| `Auth__AllowedEmails__0`, `Auth__AllowedEmailDomains__0` | `TASKLOOM_ALLOWED_EMAIL` (the first email) | empty (anyone) | Limit who can sign in. Google sign-in needs one of them (see the next row). Blank entries are ignored |
+| `Auth__AllowAnyAccount` | | `false` | `true` lets Google sign in any Google account without an allowlist. Otherwise, outside Development, Google with no allowlist stops the app from starting |
+| `Auth__SiteAdmins__0`, `Auth__SiteAdmins__1`, ... | `TASKLOOM_ADMIN_EMAIL` (the first one) | empty | Emails of the site admins (any case), who see everyone in Settings › People, turn accounts off and on and sign people out everywhere. Blank entries are ignored |
+| `Auth__Session__RecheckSeconds` | | `60` (`0` in Development) | How often a sign-in session is checked against the database; `0` checks every request. A signed-out or turned-off session can keep working this long |
+| `Auth__Session__IdleDays` | | `14` | A session ends after this many days without use |
+| `Auth__Session__MaxDays` | | `30` | A session ends this many days after sign-in, however active |
+| `RateLimits__Enabled` | | `true` | Turns all rate limiting on or off |
+| `RateLimits__SignInPerMinute` | | `20` | Per client IP: starting a sign-in and the providers' callbacks. Not the provider list, dev login or signing out (a refused sign-out would leave the session working) |
+| `RateLimits__ApiPerMinute` | | `600` | Per signed-in user (per client IP when signed out), for `/api` calls. Static files, the app's pages and `/healthz` are never limited |
 | `FileStore__Provider` | `Azure` (Azurite) | `Local` | `Local` (disk) or `Azure` (Blob Storage) |
 | `FileStore__Local__Root` | | `data/files` in the app folder | Where `Local` keeps attachments |
 | `FileStore__Azure__ConnectionString` or `FileStore__Azure__AccountUrl` | Azurite | empty | A connection string (Azurite), or an account URL plus managed identity in Azure |
@@ -262,6 +293,12 @@ The middle column is the variable `docker-compose.yml` reads for it, where there
 
 docker compose also reads `TASKLOOM_PORT` (8080), `TASKLOOM_DB_PORT` (5432), `TASKLOOM_BLOB_PORT` (10000) and
 `TASKLOOM_BIND` (127.0.0.1).
+
+The per-IP rate limits use the client address from `X-Forwarded-For`, which the app trusts from any sender (as it
+does for the scheme and host). That is right behind Azure Container Apps or Cloud Run ingress, which set the header;
+on a server that clients reach directly, they can pick their own address and get around the per-IP limits. Everyone
+behind one NAT address (an office network) shares the per-IP sign-in budget, and each sign-in uses two requests, so
+raise `RateLimits__SignInPerMinute` for an office (the Azure template sets 120).
 
 ## Project layout
 

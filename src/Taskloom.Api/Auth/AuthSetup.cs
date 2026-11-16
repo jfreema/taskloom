@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace Taskloom.Api.Auth;
@@ -13,7 +15,9 @@ public static class AuthSetup
     {
         var options = config.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
         services.AddSingleton(options);
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<UserProvisioning>();
+        services.AddScoped<SessionService>();
 
         var auth = services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(o =>
@@ -22,12 +26,16 @@ public static class AuthSetup
                 o.Cookie.HttpOnly = true;
                 o.Cookie.SameSite = SameSiteMode.Lax;
                 o.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-                o.ExpireTimeSpan = TimeSpan.FromDays(14);
+                o.ExpireTimeSpan = TimeSpan.FromDays(options.Session.IdleDays);
                 o.SlidingExpiration = true;
                 // The SPA handles navigation; API calls get status codes, not redirects.
                 o.Events.OnRedirectToLogin = ctx => { ctx.HttpContext.RespondUnauthorized(); return Task.CompletedTask; };
                 o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = 403; return Task.CompletedTask; };
+                // Spec C: the cookie names a session, which is checked against the database every RecheckSeconds.
+                o.Events.OnValidatePrincipal = ctx => ctx.HttpContext.RequestServices.GetRequiredService<SessionService>().ValidateAsync(ctx);
             });
+        // After AddCookie's own post-configuration, which creates the ticket format this wraps.
+        services.AddSingleton<IPostConfigureOptions<CookieAuthenticationOptions>, CapCookiesAtSessionEnd>();
 
         // Spec 5.8: Microsoft only with a tenant id (its authority is that tenant's), and every issuer validated.
         foreach (var provider in options.EnabledProviders())
@@ -62,7 +70,10 @@ public static class AuthSetup
                         ctx.HandleResponse();
                         return;
                     }
-                    ctx.Principal = UserProvisioning.PrincipalFor(result.User, provider.Key);
+                    var session = await ctx.HttpContext.RequestServices.GetRequiredService<SessionService>()
+                        .CreateAsync(result.User.Id, provider.Key, ctx.Request.Headers.UserAgent, ctx.HttpContext.RequestAborted);
+                    ctx.Principal = UserProvisioning.PrincipalFor(result.User, provider.Key, session.Id);
+                    SessionService.Stamp(ctx.Properties!, session);
                 };
                 o.Events.OnRemoteFailure = ctx =>
                 {
@@ -102,7 +113,7 @@ public static class AuthSetup
             return Results.Challenge(new AuthenticationProperties { RedirectUri = ReturnUrls.Safe(returnUrl) }, [p.Scheme]);
         });
 
-        g.MapPost("/dev-login", async (DevLoginRequest req, AuthOptions o, UserProvisioning provisioning, HttpContext http) =>
+        g.MapPost("/dev-login", async (DevLoginRequest req, AuthOptions o, UserProvisioning provisioning, SessionService sessions, HttpContext http) =>
         {
             if (!o.DevLogin.Enabled) return Results.NotFound();
             var email = Emails.Normalize(req.Email);
@@ -110,13 +121,20 @@ public static class AuthSetup
             // A blank name is guessed from the email (spec 5.5, NameGuess).
             var displayName = req.DisplayName?.Trim();
             if (displayName is { Length: > Limits.Name }) return Problems.BadRequest("Display names can be up to 200 characters.");
-            var user = await provisioning.DevSignInAsync(email, displayName);
-            await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, UserProvisioning.PrincipalFor(user, UserProvisioning.DevProvider));
+            var result = await provisioning.DevSignInAsync(email, displayName);
+            if (result.User is not { } user) return Results.Problem(detail: result.Error, statusCode: StatusCodes.Status403Forbidden);
+            var session = await sessions.CreateAsync(user.Id, UserProvisioning.DevProvider, http.Request.Headers.UserAgent, http.RequestAborted);
+            var properties = new AuthenticationProperties();
+            SessionService.Stamp(properties, session);
+            await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
+                UserProvisioning.PrincipalFor(user, UserProvisioning.DevProvider, session.Id), properties);
             return Results.Ok(new UserDto(user.Id, user.Email, user.DisplayName));
         }).AddEndpointFilter<RequireTaskloomHeader>();
 
-        g.MapPost("/logout", async (HttpContext http) =>
+        // The session ends first, so a copy of the cookie stops working too (at its next check).
+        g.MapPost("/logout", async (HttpContext http, SessionService sessions) =>
         {
+            if (SessionService.SessionIdOf(http.User) is { } sessionId) await sessions.RevokeAsync(sessionId, http.RequestAborted);
             await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Results.NoContent();
         }).AddEndpointFilter<RequireTaskloomHeader>();
@@ -124,6 +142,16 @@ public static class AuthSetup
 }
 
 public record DevLoginRequest(string? Email, string? DisplayName);
+
+/// <summary>Wraps the cookie scheme's ticket format so that no cookie outlives its session (<see cref="SessionCappedTicketFormat"/>).</summary>
+public sealed class CapCookiesAtSessionEnd : IPostConfigureOptions<CookieAuthenticationOptions>
+{
+    public void PostConfigure(string? name, CookieAuthenticationOptions options)
+    {
+        if (name == CookieAuthenticationDefaults.AuthenticationScheme && options.TicketDataFormat is not SessionCappedTicketFormat)
+            options.TicketDataFormat = new SessionCappedTicketFormat(options.TicketDataFormat);
+    }
+}
 
 /// <summary>
 /// CSRF guard: state-changing calls must carry an "X-Taskloom: 1" header. A cross-site form

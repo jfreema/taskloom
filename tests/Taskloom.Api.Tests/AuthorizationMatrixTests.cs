@@ -31,6 +31,7 @@ public class AuthorizationMatrixTests(TaskloomFactory factory) : IClassFixture<T
     {
         ["#5 GET /api/me"] = new(Min.SignedIn, HttpStatusCode.OK, _ => Get("/api/me")),
         ["#6 PATCH /api/me"] = new(Min.SignedIn, HttpStatusCode.OK, _ => Patch("/api/me", new { displayName = "Renamed Person" })),
+        ["POST /api/me/sign-out-others"] = new(Min.SignedIn, HttpStatusCode.NoContent, _ => Post("/api/me/sign-out-others", new { })),
         ["#7 GET /api/workspaces"] = new(Min.SignedIn, HttpStatusCode.OK, _ => Get("/api/workspaces")),
         ["#8 POST /api/workspaces"] = new(Min.SignedIn, HttpStatusCode.Created, _ => Post("/api/workspaces", new { name = "Another" })),
         ["#9 PATCH /api/workspaces/{id}"] = new(Min.Admin, HttpStatusCode.NoContent, w => Patch($"/api/workspaces/{w.WorkspaceId}", new { name = "Renamed" })),

@@ -48,7 +48,8 @@ test.describe('sign-in, seed and api(page)', () => {
     // The session cookie is in the page's browser context, so the browser itself is signed in.
     expect((await page.context().cookies()).map((c) => c.name)).toContain('taskloom.auth')
     const me = await page.goto('/api/me')
-    expect(await me?.json()).toEqual(seeded.me)
+    // GET /api/me adds the site-admin flag to the user that dev login answered (Security 1, spec D).
+    expect(await me?.json()).toEqual({ ...seeded.me, isSiteAdmin: false })
 
     // Structure: Work (new) with Website refresh (Review preset) and Admin (Simple); Personal / Tasks reused.
     expect(Object.keys(seeded.spaces).sort()).toEqual(['Personal', 'Work'])

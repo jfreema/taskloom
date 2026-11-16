@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Taskloom.Api.Auth;
 using Taskloom.Application;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
@@ -12,21 +13,28 @@ public static class WorkspaceEndpoints
 
     public static void MapWorkspaceEndpoints(this RouteGroupBuilder api)
     {
-        api.MapGet("/me", async (Access access, TaskloomDbContext db) =>
+        api.MapGet("/me", async (Access access, TaskloomDbContext db, AuthOptions options) =>
         {
             var u = await db.Users.FirstOrDefaultAsync(x => x.Id == access.UserId);
             // A session whose user is gone is signed out: 401, without a body.
-            return u is null ? throw new UnauthorizedAccessException() : Results.Ok(new UserDto(u.Id, u.Email, u.DisplayName));
+            return u is null ? throw new UnauthorizedAccessException() : Results.Ok(Me(u, options));
         });
 
-        api.MapPatch("/me", async (UpdateMeRequest req, Access access, TaskloomDbContext db) =>
+        api.MapPatch("/me", async (UpdateMeRequest req, Access access, TaskloomDbContext db, AuthOptions options) =>
         {
             var name = Text.Require(req.DisplayName, Limits.Name, "Enter a display name.", "Display names can be up to 200 characters.");
             var u = await db.Users.FirstOrDefaultAsync(x => x.Id == access.UserId);
             if (u is null) throw new UnauthorizedAccessException();
             u.DisplayName = name;
             await db.SaveChangesAsync();
-            return Results.Ok(new UserDto(u.Id, u.Email, u.DisplayName));
+            return Results.Ok(Me(u, options));
+        });
+
+        // Ends every other session of the caller (a browser they no longer use, a copied cookie); this one stays.
+        api.MapPost("/me/sign-out-others", async (Access access, SessionService sessions, HttpContext http) =>
+        {
+            await sessions.RevokeAllAsync(access.UserId, keep: SessionService.SessionIdOf(http.User), http.RequestAborted);
+            return Results.NoContent();
         });
 
         // ---- Workspaces ----
@@ -87,7 +95,7 @@ public static class WorkspaceEndpoints
             await access.RequireWorkspaceAsync(id);
             return await db.WorkspaceMembers.Where(m => m.WorkspaceId == id)
                 .OrderBy(m => m.User!.DisplayName.ToLower()).ThenBy(m => m.User!.DisplayName).ThenBy(m => m.UserId)
-                .Select(m => new MemberDto(m.UserId, m.User!.Email, m.User.DisplayName, m.Role, !m.User.Identities.Any()))
+                .Select(m => new MemberDto(m.UserId, m.User!.Email, m.User.DisplayName, m.Role, !m.User.Identities.Any(), m.User.DisabledAt != null))
                 .ToListAsync();
         });
 
@@ -117,7 +125,7 @@ public static class WorkspaceEndpoints
             }
             db.WorkspaceMembers.Add(new WorkspaceMember { WorkspaceId = id, UserId = user.Id, Role = req.Role });
             await db.SaveChangesAsync();
-            return Results.Ok(new MemberDto(user.Id, user.Email, user.DisplayName, req.Role, pending));
+            return Results.Ok(new MemberDto(user.Id, user.Email, user.DisplayName, req.Role, pending, user.DisabledAt != null));
         });
 
         // Admins may change other Admins; nobody changes their own role or the Owner's, and nobody becomes Owner.
@@ -151,6 +159,8 @@ public static class WorkspaceEndpoints
             return Results.NoContent();
         });
     }
+
+    private static MeDto Me(User u, AuthOptions options) => new(u.Id, u.Email, u.DisplayName, options.IsSiteAdmin(u.Email));
 
     private static bool IsAssignable(WorkspaceRole role) => role is WorkspaceRole.Admin or WorkspaceRole.Member or WorkspaceRole.Guest;
 }

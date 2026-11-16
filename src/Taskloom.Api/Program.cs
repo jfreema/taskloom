@@ -43,6 +43,7 @@ builder.Services.AddAzureMonitorIfConfigured(config);
 
 // ---- Auth ----
 builder.Services.AddTaskloomAuth(config);
+builder.Services.AddTaskloomRateLimits(config);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Access>();
 
@@ -67,9 +68,16 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 
 var app = builder.Build();
 
-if (app.Services.GetRequiredService<AuthOptions>().MicrosoftLacksTenant)
+var authOptions = app.Services.GetRequiredService<AuthOptions>();
+// Security 1: with Google on and no allowlist, any Google account could sign in and get a workspace.
+if (authOptions.GoogleNeedsAllowlist)
+{
+    if (!app.Environment.IsDevelopment()) throw new InvalidOperationException(AuthOptions.NoAllowlistMessage);
+    app.Logger.LogWarning(AuthOptions.NoAllowlistMessage);
+}
+if (authOptions.MicrosoftLacksTenant)
     app.Logger.LogWarning("Microsoft sign-in is off: set Auth:Microsoft:TenantId (ENTRA_TENANT_ID) to the Entra tenant id, a GUID.");
-if (app.Services.GetRequiredService<AuthOptions>().DevLogin.Enabled && !app.Environment.IsDevelopment())
+if (authOptions.DevLogin.Enabled && !app.Environment.IsDevelopment())
     app.Logger.LogWarning("Dev login is on outside Development: anyone who can reach this server can sign in as any email address. Set Auth:DevLogin:Enabled to false anywhere real.");
 
 if (config.GetValue("Database:MigrateOnStartup", true))
@@ -139,7 +147,11 @@ static bool IsUnstorableText(Exception? e)
 app.UseRequestBodyLimits();
 app.UseDefaultFiles();
 app.UseStaticFiles();
+// Static files are served above, so they are never rate limited. The sign-in limit covers the providers' callbacks,
+// which UseAuthentication answers, so it comes first; the /api limit counts per user, so it needs the signed-in user.
+app.UseSignInRateLimit();
 app.UseAuthentication();
+app.UseApiRateLimit();
 app.UseAuthorization();
 
 app.MapHealthChecks("/healthz");
@@ -147,6 +159,7 @@ app.MapAuthEndpoints();
 
 var api = app.MapGroup("/api").RequireAuthorization().AddEndpointFilter<RequireTaskloomHeader>();
 api.MapWorkspaceEndpoints();
+api.MapAdminEndpoints();
 api.MapTagEndpoints();
 api.MapHierarchyEndpoints();
 api.MapTaskEndpoints();
@@ -154,7 +167,7 @@ api.MapBulkEndpoints();
 api.MapCommentEndpoints();
 api.MapAttachmentEndpoints();
 // Development only: the path does not exist unless dev login is enabled.
-if (app.Services.GetRequiredService<AuthOptions>().DevLogin.Enabled) api.MapDevEndpoints();
+if (authOptions.DevLogin.Enabled) api.MapDevEndpoints();
 // Unknown /api paths are 404, never the SPA; known paths with the wrong method or content type are 405 or 415.
 api.MapApiFallback();
 

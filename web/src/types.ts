@@ -44,6 +44,12 @@ export interface User {
   displayName: string
 }
 
+/** GET and PATCH /api/me: the signed-in user. Everywhere else a person is a plain User. */
+export interface Me extends User {
+  /** Listed in Auth:SiteAdmins: sees Settings › People and may turn accounts off and on. */
+  isSiteAdmin: boolean
+}
+
 export interface Member {
   userId: Uuid
   email: string
@@ -51,6 +57,27 @@ export interface Member {
   role: Role
   /** True while the person has been invited but has never signed in. */
   pending: boolean
+  /** A site admin turned the account off. The person stays a member and an assignee, but can't sign in. */
+  disabled: boolean
+}
+
+/** One account in GET /api/admin/users (site admins only), ordered by display name. */
+export interface AdminUser {
+  id: Uuid
+  email: string
+  displayName: string
+  /** Invited and never signed in (no linked identity). */
+  pending: boolean
+  /** Turned off: signed out everywhere and refused at sign-in until turned back on. */
+  disabled: boolean
+  isSiteAdmin: boolean
+  createdAt: IsoTimestamp
+  /** The newest session's last use; null when the person has no session at all. */
+  lastSeenAt: IsoTimestamp | null
+  /** Sessions that are neither signed out nor expired. */
+  activeSessions: number
+  /** How many workspaces the person is a member of. */
+  workspaces: number
 }
 
 export interface Status {

@@ -187,7 +187,7 @@ public class WorkspaceTaskQueryTests(TaskloomFactory factory) : IClassFixture<Ta
         http.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimsExtensions.UserIdClaim, user.Me.Id.ToString())], "test"));
         http.Request.QueryString = new QueryString("?scope=all&q=any");
         var db = scope.ServiceProvider.GetRequiredService<TaskloomDbContext>();
-        var access = new Access(db, new HttpContextAccessor { HttpContext = http });
+        var access = new Access(db, new HttpContextAccessor { HttpContext = http }, scope.ServiceProvider.GetRequiredService<Auth.AuthOptions>());
 
         // The endpoint binds this token to HttpContext.RequestAborted; an aborted palette search must not run its query.
         using var aborted = new CancellationTokenSource();

@@ -8,6 +8,7 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<UserIdentity> UserIdentities => Set<UserIdentity>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
     public DbSet<Space> Spaces => Set<Space>();
@@ -40,6 +41,14 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
             e.Property(x => x.Provider).HasMaxLength(50);
             e.Property(x => x.Subject).HasMaxLength(255);
             e.HasIndex(x => new { x.Provider, x.Subject }).IsUnique();
+        });
+        b.Entity<UserSession>(e =>
+        {
+            e.ToTable("user_sessions");
+            e.Property(x => x.Provider).HasMaxLength(50);
+            e.Property(x => x.UserAgent).HasMaxLength(300);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.UserId);
         });
         b.Entity<Workspace>(e =>
         {

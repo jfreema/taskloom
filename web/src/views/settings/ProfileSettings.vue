@@ -6,8 +6,10 @@
 //   under the field and the old name returns.
 // - The email is read-only text under the name: it comes from the sign-in provider.
 // - "Sign out" (secondary) calls session.logout().
+// - "Other devices": "Sign out other devices" (secondary) ends this account's sessions everywhere
+//   but here (session.signOutOthers) and says so in a toast, or toasts why it failed.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { Check, LogOut } from '@lucide/vue'
+import { Check, LogOut, MonitorSmartphone } from '@lucide/vue'
 import SettingsPage from '../../components/settings/SettingsPage.vue'
 import UiAvatar from '../../components/ui/UiAvatar.vue'
 import UiButton from '../../components/ui/UiButton.vue'
@@ -15,13 +17,14 @@ import UiField from '../../components/ui/UiField.vue'
 import UiIcon from '../../components/ui/UiIcon.vue'
 import UiInput from '../../components/ui/UiInput.vue'
 import { useAnnouncer } from '../../composables/useAnnouncer'
-import { errorMessage } from '../../composables/useToast'
+import { errorMessage, useToast } from '../../composables/useToast'
 import { useSession } from '../../stores/session'
 
 const MAX_NAME = 200
 
 const session = useSession()
 const announce = useAnnouncer()
+const toast = useToast()
 
 const user = computed(() => session.user)
 
@@ -30,6 +33,7 @@ const error = ref('')
 const busy = ref(false)
 const saved = ref(false)
 const signingOut = ref(false)
+const signingOutOthers = ref(false)
 const input = ref<InstanceType<typeof UiInput> | null>(null)
 let savedTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -108,6 +112,19 @@ async function signOut(): Promise<void> {
     signingOut.value = false
   }
 }
+
+async function signOutOthers(): Promise<void> {
+  if (signingOutOthers.value) return
+  signingOutOthers.value = true
+  try {
+    await session.signOutOthers()
+    toast.success('Signed out of your other devices.')
+  } catch (err) {
+    toast.error(err, { retry: () => void signOutOthers() })
+  } finally {
+    signingOutOthers.value = false
+  }
+}
 </script>
 
 <template>
@@ -160,6 +177,14 @@ async function signOut(): Promise<void> {
         <div class="sign-out">
           <p class="sign-out-text">Sign out of Taskloom in this browser. Your work stays as it is.</p>
           <UiButton :icon="LogOut" :loading="signingOut" @click="signOut">Sign out</UiButton>
+        </div>
+      </section>
+
+      <section class="block block--tight" aria-labelledby="profile-other-devices">
+        <h3 id="profile-other-devices" class="block-title">Other devices</h3>
+        <div class="sign-out">
+          <p class="sign-out-text">Signed in on another browser or device you no longer use? Sign it out.</p>
+          <UiButton :icon="MonitorSmartphone" :loading="signingOutOthers" @click="signOutOthers">Sign out other devices</UiButton>
         </div>
       </section>
     </template>

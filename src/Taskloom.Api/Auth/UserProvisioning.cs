@@ -47,6 +47,7 @@ public class UserProvisioning(TaskloomDbContext db, AuthOptions options)
 {
     public const string DevProvider = "dev";
     public const string NotAllowedMessage = "This account is not allowed to sign in to Taskloom.";
+    public const string DisabledMessage = "This account has been turned off. Ask your Taskloom admin to turn it back on.";
 
     /// <summary>Subjects longer than this don't fit user_identities."Subject".</summary>
     private const int MaxSubject = 255;
@@ -63,6 +64,7 @@ public class UserProvisioning(TaskloomDbContext db, AuthOptions options)
     /// <item>an email the provider doesn't vouch for is refused, and nothing is linked or created.</item>
     /// </list>
     /// <see cref="AuthOptions.IsEmailAllowed"/> only ever sees a verified email: the linked user's, or the one being linked.
+    /// A turned-off account is refused in rows 1 to 3, before anything is linked.
     /// </summary>
     public async Task<SignInResult> ResolveAsync(SignInProvider provider, ClaimsPrincipal principal, CancellationToken ct = default)
     {
@@ -75,7 +77,10 @@ public class UserProvisioning(TaskloomDbContext db, AuthOptions options)
             .Join(db.Users, i => i.UserId, u => u.Id, (_, u) => u)
             .FirstOrDefaultAsync(ct);
         if (linked is not null)
-            return options.IsEmailAllowed(linked.Email) ? SignInResult.Success(linked) : SignInResult.Refused(NotAllowedMessage);
+        {
+            if (!options.IsEmailAllowed(linked.Email)) return SignInResult.Refused(NotAllowedMessage);
+            return linked.DisabledAt is null ? SignInResult.Success(linked) : SignInResult.Refused(DisabledMessage);
+        }
 
         var email = id.EmailVerified ? Emails.Normalize(id.Email) : null;
         if (email is null) return refused;
@@ -91,6 +96,7 @@ public class UserProvisioning(TaskloomDbContext db, AuthOptions options)
         }
         else
         {
+            if (user.DisabledAt is not null) return SignInResult.Refused(DisabledMessage);
             var pending = !await db.UserIdentities.AnyAsync(i => i.UserId == user.Id, ct);
             if (pending && name is not null) user.DisplayName = name;
             if (!await db.WorkspaceMembers.AnyAsync(m => m.UserId == user.Id, ct)) AddStarterWorkspace(user);
@@ -103,16 +109,21 @@ public class UserProvisioning(TaskloomDbContext db, AuthOptions options)
     /// <summary>
     /// Dev login (development only), unchanged by spec 5.8 apart from the name guess (5.4 #3): the typed email signs in
     /// as the user with that address, linking a "dev" identity, or creates the user. An existing user keeps their name.
+    /// A turned-off account is refused, and nothing is linked.
     /// </summary>
-    public async Task<User> DevSignInAsync(string email, string? displayName)
+    public async Task<SignInResult> DevSignInAsync(string email, string? displayName)
     {
         email = email.Trim().ToLowerInvariant();
         var identity = await db.UserIdentities.FirstOrDefaultAsync(i => i.Provider == DevProvider && i.Subject == email);
         if (identity is not null)
-            return await db.Users.FirstAsync(u => u.Id == identity.UserId);
+        {
+            var linked = await db.Users.FirstAsync(u => u.Id == identity.UserId);
+            return linked.DisabledAt is null ? SignInResult.Success(linked) : SignInResult.Refused(DisabledMessage);
+        }
 
         // Same email from another provider (or an invite placeholder) links to the existing user.
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user?.DisabledAt is not null) return SignInResult.Refused(DisabledMessage);
         var isNew = user is null;
         if (user is null)
         {
@@ -127,7 +138,7 @@ public class UserProvisioning(TaskloomDbContext db, AuthOptions options)
         if (!hasWorkspace) AddStarterWorkspace(user);
 
         await db.SaveChangesAsync();
-        return user;
+        return SignInResult.Success(user);
     }
 
     /// <summary>A provider's (or typed) name without control characters, trimmed and at most 200 characters; null when blank.</summary>
@@ -153,12 +164,14 @@ public class UserProvisioning(TaskloomDbContext db, AuthOptions options)
         db.Statuses.AddRange(ListStatus.Defaults(list.Id));
     }
 
-    public static ClaimsPrincipal PrincipalFor(User user, string provider) =>
+    /// <summary>The cookie's principal for a sign-in: the user, how they signed in, and the session the cookie belongs to.</summary>
+    public static ClaimsPrincipal PrincipalFor(User user, string provider, Guid sessionId) =>
         new(new ClaimsIdentity(
         [
             new Claim(ClaimsExtensions.UserIdClaim, user.Id.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Name, user.DisplayName),
             new Claim("taskloom:provider", provider),
+            new Claim(SessionService.SessionIdClaim, sessionId.ToString()),
         ], CookieAuthenticationDefaults.AuthenticationScheme));
 }

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Taskloom.Api.Auth;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
 
@@ -33,9 +34,23 @@ public class ForbiddenException : Exception;
 /// Every read and write goes through here, so a user only ever touches
 /// workspaces they are a member of, with the right role.
 /// </summary>
-public class Access(TaskloomDbContext db, IHttpContextAccessor http)
+public class Access(TaskloomDbContext db, IHttpContextAccessor http, AuthOptions options)
 {
+    private User? _siteAdmin;
+
     public Guid UserId => http.HttpContext!.User.UserId();
+
+    /// <summary>
+    /// The caller, when their email is in Auth:SiteAdmins; anyone else gets 404, so the site-admin routes look like they
+    /// don't exist. Read once per request.
+    /// </summary>
+    public async Task<User> RequireSiteAdminAsync()
+    {
+        if (_siteAdmin is not null) return _siteAdmin;
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == UserId);
+        if (user is null || !options.IsSiteAdmin(user.Email)) throw new NotFoundException();
+        return _siteAdmin = user;
+    }
 
     public async Task<WorkspaceRole> RequireWorkspaceAsync(Guid workspaceId, WorkspaceRole atLeast = WorkspaceRole.Guest)
     {

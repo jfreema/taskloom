@@ -185,6 +185,14 @@ export const useMembers = defineStore('members', () => {
     }
   }
 
+  /** Mirrors a site admin turning an account off or on (Settings › People) into every workspace's list. */
+  function setDisabledLocal(userId: Uuid, disabled: boolean): void {
+    for (const members of Object.values(byWorkspace)) {
+      const m = members.find((x) => x.userId === userId)
+      if (m) m.disabled = disabled
+    }
+  }
+
   function reset(): void {
     generation++
     for (const key of Object.keys(byWorkspace)) delete byWorkspace[key]
@@ -192,5 +200,5 @@ export const useMembers = defineStore('members', () => {
     inflight.clear()
   }
 
-  return { current, loadError, loading, get, nameOf, ensure, reload, invite, updateRole, remove, renameLocal, reset }
+  return { current, loadError, loading, get, nameOf, ensure, reload, invite, updateRole, remove, renameLocal, setDisabledLocal, reset }
 })

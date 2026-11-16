@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
+using Taskloom.Api.Auth;
 using Taskloom.Application;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
@@ -128,7 +129,7 @@ public static class AttachmentEndpoints
             headers.XContentTypeOptions = "nosniff";
             headers.ContentSecurityPolicy = "sandbox";
             return Results.File(stream, a.ContentType);
-        });
+        }).WithMetadata(new CacheableResponse());
 
         api.MapDelete("/attachments/{id:guid}", async (Guid id, Access access, TaskloomDbContext db, IFileStore files) =>
         {

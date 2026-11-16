@@ -153,6 +153,16 @@ export function formatRelativeTime(ts: IsoTimestamp, now: Date = new Date()): st
   return formatDateShort(toIso(t), toIso(now))
 }
 
+/**
+ * formatRelativeTime worded to follow other words ("Last active …"): "just now", "5m ago",
+ * "2h ago", "yesterday", "Nov 3".
+ */
+export function formatTimeAgo(ts: IsoTimestamp, now: Date = new Date()): string {
+  const rel = formatRelativeTime(ts, now)
+  if (/^\d+[mh]$/.test(rel)) return `${rel} ago`
+  return rel === 'Yesterday' ? 'yesterday' : rel
+}
+
 /** The full timestamp for tooltips: "Nov 3, 2026, 4:05 PM". */
 export function formatTimestamp(ts: IsoTimestamp): string {
   const t = new Date(ts)

@@ -145,7 +145,7 @@ async function remove(m: Member): Promise<void> {
           <tr role="row">
             <th role="columnheader" scope="col">Name</th>
             <th role="columnheader" scope="col">Email</th>
-            <th role="columnheader" scope="col">Invitation</th>
+            <th role="columnheader" scope="col">Status</th>
             <th role="columnheader" scope="col">Role</th>
             <th role="columnheader" scope="col">Actions</th>
           </tr>
