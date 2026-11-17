@@ -4,10 +4,12 @@
 //   saves and Esc goes back. renameWorkspace is optimistic (the sidebar changes at once) and
 //   rejects without a toast, so a refusal shows under the field. Others see the name as text.
 // - "Your role" says what the caller can do here.
+// - Owner and Admins get "Private spaces": every private space, with Join (PrivateSpacesSection).
 // - The Owner's "Danger zone" deletes the workspace after a confirm that asks for its name; the
 //   store then switches to another workspace, or the shell shows its empty state.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Check } from '@lucide/vue'
+import PrivateSpacesSection from '../../components/settings/PrivateSpacesSection.vue'
 import SettingsPage from '../../components/settings/SettingsPage.vue'
 import UiButton from '../../components/ui/UiButton.vue'
 import UiField from '../../components/ui/UiField.vue'
@@ -174,6 +176,8 @@ async function deleteWorkspace(): Promise<void> {
           </dd>
         </dl>
       </section>
+
+      <PrivateSpacesSection v-if="canRename" :workspace-id="ws.id" />
 
       <section v-if="isOwner" class="block" aria-labelledby="general-danger">
         <h3 id="general-danger" class="block-title">Danger zone</h3>

@@ -26,6 +26,7 @@ export const useUi = defineStore('ui', () => {
   const newSpace = ref(false)
   const newList = ref<{ spaceId: Uuid | null } | null>(null)
   const moveList = ref<{ listId: Uuid } | null>(null)
+  const shareSpace = ref<{ spaceId: Uuid } | null>(null)
   const invite = ref<{ email?: string; assignTo?: Uuid[] } | null>(null)
   const newWorkspace = ref(false)
   const moveTasks = ref<{ taskIds: Uuid[] } | null>(null)
@@ -108,6 +109,12 @@ export const useUi = defineStore('ui', () => {
     if (canEdit()) moveList.value = { listId }
   }
 
+  /** Who can see a space (Security 3): Member+, like renaming it. */
+  function openShareSpace(spaceId: Uuid): void {
+    const found = useWorkspaces().findSpace(spaceId)
+    if (found && useWorkspaces().canEdit(found.workspace.id)) shareSpace.value = { spaceId }
+  }
+
   /** The invite dialog is for Admin+ (9.4). */
   function openInvite(o?: { email?: string; assignTo?: Uuid[] }): void {
     if (!useWorkspaces().isAdmin()) return
@@ -141,6 +148,7 @@ export const useUi = defineStore('ui', () => {
     newSpace.value = false
     newList.value = null
     moveList.value = null
+    shareSpace.value = null
     invite.value = null
     newWorkspace.value = false
     moveTasks.value = null
@@ -161,6 +169,7 @@ export const useUi = defineStore('ui', () => {
     newSpace,
     newList,
     moveList,
+    shareSpace,
     invite,
     newWorkspace,
     moveTasks,
@@ -177,6 +186,7 @@ export const useUi = defineStore('ui', () => {
     openNewSpace,
     openNewList,
     openMoveList,
+    openShareSpace,
     openInvite,
     openNewWorkspace,
     openMoveTasks,

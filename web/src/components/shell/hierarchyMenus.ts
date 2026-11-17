@@ -1,8 +1,8 @@
 // The space and list "..." menus (3.4, 8.3) and the deletes behind them. The sidebar uses both;
 // the list page header can use `listMenuItems` for its own list menu ("the same items as the
 // sidebar list menu", 8.4). Items follow the role rules of 9.4: guests get only "Copy link" on lists
-// and no space menu at all; deleting a space needs Admin.
-import { FolderInput, Link, ListChecks, Pencil, Plus, Trash2 } from '@lucide/vue'
+// and no space menu at all; deleting a space needs Admin. "Share space…" (Member+) says who can see it.
+import { FolderInput, Link, ListChecks, Lock, Pencil, Plus, Trash2, Users } from '@lucide/vue'
 import { useClipboard } from '../../composables/useClipboard'
 import { useConfirm } from '../../composables/useConfirm'
 import { useToast } from '../../composables/useToast'
@@ -138,6 +138,13 @@ export function useHierarchyMenus(): {
         },
       },
       { id: 'new-list', label: 'New list', icon: Plus, onSelect: () => ui.openNewList(spaceId) },
+      {
+        id: 'share',
+        label: 'Share space…',
+        icon: space.isPrivate ? Lock : Users,
+        hint: space.isPrivate ? 'Private' : undefined,
+        onSelect: () => ui.openShareSpace(spaceId),
+      },
     )
     if (workspaces.isAdmin(found.workspace.id)) {
       items.push(

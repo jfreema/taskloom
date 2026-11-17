@@ -38,23 +38,33 @@ public static class WorkspaceEndpoints
         });
 
         // ---- Workspaces ----
-        // The whole tree the caller can see: workspaces by creation, spaces and lists by position, each list with its statuses.
+        // The whole tree the caller can see: workspaces by creation, then the spaces they can see (every space that isn't
+        // private, and the private ones they are in) and their lists by position, each list with its statuses.
         api.MapGet("/workspaces", async (Access access, TaskloomDbContext db) =>
         {
             var uid = access.UserId;
-            return await (
+            var memberships = await (
                     from m in db.WorkspaceMembers
                     where m.UserId == uid
                     join w in db.Workspaces on m.WorkspaceId equals w.Id
                     orderby w.CreatedAt, w.Id
-                    select new WorkspaceTreeDto(w.Id, w.Name, m.Role,
-                        w.Spaces.OrderBy(s => s.Position).ThenBy(s => s.Id).Select(s => new SpaceDto(s.Id, s.Name, s.Color, s.Position,
-                            s.Lists.OrderBy(l => l.Position).ThenBy(l => l.Id).Select(l => new ListSummaryDto(l.Id, l.SpaceId, l.Name, l.Position,
-                                l.Statuses.OrderBy(x => x.Position).ThenBy(x => x.Id)
-                                    .Select(x => new StatusDto(x.Id, x.ListId, x.Name, x.Color, x.Category, x.Position)).ToList()))
-                                .ToList()))
-                            .ToList()))
+                    select new { w.Id, w.Name, m.Role })
+                .ToListAsync();
+            var spaces = await db.Spaces.VisibleTo(db, uid)
+                .OrderBy(s => s.Position).ThenBy(s => s.Id)
+                .Select(s => new
+                {
+                    s.WorkspaceId,
+                    Dto = new SpaceDto(s.Id, s.Name, s.Color, s.Position, s.IsPrivate,
+                        s.Members.OrderBy(m => m.AddedAt).ThenBy(m => m.UserId).Select(m => m.UserId).ToList(),
+                        s.Lists.OrderBy(l => l.Position).ThenBy(l => l.Id).Select(l => new ListSummaryDto(l.Id, l.SpaceId, l.Name, l.Position,
+                            l.Statuses.OrderBy(x => x.Position).ThenBy(x => x.Id)
+                                .Select(x => new StatusDto(x.Id, x.ListId, x.Name, x.Color, x.Category, x.Position)).ToList()))
+                            .ToList()),
+                })
                 .AsSplitQuery().ToListAsync();
+            var byWorkspace = spaces.ToLookup(s => s.WorkspaceId, s => s.Dto);
+            return memberships.Select(m => new WorkspaceTreeDto(m.Id, m.Name, m.Role, byWorkspace[m.Id].ToList())).ToList();
         });
 
         api.MapPost("/workspaces", async (CreateWorkspaceRequest req, Access access, TaskloomDbContext db) =>
@@ -141,7 +151,8 @@ public static class WorkspaceEndpoints
             return Results.NoContent();
         });
 
-        // Removing someone also unassigns them from the workspace's tasks.
+        // Removing someone also unassigns them from the workspace's tasks and takes them out of its private spaces, so
+        // inviting them again doesn't bring those back.
         api.MapDelete("/workspaces/{id:guid}/members/{userId:guid}", async (Guid id, Guid userId, Access access, TaskloomDbContext db) =>
         {
             await access.RequireWorkspaceAsync(id, WorkspaceRole.Admin);
@@ -152,6 +163,9 @@ public static class WorkspaceEndpoints
             await using var tx = await db.Database.BeginTransactionAsync();
             await db.TaskAssignees
                 .Where(a => a.UserId == userId && db.Tasks.Any(t => t.Id == a.TaskId && db.Lists.Any(l => l.Id == t.ListId && l.Space!.WorkspaceId == id)))
+                .ExecuteDeleteAsync();
+            await db.SpaceMembers
+                .Where(x => x.UserId == userId && db.Spaces.Any(s => s.Id == x.SpaceId && s.WorkspaceId == id))
                 .ExecuteDeleteAsync();
             db.WorkspaceMembers.Remove(m);
             await db.SaveChangesAsync();

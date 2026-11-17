@@ -2,9 +2,11 @@
 // Assignee picker (7.11): a multiple-select, always-searchable listbox. The first row is "Assign
 // to me" (or "Unassign me"); then the members, me first, then by name. Descriptions: the email,
 // "Invited" for pending members, "Guest · view and comment only" for guests. Assigned people who
-// left the workspace show as "Former member" so they can be removed. Admins get an "Invite people"
-// footer (it passes the query when it looks like an email, and `taskIds` to assign); others see
-// "Not in this workspace. Ask an admin to invite them." when nothing matches.
+// left the workspace show as "Former member" so they can be removed. In a private space only its people
+// are offered; someone assigned who can't see it shows as "Can't see this space" so they can be
+// removed. Admins get an "Invite people" footer outside private spaces (it passes the query when it
+// looks like an email, and `taskIds` to assign); others see "Not in this workspace. Ask an admin to
+// invite them." when nothing matches.
 // Triggers, named "Assignees: <names>, change" or "Assignees: none, add": 'stack' (an avatar
 // stack), 'field' (avatars and names), 'chip' (quick create).
 import { computed, nextTick } from 'vue'
@@ -12,6 +14,7 @@ import { UserPlus, UserRoundPlus, X } from '@lucide/vue'
 import { isValidEmail } from '../../lib/format'
 import { useMembers } from '../../stores/members'
 import { useSession } from '../../stores/session'
+import { useTasks } from '../../stores/tasks'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { Uuid } from '../../types'
@@ -32,8 +35,10 @@ const open = defineModel<boolean>('open', { default: false })
 const props = withDefaults(
   defineProps<{
     modelValue: Uuid[]
-    /** The tasks being edited: "Invite people" assigns the new person to them. */
+    /** The tasks being edited: "Invite people" assigns the new person to them, and their lists decide who can be assigned. */
     taskIds?: Uuid[]
+    /** Lists the task will be in, when there is no task yet (quick create). */
+    listIds?: Uuid[]
     variant?: 'stack' | 'field' | 'chip'
     max?: number
     size?: 16 | 20 | 24 | 28
@@ -43,7 +48,17 @@ const props = withDefaults(
     /** Mounts the popover only once used (List rows the pointer or focus hasn't reached yet). */
     lazy?: boolean
   }>(),
-  { taskIds: () => [], variant: 'stack', max: 3, size: 24, readonly: false, anchor: null, hideTrigger: false, lazy: false },
+  {
+    taskIds: () => [],
+    listIds: () => [],
+    variant: 'stack',
+    max: 3,
+    size: 24,
+    readonly: false,
+    anchor: null,
+    hideTrigger: false,
+    lazy: false,
+  },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [ids: Uuid[]] }>()
@@ -53,10 +68,21 @@ const ME = '@me'
 const members = useMembers()
 const session = useSession()
 const workspaces = useWorkspaces()
+const tasks = useTasks()
 const ui = useUi()
 
 const meId = computed(() => session.user?.id ?? null)
-const canInvite = computed(() => workspaces.isAdmin())
+/** Null when anyone in the workspace may be assigned; else the people of the private space the tasks are in. */
+const allowed = computed(() => {
+  const listIds = [...props.listIds]
+  for (const id of props.taskIds) {
+    const listId = tasks.get(id)?.listId
+    if (listId) listIds.push(listId)
+  }
+  return workspaces.assignableIn(listIds)
+})
+// Someone invited now couldn't see a private space's tasks, so there is nothing to invite them to.
+const canInvite = computed(() => workspaces.isAdmin() && !allowed.value)
 
 const people = computed(() => props.modelValue.map((id) => ({ id, displayName: members.nameOf(id) })))
 const label = computed(() => triggerLabel('Assignees', joinNames(people.value.map((p) => p.displayName))))
@@ -79,13 +105,17 @@ function options(): ListboxOption[] {
   const chosen = new Set(props.modelValue)
   const out: ListboxOption[] = []
   if (me) out.push({ value: ME, label: chosen.has(me) ? 'Unassign me' : 'Assign to me', keywords: ['me'] })
-  const list = members.current
+  const only = allowed.value
+  const list = only ? members.current.filter((m) => only.has(m.userId)) : members.current
   const mine = list.find((m) => m.userId === me)
   for (const m of mine ? [mine, ...list.filter((x) => x !== mine)] : list) {
     out.push({ value: m.userId, label: m.displayName, description: describe(m.userId), keywords: [m.email] })
   }
   for (const id of props.modelValue) {
-    if (!members.get(id) && id !== me) out.push({ value: id, label: 'Former member' })
+    if (id === me) continue
+    const m = members.get(id)
+    if (!m) out.push({ value: id, label: 'Former member' })
+    else if (only && !only.has(id)) out.push({ value: id, label: m.displayName, description: "Can't see this space", keywords: [m.email] })
   }
   return out
 }
@@ -180,7 +210,8 @@ async function invite(e: MouseEvent): Promise<void> {
           </span>
         </template>
         <template #empty="{ query }">
-          <span v-if="query && !canInvite">Not in this workspace. Ask an admin to invite them.</span>
+          <span v-if="query && allowed">No one in this private space matches “{{ query }}”.</span>
+          <span v-else-if="query && !canInvite">Not in this workspace. Ask an admin to invite them.</span>
           <span v-else-if="query">No one matches “{{ query }}”.</span>
           <span v-else>No members yet.</span>
         </template>

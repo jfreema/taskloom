@@ -38,7 +38,7 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
 - **Settings:**
   - Profile: your display name, and "Sign out other devices" for browsers you no longer use.
   - Appearance: System, Light or Dark theme, and whether single-key shortcuts are on.
-  - Workspace: rename or delete it.
+  - Workspace: rename or delete it. Owner and Admins also see every private space here, with Join.
   - Members: invite several people at once, change roles, remove people, copy the sign-in link. People whose
     account is turned off are marked "Turned off".
   - People (site admins only): everyone who has signed in or been invited, when they were last active and how many
@@ -46,8 +46,15 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
   - Tags: create, rename, recolour or delete them.
   - Statuses are edited per list from the list menu or the board. Spaces and lists can be created, recoloured,
     moved and deleted from the sidebar.
-- **Roles:** Owner, Admin, Member and Guest. Guests can read everything in the workspace and comment, but not
-  edit. Every API call is checked against the caller's workspace membership. Site admins (`Auth:SiteAdmins`) also
+- **Roles:** Owner, Admin, Member and Guest. Guests can read everything they can see and comment, but not
+  edit. Every API call is checked against the caller's workspace membership.
+- **Private spaces:** "Share space…" in a space's menu (Member+) makes it private to the people you tick, of any
+  role. Everyone else, workspace Owner and Admins included, can't see it or anything in it: every route answers 404,
+  and its tasks never show in Home or search. People keep their workspace role inside it (a Guest still only views
+  and comments), and only its people can be assigned to its tasks. Changing who can see a space never removes
+  assignments: someone who loses access keeps theirs and sees them again if added back. Owner and Admins can list
+  every private space in Settings › General and join one (its people then see them listed), so a space whose people
+  have all left can be recovered. Site admins (`Auth:SiteAdmins`) also
   manage everyone's accounts in Settings › People: a turned-off account is signed out everywhere and can't sign in
   until it is turned back on, but stays a member and assignee, and its tasks and comments stay.
 - **Sign-in:** Microsoft Entra ID (one tenant) and Google, using OpenID Connect and a cookie session. A dev-only

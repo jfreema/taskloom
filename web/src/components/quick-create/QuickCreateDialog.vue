@@ -89,7 +89,7 @@ useShortcut(
       <div class="chips">
         <ListPicker v-model="listId" variant="chip" />
         <StatusPicker v-if="listId && statusId" v-model="statusId" :list-id="listId" variant="chip" />
-        <AssigneePicker v-model="assigneeIds" variant="chip" />
+        <AssigneePicker v-model="assigneeIds" variant="chip" :list-ids="listId ? [listId] : []" />
         <DateField v-model="dueDate" kind="due" variant="chip" :other-date="startDate" @update:other-date="onOtherDate" />
         <PriorityPicker v-model="priority" variant="chip" />
         <TagPicker v-model="tagIds" variant="chip" />

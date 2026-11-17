@@ -86,6 +86,9 @@ namespace Taskloom.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<bool>("IsPrivate")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -102,6 +105,24 @@ namespace Taskloom.Infrastructure.Migrations
                     b.HasIndex("WorkspaceId");
 
                     b.ToTable("spaces", (string)null);
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.SpaceMember", b =>
+                {
+                    b.Property<Guid>("SpaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SpaceId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("space_members", (string)null);
                 });
 
             modelBuilder.Entity("Taskloom.Domain.Tag", b =>
@@ -531,6 +552,23 @@ namespace Taskloom.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Taskloom.Domain.SpaceMember", b =>
+                {
+                    b.HasOne("Taskloom.Domain.Space", null)
+                        .WithMany("Members")
+                        .HasForeignKey("SpaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Taskloom.Domain.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Taskloom.Domain.Tag", b =>
                 {
                     b.HasOne("Taskloom.Domain.Workspace", null)
@@ -698,6 +736,8 @@ namespace Taskloom.Infrastructure.Migrations
             modelBuilder.Entity("Taskloom.Domain.Space", b =>
                 {
                     b.Navigation("Lists");
+
+                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Taskloom.Domain.TaskItem", b =>

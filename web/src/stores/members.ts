@@ -163,7 +163,7 @@ export const useMembers = defineStore('members', () => {
     byWorkspace[wsId] = members.filter((m) => m.userId !== userId)
     const restoreAssignments = useTasks().stripAssignee(userId)
     return handled(
-      api.del(`/api/workspaces/${wsId}/members/${userId}`).catch((err: unknown) => {
+      api.del(`/api/workspaces/${wsId}/members/${userId}`).then(() => workspaces.forgetMember(wsId, userId), (err: unknown) => {
         const now = byWorkspace[wsId] ?? []
         if (!now.some((m) => m.userId === userId)) {
           const next = [...now]

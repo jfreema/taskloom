@@ -11,6 +11,7 @@ public static class TaskEndpoints
 {
     public const string AssigneesMustBeMembers = TaskPatcher.AssigneesMustBeMembers;
     public const string TagsMustBelongToWorkspace = TaskPatcher.TagsMustBelongToWorkspace;
+    public const string AssigneesMustSeeSpace = TaskPatcher.AssigneesMustSeeSpace;
 
     /// <summary>Neighbours closer than this are renumbered before a move (spec 5.5 Move).</summary>
     public const double MinGap = 0.001;
@@ -47,7 +48,7 @@ public static class TaskEndpoints
     // ---- POST /api/lists/{id}/tasks (spec 5.5 Create task) ----
     private static async Task<IResult> CreateAsync(Guid id, CreateTaskRequest req, Access access, TaskloomDbContext db)
     {
-        var (_, workspaceId) = await access.RequireListAsync(id, WorkspaceRole.Member);
+        var (list, workspaceId) = await access.RequireListAsync(id, WorkspaceRole.Member);
         var title = Text.Require(req.Title, Limits.TaskTitle, "Enter a task title.", "Task titles can be up to 500 characters.");
         if (req.Description is { Length: > Limits.DescriptionHtml }) throw ProblemException.BadRequest("Descriptions can be up to 200,000 characters.");
 
@@ -65,9 +66,9 @@ public static class TaskEndpoints
                      ?? throw ProblemException.BadRequest("Choose a parent task in this list.");
             if (parent.ParentTaskId is not null) throw ProblemException.BadRequest("Subtasks can't have subtasks.");
         }
-        // On create every assignee is being added, so all must be members.
+        // On create every assignee is being added, so all must be members who can see the list.
         var assigneeIds = (req.AssigneeIds ?? []).Distinct().ToList();
-        if (!await AreMembersAsync(db, workspaceId, assigneeIds)) throw ProblemException.BadRequest(AssigneesMustBeMembers);
+        await RequireAssignableAsync(db, list.SpaceId, assigneeIds);
         var tagIds = (req.TagIds ?? []).Distinct().ToList();
         if (!await AreWorkspaceTagsAsync(db, workspaceId, tagIds)) throw ProblemException.BadRequest(TagsMustBelongToWorkspace);
 
@@ -145,7 +146,7 @@ public static class TaskEndpoints
         await db.Entry(task).Collection(t => t.Assignees).LoadAsync();
         await db.Entry(task).Collection(t => t.Tags).LoadAsync();
         var now = Clock.Now();
-        var patcher = await TaskPatcher.CreateAsync(db, workspaceId, new ActivityRecorder(db, access.UserId, now), now, [(task, change)]);
+        var patcher = await TaskPatcher.CreateAsync(db, access, workspaceId, new ActivityRecorder(db, access.UserId, now), now, [(task, change)]);
         await patcher.ApplyAsync(task, change);
         await db.SaveChangesAsync();
         await tx.CommitAsync();
@@ -221,6 +222,17 @@ public static class TaskEndpoints
         return Results.Ok(await TaskProjections.LoadAsync(db, id));
     }
 
+    /// <summary>
+    /// 400 unless every user id (distinct) may be newly assigned to a task of the space: a member of its workspace who can
+    /// see it.
+    /// </summary>
+    public static async Task RequireAssignableAsync(TaskloomDbContext db, Guid spaceId, IReadOnlyCollection<Guid> userIds)
+    {
+        var (members, canSee) = await SpaceVisibility.CountAsync(db, spaceId, userIds);
+        if (members != userIds.Count) throw ProblemException.BadRequest(AssigneesMustBeMembers);
+        if (canSee != userIds.Count) throw ProblemException.BadRequest(AssigneesMustSeeSpace);
+    }
+
     /// <summary>True when every user id (distinct) is a member of the workspace.</summary>
     public static async Task<bool> AreMembersAsync(TaskloomDbContext db, Guid workspaceId, IReadOnlyCollection<Guid> userIds) =>
         userIds.Count == 0 ||
@@ -266,7 +278,8 @@ public static class WorkspaceTaskQuery
             throw ProblemException.BadRequest("limit must be a whole number from 1 to 1000.");
 
         var me = access.UserId;
-        var listIds = db.Lists.Where(l => l.Space!.WorkspaceId == id).Select(l => l.Id);
+        // Only lists the caller can see: tasks in private spaces they aren't in never show, even assigned to them.
+        var listIds = access.VisibleListIds(id);
         var tasks = db.Tasks.Where(t => listIds.Contains(t.ListId));
         // Mine: assigned to me, or created by me and assigned to nobody. Subtasks are included either way.
         if (!all) tasks = tasks.Where(t => t.Assignees.Any(a => a.UserId == me) || (t.CreatedById == me && !t.Assignees.Any()));

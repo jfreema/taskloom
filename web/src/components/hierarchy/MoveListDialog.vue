@@ -2,9 +2,11 @@
 // Move list (8.13), opened by ui.openMoveList(listId) from the list menus ("Move to space…"):
 // a Space select without the list's own space, the first other space preselected. "Move" calls
 // updateList(id, { spaceId }), which is optimistic (the list goes last in that space, and the store
-// rolls back and toasts on failure), toasts "Moved to <space>" and expands that space.
+// rolls back and toasts on failure), toasts "Moved to <space>" and expands that space. Private spaces
+// are marked, with a hint that only their people will see the list there.
 import { computed, ref, useId, watch } from 'vue'
 import { useToast } from '../../composables/useToast'
+import { pluralize } from '../../lib/format'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { Uuid } from '../../types'
@@ -33,7 +35,12 @@ const options = computed(() => {
   return [...f.workspace.spaces]
     .filter((s) => s.id !== f.space.id)
     .sort((a, b) => a.position - b.position)
-    .map((s) => ({ value: s.id, label: s.name }))
+    .map((s) => ({ value: s.id, label: s.isPrivate ? `${s.name} · Private` : s.name }))
+})
+
+const hint = computed(() => {
+  const space = found.value?.workspace.spaces.find((s) => s.id === target.value)
+  return space?.isPrivate ? `Private: only its ${pluralize(space.memberIds.length, 'person', 'people')} will see this list there.` : undefined
 })
 
 const open = useRequestedDialog(
@@ -73,7 +80,7 @@ function move(): void {
 <template>
   <UiDialog v-model:open="open" :title="title" description="The list keeps its tasks, statuses and views." size="sm">
     <form :id="formId" novalidate @submit.prevent="move">
-      <UiField v-if="options.length" label="Space">
+      <UiField v-if="options.length" label="Space" :hint="hint">
         <template #default="{ id, describedBy }">
           <UiSelect :id="id" v-model="target" :aria-describedby="describedBy" :options="options" />
         </template>

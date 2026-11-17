@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // One space of the sidebar tree (3.4, 8.3): a disclosure button named by the space (chevron,
 // SpaceTile, name; aria-expanded), its "..." menu (Rename, Colour, New list, Delete space) and "+"
-// ("New list in <space>"), then its lists. Collapsed spaces are remembered per user
+// ("New list in <space>"), then its lists. A private space shows a lock after its name. Collapsed spaces are remembered per user
 // (sidebarState). F2 renames in place; Shift+F10 opens the menu. Guests get neither control.
 import { computed, nextTick, ref, watch } from 'vue'
-import { ChevronRight, Ellipsis, Plus } from '@lucide/vue'
+import { ChevronRight, Ellipsis, Lock, Plus } from '@lucide/vue'
 import { shortcutsEnabled } from '../../composables/useShortcut'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
@@ -87,6 +87,7 @@ function save(name: string): void {
         class="row-main"
         data-sidebar-item="space"
         :data-space-id="space.id"
+        :aria-label="space.isPrivate ? `${space.name}, private` : undefined"
         :aria-expanded="expanded ? 'true' : 'false'"
         @click="toggle"
         @keydown="onKeydown"
@@ -94,6 +95,7 @@ function save(name: string): void {
         <UiIcon :icon="ChevronRight" :size="16" class="chevron" :class="{ 'is-open': expanded }" />
         <SpaceTile :space="space" :size="18" />
         <span class="name space-name truncate">{{ space.name }}</span>
+        <UiIcon v-if="space.isPrivate" :icon="Lock" :size="12" class="lock" />
       </button>
       <div v-if="renaming" class="row-main is-editing">
         <UiIcon :icon="ChevronRight" :size="16" class="chevron" :class="{ 'is-open': expanded }" />
@@ -169,6 +171,11 @@ function save(name: string): void {
 }
 
 .chevron {
+  color: var(--text-tertiary);
+}
+
+.lock {
+  flex: none;
   color: var(--text-tertiary);
 }
 

@@ -135,13 +135,14 @@ public sealed class TaskPatcher
     private readonly Dictionary<Guid, string> _memberNames;
     private readonly Dictionary<Guid, string> _formerMemberNames;
     private readonly Dictionary<Guid, Tag> _tags;
+    private readonly Dictionary<Guid, HashSet<Guid>> _privatePeople;
     private readonly ILookup<Guid, TaskItem> _subtasks;
     private readonly PositionBook _positions;
     private int _assigned;
 
     private TaskPatcher(TaskloomDbContext db, ActivityRecorder activity, DateTimeOffset now, Dictionary<Guid, TaskList> lists,
         List<ListStatus> statuses, Dictionary<Guid, string> memberNames, Dictionary<Guid, string> formerMemberNames,
-        Dictionary<Guid, Tag> tags, ILookup<Guid, TaskItem> subtasks, PositionBook positions)
+        Dictionary<Guid, Tag> tags, Dictionary<Guid, HashSet<Guid>> privatePeople, ILookup<Guid, TaskItem> subtasks, PositionBook positions)
     {
         _db = db;
         _activity = activity;
@@ -153,23 +154,36 @@ public sealed class TaskPatcher
         _memberNames = memberNames;
         _formerMemberNames = formerMemberNames;
         _tags = tags;
+        _privatePeople = privatePeople;
         _subtasks = subtasks;
         _positions = positions;
     }
 
     public const string AssigneesMustBeMembers = "Everyone assigned must be a member of this workspace.";
     public const string TagsMustBelongToWorkspace = "Tags must belong to this workspace.";
+    public const string AssigneesMustSeeSpace = "Only people in this private space can be assigned to its tasks.";
 
+    /// <param name="access">The caller: only the lists they can see are loaded, so a task can't move into a private space
+    /// they aren't in.</param>
     /// <param name="items">The tasks (tracked, with <c>Assignees</c> and <c>Tags</c> loaded) and their changes.</param>
-    public static async Task<TaskPatcher> CreateAsync(TaskloomDbContext db, Guid workspaceId, ActivityRecorder activity,
+    public static async Task<TaskPatcher> CreateAsync(TaskloomDbContext db, Access access, Guid workspaceId, ActivityRecorder activity,
         DateTimeOffset now, IReadOnlyList<(TaskItem Task, TaskChange Change)> items)
     {
-        var lists = await db.Lists.AsNoTracking().Where(l => l.Space!.WorkspaceId == workspaceId).ToDictionaryAsync(l => l.Id);
-        var statuses = await db.Statuses.AsNoTracking()
-            .Where(s => db.Lists.Any(l => l.Id == s.ListId && l.Space!.WorkspaceId == workspaceId)).ToListAsync();
+        var visibleListIds = access.VisibleListIds(workspaceId);
+        var lists = await db.Lists.AsNoTracking().Where(l => visibleListIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id);
+        var statuses = await db.Statuses.AsNoTracking().Where(s => visibleListIds.Contains(s.ListId)).ToListAsync();
         var memberNames = await db.WorkspaceMembers.Where(m => m.WorkspaceId == workspaceId)
             .Select(m => new { m.UserId, m.User!.DisplayName }).ToDictionaryAsync(m => m.UserId, m => m.DisplayName);
         var tags = await db.Tags.AsNoTracking().Where(t => t.WorkspaceId == workspaceId).ToDictionaryAsync(t => t.Id);
+
+        // The people of each private space, read only when someone is being assigned: they alone may be.
+        var privatePeople = new Dictionary<Guid, HashSet<Guid>>();
+        if (items.Any(i => i.Change.AssigneeIds is { Count: > 0 } || i.Change.AddAssigneeIds is { Count: > 0 }))
+        {
+            var rows = await db.Spaces.Where(s => s.WorkspaceId == workspaceId && s.IsPrivate)
+                .Select(s => new { s.Id, People = s.Members.Select(m => m.UserId).ToList() }).ToListAsync();
+            privatePeople = rows.ToDictionary(r => r.Id, r => r.People.ToHashSet());
+        }
 
         // Assignees who have left the workspace still need a name when they are removed.
         var formerIds = items.SelectMany(i => i.Task.Assignees).Select(a => a.UserId).Where(u => !memberNames.ContainsKey(u)).Distinct().ToList();
@@ -191,7 +205,7 @@ public sealed class TaskPatcher
         }
         var positions = await PositionBook.LoadAsync(db, targets);
 
-        return new TaskPatcher(db, activity, now, lists, statuses, memberNames, formerNames, tags,
+        return new TaskPatcher(db, activity, now, lists, statuses, memberNames, formerNames, tags, privatePeople,
             subtasks.ToLookup(t => t.ParentTaskId!.Value), positions);
     }
 
@@ -317,8 +331,11 @@ public sealed class TaskPatcher
             added = (change.AddAssigneeIds ?? []).Where(u => !current.Contains(u)).ToList();
             removed = remove.Where(current.Contains).ToList();
         }
-        // Only people being added must be members; an assignee who has left the workspace can stay or go.
+        // Only people being added must be members who can see the task (in its new list, when it moves); an assignee who
+        // has left the workspace, or can no longer see the task, can stay or go.
         if (added.Any(u => !_memberNames.ContainsKey(u))) throw ProblemException.BadRequest(AssigneesMustBeMembers);
+        if (_privatePeople.TryGetValue(_lists[task.ListId].SpaceId, out var people) && added.Any(u => !people.Contains(u)))
+            throw ProblemException.BadRequest(AssigneesMustSeeSpace);
 
         foreach (var userId in added)
         {

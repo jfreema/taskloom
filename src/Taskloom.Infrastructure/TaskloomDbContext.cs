@@ -12,6 +12,7 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
     public DbSet<Space> Spaces => Set<Space>();
+    public DbSet<SpaceMember> SpaceMembers => Set<SpaceMember>();
     public DbSet<TaskList> Lists => Set<TaskList>();
     public DbSet<ListStatus> Statuses => Set<ListStatus>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
@@ -70,6 +71,14 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Color).HasMaxLength(20);
             e.HasMany(x => x.Lists).WithOne(x => x.Space).HasForeignKey(x => x.SpaceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Members).WithOne().HasForeignKey(x => x.SpaceId).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<SpaceMember>(e =>
+        {
+            e.ToTable("space_members");
+            e.HasKey(x => new { x.SpaceId, x.UserId });
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.UserId);
         });
         b.Entity<TaskList>(e =>
         {

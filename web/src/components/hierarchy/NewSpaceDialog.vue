@@ -1,5 +1,7 @@
 <script setup lang="ts">
-// New space (8.13), opened by ui.openNewSpace(): a name and a colour (Teal by default).
+// New space (8.13), opened by ui.openNewSpace(): a name, a colour (Teal by default) and whether it is
+// private (Security 3): only its people see a private space, starting with its creator; more people
+// are added from the space menu's "Share space…".
 // createSpace is optimistic, so the space is already in the sidebar behind the dialog; the dialog
 // waits for the server so it can show a refusal inline. The new space is expanded in the sidebar.
 // When the workspace had no list yet (or quick create sent the user here), New list follows for
@@ -17,6 +19,7 @@ import UiDialog from '../ui/UiDialog.vue'
 import UiField from '../ui/UiField.vue'
 import UiInlineAlert from '../ui/UiInlineAlert.vue'
 import UiInput from '../ui/UiInput.vue'
+import UiSwitch from '../ui/UiSwitch.vue'
 import { useRequestedDialog } from './useRequestedDialog'
 
 const ui = useUi()
@@ -28,6 +31,7 @@ const colorLabelId = `${uid}-color`
 
 const name = ref('')
 const color = ref<string>(DEFAULT_COLORS.space)
+const isPrivate = ref(false)
 const error = ref('')
 const busy = ref(false)
 /** Quick create sent the user here: there is no list to put a task in yet. */
@@ -44,6 +48,7 @@ const open = useRequestedDialog(
   () => {
     name.value = ''
     color.value = DEFAULT_COLORS.space
+    isPrivate.value = false
     error.value = ''
     busy.value = false
     noListHint.value = ui.noListHint
@@ -73,7 +78,7 @@ async function submit(): Promise<void> {
   busy.value = true
   error.value = ''
   try {
-    const space = await workspaces.createSpace({ name: trimmed, color: color.value })
+    const space = await workspaces.createSpace({ name: trimmed, color: color.value, isPrivate: isPrivate.value })
     sidebar.setCollapsed(space.id, false)
     if (!hadList || noListHint.value) thenNewListIn = { spaceId: space.id, hint: noListHint.value }
     open.value = false
@@ -123,6 +128,11 @@ function afterLeave(): void {
         <span :id="colorLabelId" class="label">Colour</span>
         <UiColorSwatches v-model="color" :aria-labelledby="colorLabelId" />
       </div>
+      <UiSwitch
+        v-model="isPrivate"
+        label="Private"
+        description="Only you will see it until you add people from its menu › Share space."
+      />
     </form>
     <template #footer>
       <UiButton variant="secondary" @click="open = false">Cancel</UiButton>

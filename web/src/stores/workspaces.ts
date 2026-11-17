@@ -14,8 +14,10 @@ import { readString, userKey, writeString } from '../lib/storage'
 import {
   STATUS_CATEGORY_ORDER,
   type ListSummary,
+  type PrivateSpaceSummary,
   type Role,
   type Space,
+  type SpaceMembersResponse,
   type Status,
   type StatusCategory,
   type StatusPreset,
@@ -395,18 +397,24 @@ export const useWorkspaces = defineStore('workspaces', () => {
 
   // Spaces
 
-  /** POST /api/workspaces/{id}/spaces in the current workspace. Optimistic; rejects without a toast. */
-  function createSpace(r: { name: string; color?: string }): Promise<Space> {
+  /**
+   * POST /api/workspaces/{id}/spaces in the current workspace. Optimistic; rejects without a toast. A private space
+   * starts with the caller as its only person.
+   */
+  function createSpace(r: { name: string; color?: string; isPrivate?: boolean }): Promise<Space> {
     const ws = current.value
     if (!ws) return rejectWith('Choose a workspace first.')
     const id = newId()
     const name = r.name.trim()
     const color = r.color ?? DEFAULT_COLORS.space
-    ws.spaces.push({ id, name, color, position: between(maxPosition(ws.spaces), null), lists: [] })
+    const isPrivate = r.isPrivate === true
+    const me = useSession().user?.id
+    const memberIds = isPrivate && me ? [me] : []
+    ws.spaces.push({ id, name, color, position: between(maxPosition(ws.spaces), null), isPrivate, memberIds, lists: [] })
     const wsId = ws.id
     return handled(
       write(
-        () => api.post<Space>(`/api/workspaces/${wsId}/spaces`, { id, name, color }),
+        () => api.post<Space>(`/api/workspaces/${wsId}/spaces`, { id, name, color, ...(isPrivate ? { isPrivate } : {}) }),
         () => {
           const found = findSpace(id)
           if (found) found.workspace.spaces = found.workspace.spaces.filter((s) => s.id !== id)
@@ -418,6 +426,8 @@ export const useWorkspaces = defineStore('workspaces', () => {
         live.name = server.name
         live.color = server.color
         live.position = server.position
+        live.isPrivate = server.isPrivate
+        live.memberIds = server.memberIds
         return live
       }),
     )
@@ -452,6 +462,120 @@ export const useWorkspaces = defineStore('workspaces', () => {
       },
       { retry: () => void updateSpace(spaceId, r) },
     )
+  }
+
+  // Private spaces (Security 3)
+
+  /** True when the person can see the space: everyone can see a space that isn't private. */
+  function canSee(spaceId: Uuid, userId: Uuid): boolean {
+    const space = findSpace(spaceId)?.space
+    return !!space && (!space.isPrivate || space.memberIds.includes(userId))
+  }
+
+  /**
+   * The people who may be newly assigned to tasks in these lists: null when every list is in a space everyone can see,
+   * else the people of all the private spaces among them.
+   */
+  function assignableIn(listIds: readonly Uuid[]): Set<Uuid> | null {
+    let allowed: Set<Uuid> | null = null
+    for (const id of new Set(listIds)) {
+      const space = findList(id)?.space
+      if (!space?.isPrivate) continue
+      allowed = allowed ? new Set(space.memberIds.filter((u) => allowed!.has(u))) : new Set(space.memberIds)
+    }
+    return allowed
+  }
+
+  /** Takes a space out of the tree (the caller can't see it any more), leaving its pages. */
+  function forgetSpace(spaceId: Uuid): void {
+    const found = findSpace(spaceId)
+    if (!found) return
+    found.workspace.spaces = found.workspace.spaces.filter((s) => s.id !== spaceId)
+    listsRemoved(found.space.lists.map((l) => l.id))
+  }
+
+  /**
+   * PATCH /api/spaces/{id} with isPrivate. Private keeps the space to its people, starting with the caller; public shows
+   * it to everyone and clears its people. Optimistic; toasts and rolls back on failure.
+   */
+  function setSpacePrivate(spaceId: Uuid, isPrivate: boolean): Promise<void> {
+    const space = findSpace(spaceId)?.space
+    if (!space) return rejectWith('This space no longer exists.')
+    if (space.isPrivate === isPrivate) return Promise.resolve()
+    const prev = { isPrivate: space.isPrivate, memberIds: [...space.memberIds] }
+    const me = useSession().user?.id
+    space.isPrivate = isPrivate
+    space.memberIds = isPrivate && me ? [me] : []
+    return write(
+      () => api.patch<void>(`/api/spaces/${spaceId}`, { isPrivate }),
+      () => {
+        const live = findSpace(spaceId)?.space
+        if (live) Object.assign(live, prev)
+      },
+      { retry: () => void setSpacePrivate(spaceId, isPrivate) },
+    )
+  }
+
+  /** POST /api/spaces/{id}/members: adds people to a private space. Optimistic; toasts and rolls back on failure. */
+  function addSpaceMembers(spaceId: Uuid, userIds: Uuid[]): Promise<void> {
+    const space = findSpace(spaceId)?.space
+    if (!space) return rejectWith('This space no longer exists.')
+    const added = userIds.filter((u) => !space.memberIds.includes(u))
+    if (added.length === 0) return Promise.resolve()
+    space.memberIds = [...space.memberIds, ...added]
+    return handled(
+      write(
+        () => api.post<SpaceMembersResponse>(`/api/spaces/${spaceId}/members`, { userIds: added }),
+        () => {
+          const live = findSpace(spaceId)?.space
+          if (live) live.memberIds = live.memberIds.filter((u) => !added.includes(u))
+        },
+        { retry: () => void addSpaceMembers(spaceId, userIds) },
+      ).then((server) => {
+        const live = findSpace(spaceId)?.space
+        if (live) live.memberIds = server.memberIds
+      }),
+    )
+  }
+
+  /**
+   * DELETE /api/spaces/{id}/members/{userId}. Optimistic; toasts and rolls back on failure. Taking yourself out of a
+   * private space removes it from the tree.
+   */
+  function removeSpaceMember(spaceId: Uuid, userId: Uuid): Promise<void> {
+    const found = findSpace(spaceId)
+    if (!found) return Promise.resolve()
+    const { space, workspace } = found
+    const prev = [...space.memberIds]
+    const self = userId === useSession().user?.id
+    space.memberIds = space.memberIds.filter((u) => u !== userId)
+    return write(
+      () => api.del(`/api/spaces/${spaceId}/members/${userId}`),
+      () => {
+        const live = findSpace(spaceId)?.space
+        if (live) live.memberIds = prev
+      },
+    ).then(() => {
+      if (self && workspace.spaces.includes(space)) forgetSpace(spaceId)
+    })
+  }
+
+  /** Someone left the workspace: they are no longer among any of its spaces' people. */
+  function forgetMember(wsId: Uuid, userId: Uuid): void {
+    for (const space of workspaceOf(wsId)?.spaces ?? []) {
+      if (space.memberIds.includes(userId)) space.memberIds = space.memberIds.filter((u) => u !== userId)
+    }
+  }
+
+  /** GET /api/workspaces/{id}/private-spaces (Admin+): every private space, including ones the caller isn't in. */
+  function loadPrivateSpaces(wsId: Uuid): Promise<PrivateSpaceSummary[]> {
+    return api.get<PrivateSpaceSummary[]>(`/api/workspaces/${wsId}/private-spaces`)
+  }
+
+  /** POST /api/spaces/{id}/join (Admin+), then refetches the tree so the space and its lists appear. */
+  async function joinSpace(spaceId: Uuid): Promise<void> {
+    await write(() => api.post<void>(`/api/spaces/${spaceId}/join`, {}), null, { toast: false })
+    await fetchTree()
   }
 
   /** DELETE /api/spaces/{id} (after the confirm). Optimistic; restores the space on failure. */
@@ -695,6 +819,14 @@ export const useWorkspaces = defineStore('workspaces', () => {
     createSpace,
     updateSpace,
     deleteSpace,
+    canSee,
+    assignableIn,
+    setSpacePrivate,
+    addSpaceMembers,
+    removeSpaceMember,
+    forgetMember,
+    loadPrivateSpaces,
+    joinSpace,
     createList,
     updateList,
     deleteList,

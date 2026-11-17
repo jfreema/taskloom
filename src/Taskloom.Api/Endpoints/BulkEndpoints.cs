@@ -41,16 +41,18 @@ public static class BulkEndpoints
         await using var tx = await db.Database.BeginTransactionAsync();
         var tasks = await db.Tasks.Include(t => t.Assignees).Include(t => t.Tags)
             .Where(t => ids.Contains(t.Id)).AsSplitQuery().ToDictionaryAsync(t => t.Id);
-        // All tasks must exist and share one workspace in which the caller is Member or above.
+        // All tasks must exist, share one workspace in which the caller is Member or above, and be in spaces they can see.
         if (tasks.Count != ids.Count) throw new NotFoundException();
         var listIds = tasks.Values.Select(t => t.ListId).Distinct().ToList();
         var workspaceIds = await db.Lists.Where(l => listIds.Contains(l.Id)).Select(l => l.Space!.WorkspaceId).Distinct().ToListAsync();
         if (workspaceIds.Count != 1) throw new NotFoundException();
-        await access.RequireWorkspaceAsync(workspaceIds[0], WorkspaceRole.Member);
+        var role = await access.RequireWorkspaceAsync(workspaceIds[0]);
+        if (await access.VisibleListIds(workspaceIds[0]).CountAsync(l => listIds.Contains(l)) != listIds.Count) throw new NotFoundException();
+        if (role > WorkspaceRole.Member) throw new ForbiddenException();
 
         var pairs = ids.Select((id, i) => (tasks[id], TaskChange.Parse(items[i], TaskChangeKind.Bulk))).ToList();
         var now = Clock.Now();
-        var patcher = await TaskPatcher.CreateAsync(db, workspaceIds[0], new ActivityRecorder(db, access.UserId, now), now, pairs);
+        var patcher = await TaskPatcher.CreateAsync(db, access, workspaceIds[0], new ActivityRecorder(db, access.UserId, now), now, pairs);
         foreach (var (task, change) in pairs) await patcher.ApplyAsync(task, change);
         await db.SaveChangesAsync();
         await tx.CommitAsync();
@@ -60,7 +62,7 @@ public static class BulkEndpoints
     /// <summary>
     /// Deletes up to 500 tasks with their subtasks and stored files. Ids that no longer exist are ignored (an undo
     /// toast may commit a delete twice). Nothing is deleted when any task is in a workspace where the caller isn't a
-    /// member (404) or is only a Guest (403).
+    /// member, or in a private space they aren't in (404), or is only a Guest (403).
     /// </summary>
     private static async Task<IResult> DeleteAsync(BulkDeleteRequest req, Access access, TaskloomDbContext db, IFileStore files)
     {
@@ -74,6 +76,9 @@ public static class BulkEndpoints
         var me = access.UserId;
         var roles = await db.WorkspaceMembers.Where(m => m.UserId == me && workspaceIds.Contains(m.WorkspaceId)).Select(m => m.Role).ToListAsync();
         if (roles.Count != workspaceIds.Count) throw new NotFoundException();
+        var visibleSpaceIds = db.Spaces.VisibleTo(db, me).Select(s => s.Id);
+        var visible = await db.Lists.CountAsync(l => listIds.Contains(l.Id) && visibleSpaceIds.Contains(l.SpaceId));
+        if (visible != listIds.Count) throw new NotFoundException();
         if (roles.Any(r => r > WorkspaceRole.Member)) throw new ForbiddenException();
 
         var taskIds = found.Select(t => t.Id).ToList();

@@ -104,7 +104,27 @@ export interface Space {
   name: string
   color: string
   position: number
+  /** Only `memberIds` can see it (and anything in it); to everyone else it doesn't exist. */
+  isPrivate: boolean
+  /** The people of a private space, by when they were added; empty for a space everyone in the workspace can see. */
+  memberIds: Uuid[]
   lists: ListSummary[]
+}
+
+/** POST /api/spaces/{id}/members: the space's people after the change. */
+export interface SpaceMembersResponse {
+  spaceId: Uuid
+  isPrivate: boolean
+  memberIds: Uuid[]
+}
+
+/** A row of GET /api/workspaces/{id}/private-spaces (Admin+), including private spaces the caller isn't in. */
+export interface PrivateSpaceSummary {
+  id: Uuid
+  name: string
+  color: string
+  memberCount: number
+  isMember: boolean
 }
 
 /** GET /api/workspaces returns the whole tree the caller can see. */
@@ -280,12 +300,22 @@ export interface CreateSpaceRequest {
   id?: Uuid
   name: string
   color?: string
+  /** Only the creator and `memberIds` will see it. */
+  isPrivate?: boolean
+  /** Workspace members to add to a private space besides the creator. */
+  memberIds?: Uuid[]
 }
 
 export interface UpdateSpaceRequest {
   name?: string
   color?: string
   position?: number
+  /** true keeps the space to its people (the caller is added); false shows it to everyone and clears its people. */
+  isPrivate?: boolean
+}
+
+export interface AddSpaceMembersRequest {
+  userIds: Uuid[]
 }
 
 export interface CreateListRequest {

@@ -107,7 +107,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         Assert.Equal(Sorted("id", "name", "role", "spaces"), ws.Keys());
         Assert.Equal("Owner", ws.GetProperty("role").GetString());
         var space = ws.GetProperty("spaces")[0];
-        Assert.Equal(Sorted("id", "name", "color", "position", "lists"), space.Keys());
+        Assert.Equal(Sorted("id", "name", "color", "position", "isPrivate", "memberIds", "lists"), space.Keys());
         var list = space.GetProperty("lists")[0];
         Assert.Equal(Sorted("id", "spaceId", "name", "position", "statuses"), list.Keys());
         var status = list.GetProperty("statuses")[0];
@@ -212,7 +212,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         Assert.Equal(JsonValueKind.String, edited.RootElement.GetProperty("editedAt").ValueKind);
 
         using var space = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/workspaces/{user.Workspace.Id}/spaces", new { name = "S" }));
-        Assert.Equal(Sorted("id", "name", "color", "position", "lists"), space.RootElement.Keys());
+        Assert.Equal(Sorted("id", "name", "color", "position", "isPrivate", "memberIds", "lists"), space.RootElement.Keys());
         using var newList = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/spaces/{space.RootElement.GetProperty("id").GetString()}/lists", new { name = "L", statusPreset = "Requests" }));
         Assert.Equal(Sorted("id", "spaceId", "name", "position", "statuses"), newList.RootElement.Keys());
         var listId = newList.RootElement.GetProperty("id").GetString();

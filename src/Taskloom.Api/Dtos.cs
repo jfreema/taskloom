@@ -28,7 +28,16 @@ public record AdminUserDto(
 
 public record StatusDto(Guid Id, Guid ListId, string Name, string Color, StatusCategory Category, double Position);
 public record ListSummaryDto(Guid Id, Guid SpaceId, string Name, double Position, List<StatusDto> Statuses);
-public record SpaceDto(Guid Id, string Name, string Color, double Position, List<ListSummaryDto> Lists);
+/// <param name="IsPrivate">Only <paramref name="MemberIds"/> can see it.</param>
+/// <param name="MemberIds">The people of a private space, by when they were added; empty for a space everyone can see.</param>
+public record SpaceDto(Guid Id, string Name, string Color, double Position, bool IsPrivate, List<Guid> MemberIds, List<ListSummaryDto> Lists);
+/// <summary>POST /api/spaces/{id}/members: the space's people after the change.</summary>
+public record SpaceMembersDto(Guid SpaceId, bool IsPrivate, List<Guid> MemberIds);
+/// <summary>
+/// A row of GET /api/workspaces/{id}/private-spaces (Admin+): every private space of the workspace, including the ones
+/// the caller isn't in, so an admin can join one that has nobody left to add people.
+/// </summary>
+public record PrivateSpaceDto(Guid Id, string Name, string Color, int MemberCount, bool IsMember);
 public record WorkspaceTreeDto(Guid Id, string Name, WorkspaceRole Role, List<SpaceDto> Spaces);
 /// <summary>GET /api/lists/{id}; the web app no longer calls it.</summary>
 public record ListDetailDto(Guid Id, Guid SpaceId, Guid WorkspaceId, string Name, List<StatusDto> Statuses, List<UserDto> Members);
@@ -74,8 +83,12 @@ public record AddMemberRequest(string? Email, WorkspaceRole Role, string? Displa
 public record UpdateMemberRequest(WorkspaceRole Role);
 public record CreateTagRequest(Guid? Id, string? Name, string? Color);
 public record UpdateTagRequest(string? Name, string? Color);
-public record CreateSpaceRequest(Guid? Id, string? Name, string? Color);
-public record UpdateSpaceRequest(string? Name, string? Color, double? Position);
+/// <param name="IsPrivate">Only the creator and <paramref name="MemberIds"/> will see it.</param>
+/// <param name="MemberIds">Workspace members to add to a private space besides the creator.</param>
+public record CreateSpaceRequest(Guid? Id, string? Name, string? Color, bool? IsPrivate = null, List<Guid>? MemberIds = null);
+/// <param name="IsPrivate">true keeps the space to its people (the caller is added); false shows it to everyone and clears the people.</param>
+public record UpdateSpaceRequest(string? Name, string? Color, double? Position, bool? IsPrivate = null);
+public record AddSpaceMembersRequest(List<Guid>? UserIds);
 public record CreateListRequest(Guid? Id, string? Name, StatusPreset? StatusPreset, Guid? StatusesFromListId);
 public record UpdateListRequest(string? Name, double? Position, Guid? SpaceId);
 public record CreateStatusRequest(Guid? Id, string? Name, string? Color, StatusCategory? Category);

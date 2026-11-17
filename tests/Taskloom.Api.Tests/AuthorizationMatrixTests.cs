@@ -73,6 +73,15 @@ public class AuthorizationMatrixTests(TaskloomFactory factory) : IClassFixture<T
         ["#40 POST /api/tasks/{id}/attachments"] = new(Min.Member, HttpStatusCode.OK, w => Upload($"/api/tasks/{w.Task.Id}/attachments")),
         ["#41 GET /api/attachments/{id}"] = new(Min.Guest, HttpStatusCode.OK, w => Get($"/api/attachments/{w.Attachment.Id}")),
         ["#42 DELETE /api/attachments/{id}"] = new(Min.Member, HttpStatusCode.NoContent, w => Delete($"/api/attachments/{w.Attachment.Id}")),
+        ["POST /api/workspaces/{id}/spaces (private)"] = new(Min.Member, HttpStatusCode.Created,
+            w => Post($"/api/workspaces/{w.WorkspaceId}/spaces", new { name = "Private", isPrivate = true })),
+        ["PATCH /api/spaces/{id} (private)"] = new(Min.Member, HttpStatusCode.NoContent, w => Patch($"/api/spaces/{w.SpaceId}", new { isPrivate = true })),
+        ["POST /api/spaces/{id}/members"] = new(Min.Member, HttpStatusCode.OK,
+            w => Post($"/api/spaces/{w.PrivateSpaceId}/members", new { userIds = new[] { w.OutsidePrivateId } })),
+        ["DELETE /api/spaces/{id}/members/{userId}"] = new(Min.Member, HttpStatusCode.NoContent,
+            w => Delete($"/api/spaces/{w.PrivateSpaceId}/members/{w.InsidePrivateId}")),
+        ["GET /api/workspaces/{id}/private-spaces"] = new(Min.Admin, HttpStatusCode.OK, w => Get($"/api/workspaces/{w.WorkspaceId}/private-spaces")),
+        ["POST /api/spaces/{id}/join"] = new(Min.Admin, HttpStatusCode.NoContent, w => Post($"/api/spaces/{w.PrivateSpaceId}/join", new { })),
         ["#43 POST /api/dev/seed"] = new(Min.Owner, HttpStatusCode.NoContent, w => Post("/api/dev/seed", new { workspaceId = w.WorkspaceId, fillers = 0 })),
         ["GET /api/lists/{id}"] = new(Min.Guest, HttpStatusCode.OK, w => Get($"/api/lists/{w.ListId}")),
     };
@@ -143,7 +152,8 @@ public class AuthorizationMatrixTests(TaskloomFactory factory) : IClassFixture<T
 
     /// <summary>
     /// A workspace with a person of each role, an outsider with a workspace of their own, and one of everything to act
-    /// on: a tag, a task, a comment written by the Guest, and an attachment.
+    /// on: a tag, a task, a comment written by the Guest, an attachment, and a private space that everyone of the
+    /// workspace is in, with an invitee in it and another who isn't.
     /// </summary>
     public sealed class World
     {
@@ -158,6 +168,9 @@ public class AuthorizationMatrixTests(TaskloomFactory factory) : IClassFixture<T
         public required TaskDto Task { get; init; }
         public required CommentDto Comment { get; init; }
         public required AttachmentDto Attachment { get; init; }
+        public required Guid PrivateSpaceId { get; init; }
+        public required Guid InsidePrivateId { get; init; }
+        public required Guid OutsidePrivateId { get; init; }
         public string NewcomerEmail { get; } = Builders.NewEmail();
 
         public Guid WorkspaceId => Owner.Workspace.Id;
@@ -168,9 +181,15 @@ public class AuthorizationMatrixTests(TaskloomFactory factory) : IClassFixture<T
         public static async Task<World> CreateAsync(TaskloomFactory factory)
         {
             var owner = await factory.NewUserAsync();
-            var (admin, _) = await factory.JoinAsync(owner, WorkspaceRole.Admin, "Ada Admin");
+            var (admin, adminInfo) = await factory.JoinAsync(owner, WorkspaceRole.Admin, "Ada Admin");
             var (member, memberInfo) = await factory.JoinAsync(owner, WorkspaceRole.Member, "Max Member");
-            var (guest, _) = await factory.JoinAsync(owner, WorkspaceRole.Guest, "Gus Guest");
+            var (guest, guestInfo) = await factory.JoinAsync(owner, WorkspaceRole.Guest, "Gus Guest");
+            var inside = await owner.Client.InviteAsync(owner.Workspace.Id, Builders.NewEmail(), WorkspaceRole.Member);
+            var outside = await owner.Client.InviteAsync(owner.Workspace.Id, Builders.NewEmail(), WorkspaceRole.Member);
+            var privateSpace = await (await owner.Client.PostAsJsonAsync($"/api/workspaces/{owner.Workspace.Id}/spaces", new
+            {
+                name = "Private", isPrivate = true, memberIds = new[] { adminInfo.UserId, memberInfo.UserId, guestInfo.UserId, inside.UserId },
+            })).ReadAsync<SpaceDto>();
             var outsider = await factory.NewUserAsync();
             var tag = await owner.Client.CreateTagAsync(owner.Workspace.Id, "matrix");
             var task = await owner.Client.CreateTaskAsync(owner.List.Id, new { title = "Matrix task", tagIds = new[] { tag.Id }, assigneeIds = new[] { memberInfo.UserId } });
@@ -181,6 +200,7 @@ public class AuthorizationMatrixTests(TaskloomFactory factory) : IClassFixture<T
                 Owner = owner, Admin = admin, Member = member, Guest = guest, Outsider = outsider.Client,
                 Anonymous = factory.CreateClient(new() { AllowAutoRedirect = false }),
                 MemberId = memberInfo.UserId, Tag = tag, Task = task, Comment = comment, Attachment = attachment,
+                PrivateSpaceId = privateSpace.Id, InsidePrivateId = inside.UserId, OutsidePrivateId = outside.UserId,
             };
         }
 

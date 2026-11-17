@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // The bulk bar's Assignees button (8.7): "Add assignee ›" (the workspace's members, you first),
-// "Remove assignee ›" (the people on any selected task) and "Unassign all".
+// "Remove assignee ›" (the people on any selected task) and "Unassign all". In a private space only its
+// people can be added.
 import { computed, h, onMounted, ref } from 'vue'
 import { Users } from '@lucide/vue'
 import { pluralize } from '../../lib/format'
 import { useMembers } from '../../stores/members'
 import { useSession } from '../../stores/session'
+import { useWorkspaces } from '../../stores/workspaces'
 import type { Uuid } from '../../types'
 import type { MenuItem } from '../ui/menu'
 import UiAvatar from '../ui/UiAvatar.vue'
@@ -18,6 +20,7 @@ const props = defineProps<{ actions: BulkActions; iconOnly: boolean }>()
 
 const members = useMembers()
 const session = useSession()
+const workspaces = useWorkspaces()
 const open = ref(false)
 
 onMounted(() => void members.ensure().catch(() => undefined))
@@ -43,7 +46,8 @@ const counts = computed(() => {
 function addItems(): MenuItem[] {
   const total = props.actions.selected.value.length
   const me = session.user?.id
-  const list = members.current
+  const allowed = workspaces.assignableIn(props.actions.selected.value.map((t) => t.listId))
+  const list = allowed ? members.current.filter((m) => allowed.has(m.userId)) : members.current
   const mine = list.find((m) => m.userId === me)
   const ordered = mine ? [mine, ...list.filter((m) => m !== mine)] : list
   return ordered.map((m) => {

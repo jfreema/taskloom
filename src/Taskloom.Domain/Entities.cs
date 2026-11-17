@@ -83,7 +83,26 @@ public class Space
     public required string Name { get; set; }
     public string Color { get; set; } = Palette.Teal;
     public double Position { get; set; }
+    /// <summary>
+    /// Only the people in <see cref="Members"/> can see a private space and anything in it; to everyone else, workspace
+    /// Owner and Admins included, it doesn't exist. Everyone in the workspace can see a space that isn't private.
+    /// </summary>
+    public bool IsPrivate { get; set; }
+    /// <summary>The people of a private space (empty while the space isn't private).</summary>
+    public List<SpaceMember> Members { get; set; } = [];
     public List<TaskList> Lists { get; set; } = [];
+}
+
+/// <summary>
+/// A person who can see a private space. They must be a member of the space's workspace, and their workspace role still
+/// decides what they can change in it (a Guest only views and comments).
+/// </summary>
+public class SpaceMember
+{
+    public Guid SpaceId { get; set; }
+    public Guid UserId { get; set; }
+    public User? User { get; set; }
+    public DateTimeOffset AddedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public class TaskList
