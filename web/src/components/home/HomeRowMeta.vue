@@ -51,7 +51,7 @@ const people = computed(() => props.task.assigneeIds.map((id) => ({ id, displayN
     <span v-else class="location" />
     <span class="due">
       <span v-if="task.dueDate" class="sep" aria-hidden="true">·</span>
-      <DueDate :date="task.dueDate" :done="done" size="sm" />
+      <DueDate :date="task.dueDate" :done="done" size="sm" :repeat="!!task.repeat" />
     </span>
     <span class="flag"><PriorityFlag v-if="task.priority !== 'None'" :priority="task.priority" :size="14" /></span>
     <span class="people">

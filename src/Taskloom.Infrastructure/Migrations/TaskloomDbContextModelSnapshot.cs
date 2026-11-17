@@ -319,6 +319,9 @@ namespace Taskloom.Infrastructure.Migrations
                     b.Property<Guid>("ListId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("NextRepeatId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ParentTaskId")
                         .HasColumnType("uuid");
 
@@ -329,6 +332,9 @@ namespace Taskloom.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Repeat")
+                        .HasColumnType("jsonb");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
@@ -347,6 +353,8 @@ namespace Taskloom.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedById");
+
+                    b.HasIndex("NextRepeatId");
 
                     b.HasIndex("ParentTaskId");
 
@@ -655,6 +663,11 @@ namespace Taskloom.Infrastructure.Migrations
                         .HasForeignKey("ListId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Taskloom.Domain.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("NextRepeatId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Taskloom.Domain.TaskItem", null)
                         .WithMany("Subtasks")

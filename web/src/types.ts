@@ -33,8 +33,17 @@ export type ActivityKind =
   | 'AttachmentAdded'
   | 'AttachmentRemoved'
   | 'SubtaskAdded'
+  /** `from` and `to` are repeat rules as JSON (a RepeatRule without its null fields), or null. */
+  | 'RepeatChanged'
+  /** Completing the task created the next one; `to` is its due date. */
+  | 'Repeated'
 /** Query parameter of GET /api/workspaces/{id}/tasks (lower case on the wire). */
 export type TaskScope = 'mine' | 'all'
+export type RepeatUnit = 'Day' | 'Week' | 'Month' | 'Year'
+/** Schedule: the rule's own dates, counted from the due date. Completion: counted from the day the task is done. */
+export type RepeatBasis = 'Schedule' | 'Completion'
+/** Day names as .NET's DayOfWeek: index i is `Date.getDay() === i`. */
+export type Weekday = 'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday'
 
 // ---- Responses ----
 
@@ -144,6 +153,39 @@ export interface Tag {
   createdAt: IsoTimestamp
 }
 
+/**
+ * How a task repeats. Completing it creates the next task of the series, which takes the rule over. The server fits
+ * the rule to its unit and basis: `weekdays` only for weekly rules on schedule, `monthDay` or `monthWeek` and
+ * `monthWeekday` only for monthly ones.
+ */
+export interface RepeatRule {
+  unit: RepeatUnit
+  /** Every 1 to 365 units. */
+  every: number
+  basis: RepeatBasis
+  /** In week order from Sunday. */
+  weekdays: Weekday[]
+  /** 1 to 31 (the month's last day when shorter), or -1 for the last day. */
+  monthDay: number | null
+  /** The 1st to 4th, or -1 for the last, `monthWeekday` of the month. */
+  monthWeek: number | null
+  monthWeekday: Weekday | null
+  /** No task is created due after this day. */
+  until: IsoDate | null
+}
+
+/** A rule as a client sends it: the server fills what's missing from the due date (else today). */
+export interface RepeatRequest {
+  unit: RepeatUnit
+  every?: number
+  basis?: RepeatBasis
+  weekdays?: Weekday[]
+  monthDay?: number | null
+  monthWeek?: number | null
+  monthWeekday?: Weekday | null
+  until?: IsoDate | null
+}
+
 export interface Task {
   id: Uuid
   listId: Uuid
@@ -170,6 +212,10 @@ export interface Task {
   subtaskDoneCount: number
   commentCount: number
   attachmentCount: number
+  /** Only the newest task of a series has it (top-level tasks only). */
+  repeat: RepeatRule | null
+  /** The task this one's completion created, while that link stands. Reopening this task takes it back if untouched. */
+  nextRepeatId: Uuid | null
 }
 
 export interface TaskRef {
@@ -362,6 +408,8 @@ export interface CreateTaskRequest {
   dueDate?: IsoDate | null
   /** Where the task goes among tasks with the same status and parent. Default 'Bottom'. */
   placement?: Placement
+  /** Top-level tasks only; a task without a due date gets the rule's first date. */
+  repeat?: RepeatRequest
 }
 
 /** PATCH /api/tasks/{id}. Only present properties change; null clears a nullable field. */
@@ -380,6 +428,8 @@ export interface TaskPatch {
   listId?: Uuid
   /** Sets the position exactly. Sent only by undo; without it a status change puts the task at the top of its new status. */
   position?: number
+  /** Top-level tasks only; null stops repeating. A task without a due date gets the rule's first date. */
+  repeat?: RepeatRequest | null
 }
 
 export interface MoveTaskRequest {

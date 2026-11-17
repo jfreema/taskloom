@@ -18,7 +18,8 @@ public static class TaskProjections
         t.Tags.OrderBy(x => x.Tag!.NormalizedName).ThenBy(x => x.TagId).Select(x => x.TagId).ToList(),
         t.StartDate, t.DueDate, t.Position,
         t.CreatedById, t.CreatedAt, t.UpdatedAt, t.CompletedAt,
-        t.Subtasks.Count(), t.Subtasks.Count(s => s.CompletedAt != null), t.Comments.Count(), t.Attachments.Count());
+        t.Subtasks.Count(), t.Subtasks.Count(s => s.CompletedAt != null), t.Comments.Count(), t.Attachments.Count(),
+        RepeatDto.From(t.Repeat), t.NextRepeatId);
 
     /// <summary>Tasks in their stable order: position, then creation time, then id.</summary>
     public static IOrderedQueryable<TaskItem> InOrder(this IQueryable<TaskItem> tasks) =>

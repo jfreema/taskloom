@@ -45,13 +45,16 @@ public record ListDetailDto(Guid Id, Guid SpaceId, Guid WorkspaceId, string Name
 public record TagDto(Guid Id, Guid WorkspaceId, string Name, string Color, DateTimeOffset CreatedAt);
 
 /// <summary>Built only by <see cref="TaskProjections.ToDto"/>.</summary>
+/// <param name="Repeat">How the task repeats; only the newest task of a series has it.</param>
+/// <param name="NextRepeatId">The task this one's completion created, while that link stands (see TaskItem.NextRepeatId).</param>
 public record TaskDto(
     Guid Id, Guid ListId, Guid StatusId, Guid? ParentTaskId,
     string Title, bool HasDescription, TaskPriority Priority,
     List<Guid> AssigneeIds, List<Guid> TagIds,
     DateOnly? StartDate, DateOnly? DueDate, double Position,
     Guid CreatedById, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, DateTimeOffset? CompletedAt,
-    int SubtaskCount, int SubtaskDoneCount, int CommentCount, int AttachmentCount);
+    int SubtaskCount, int SubtaskDoneCount, int CommentCount, int AttachmentCount,
+    RepeatDto? Repeat, Guid? NextRepeatId);
 
 public record TaskRefDto(Guid Id, string Title, Guid ListId);
 public record CommentDto(Guid Id, Guid TaskId, UserDto Author, string Body, DateTimeOffset CreatedAt, DateTimeOffset? EditedAt);
@@ -93,10 +96,11 @@ public record CreateListRequest(Guid? Id, string? Name, StatusPreset? StatusPres
 public record UpdateListRequest(string? Name, double? Position, Guid? SpaceId);
 public record CreateStatusRequest(Guid? Id, string? Name, string? Color, StatusCategory? Category);
 public record UpdateStatusRequest(string? Name, string? Color, StatusCategory? Category, double? Position);
+/// <param name="Repeat">Top-level tasks only; a task without a due date gets the rule's first date.</param>
 public record CreateTaskRequest(
     Guid? Id, string? Title, Guid? StatusId, Guid? ParentTaskId, string? Description,
     TaskPriority? Priority, List<Guid>? AssigneeIds, List<Guid>? TagIds,
-    DateOnly? StartDate, DateOnly? DueDate, Placement? Placement);
+    DateOnly? StartDate, DateOnly? DueDate, Placement? Placement, RepeatRequest? Repeat = null);
 /// <summary>
 /// Move a task to a status between two neighbours: <paramref name="BeforeTaskId"/> is the neighbour above the drop
 /// point, <paramref name="AfterTaskId"/> the one below (either may be null).

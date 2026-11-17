@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // Due date text (7.11): formatDue ("Today", "Tomorrow", "Fri", "Nov 12"). Overdue and not done:
 // --danger-text with a CircleAlert, named "Overdue: <date>". Due today: --warning-text. Renders
-// nothing without a date. sm is 12/16 (cards, phone rows), md 13/18 (table cells).
+// nothing without a date. sm is 12/16 (cards, phone rows), md 13/18 (table cells). `repeat` adds a
+// small Repeat icon after the date, named "Repeats" (Features 1).
 import { computed } from 'vue'
-import { Calendar, CircleAlert } from '@lucide/vue'
+import { Calendar, CircleAlert, Repeat } from '@lucide/vue'
 import { useToday } from '../../composables/useToday'
 import { formatDue } from '../../lib/dates'
 import type { IsoDate } from '../../types'
@@ -15,8 +16,10 @@ const props = withDefaults(
     done?: boolean
     showIcon?: boolean
     size?: 'sm' | 'md'
+    /** The task repeats. */
+    repeat?: boolean
   }>(),
-  { done: false, showIcon: false, size: 'md' },
+  { done: false, showIcon: false, size: 'md', repeat: false },
 )
 
 const today = useToday()
@@ -36,11 +39,12 @@ const iconSize = computed(() => 14 as const)
     class="due-date tabular"
     :class="[`due-date--${size}`, `is-${state}`]"
     :role="state === 'overdue' ? 'img' : undefined"
-    :aria-label="state === 'overdue' ? `Overdue: ${text}` : undefined"
+    :aria-label="state === 'overdue' ? `Overdue: ${text}${repeat ? ', repeats' : ''}` : undefined"
   >
     <UiIcon v-if="state === 'overdue'" class="icon" :icon="CircleAlert" :size="iconSize" />
     <UiIcon v-else-if="showIcon" class="icon" :icon="Calendar" :size="iconSize" />
     <span class="text">{{ text }}</span>
+    <UiIcon v-if="repeat" class="icon repeat" :icon="Repeat" :size="12" label="Repeats" />
   </span>
 </template>
 

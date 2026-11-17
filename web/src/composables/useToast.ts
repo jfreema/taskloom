@@ -151,6 +151,16 @@ function dismiss(id: string): void {
   close(id, 'dismiss')
 }
 
+/** Changes the message of a toast that is still showing, leaving its timer and action alone. False when it has gone. */
+function retext(id: string, message: string): boolean {
+  const entry = entries.get(id)
+  if (!entry) return false
+  const item: ToastItem = { ...entry.item, message }
+  entry.item = item
+  items.value = items.value.map((t) => (t.id === id ? item : t))
+  return true
+}
+
 function success(message: string): string {
   return show({ message, tone: 'success' })
 }
@@ -264,12 +274,13 @@ function resumeAll(source: string): void {
 export function useToast(): {
   show(o: ToastOptions): string
   dismiss(id: string): void
+  retext(id: string, message: string): boolean
   success(message: string): string
   error(err: unknown, o?: { retry?: () => void }): string
   undoable(message: string, undo: () => void | Promise<void>, o?: { onCommit?: () => void; duration?: number }): string
   undoLatest(): boolean
 } {
-  return { show, dismiss, success, error, undoable, undoLatest }
+  return { show, dismiss, retext, success, error, undoable, undoLatest }
 }
 
 /** For UiToastHost only. */

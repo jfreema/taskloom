@@ -35,8 +35,10 @@ const props = withDefaults(
     hideTrigger?: boolean
     /** Mounts the popover only once used (List rows the pointer or focus hasn't reached yet). */
     lazy?: boolean
+    /** The task repeats: a due date shows the Repeat icon, and the trigger's name says so. */
+    repeat?: boolean
   }>(),
-  { otherDate: null, variant: 'cell', done: false, readonly: false, anchor: null, hideTrigger: false, lazy: false },
+  { otherDate: null, variant: 'cell', done: false, readonly: false, anchor: null, hideTrigger: false, lazy: false, repeat: false },
 )
 
 const emit = defineEmits<{
@@ -48,7 +50,8 @@ const today = useToday()
 
 const fieldName = computed(() => (props.kind === 'due' ? 'Due date' : 'Start date'))
 const text = computed(() => (props.modelValue ? formatDue(props.modelValue, today.value) : null))
-const label = computed(() => triggerLabel(fieldName.value, text.value))
+const repeats = computed(() => props.kind === 'due' && props.repeat && !!props.modelValue)
+const label = computed(() => triggerLabel(fieldName.value, text.value && repeats.value ? `${text.value}, repeats` : text.value))
 const overdue = computed(() => props.kind === 'due' && !props.done && !!props.modelValue && props.modelValue < today.value)
 const triggerVariant = computed(() =>
   props.variant === 'field' ? 'ghost' : props.variant === 'chip' ? 'chip' : props.variant === 'icon' ? 'icon' : 'cell',
@@ -74,7 +77,7 @@ function pick(v: IsoDate | null): void {
 <template>
   <span v-if="readonly" v-bind="$attrs" class="static" :class="`static--${variant}`">
     <template v-if="modelValue">
-      <DueDate v-if="kind === 'due'" :date="modelValue" :done="done" :show-icon="variant !== 'cell'" />
+      <DueDate v-if="kind === 'due'" :date="modelValue" :done="done" :show-icon="variant !== 'cell'" :repeat="repeats" />
       <span v-else class="plain"><UiIcon v-if="variant !== 'cell'" :icon="Calendar" :size="14" />{{ text }}</span>
     </template>
     <span v-else-if="variant === 'field'" class="none">None</span>
@@ -98,7 +101,7 @@ function pick(v: IsoDate | null): void {
       >
         <UiIcon v-if="variant === 'icon'" :icon="Calendar" :size="16" />
         <template v-else-if="modelValue">
-          <DueDate v-if="kind === 'due'" :date="modelValue" :done="done" :show-icon="variant !== 'cell'" />
+          <DueDate v-if="kind === 'due'" :date="modelValue" :done="done" :show-icon="variant !== 'cell'" :repeat="repeats" />
           <span v-else class="plain"><UiIcon v-if="variant !== 'cell'" class="lead" :icon="Calendar" :size="14" />{{ text }}</span>
         </template>
         <UiIcon v-else-if="variant === 'cell'" :icon="Calendar" :size="16" />

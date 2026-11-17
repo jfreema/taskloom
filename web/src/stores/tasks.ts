@@ -6,6 +6,8 @@
 // - Refreshes merge by id and never overwrite a task with a request in flight or a newer local write.
 // - The store alone keeps parents' subtaskCount and subtaskDoneCount current.
 // - Deletes are delayed with Undo (useDelayedDelete) and committed in chunks of 500.
+// - Repeating tasks: when a response shows that completing a task created its next one, that task
+//   is fetched; when it shows the server took one back (a reopen or undo), it is dropped.
 import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 import { api, newId, query } from '../api'
@@ -13,8 +15,10 @@ import { useDelayedDelete } from '../composables/useDelayedDelete'
 import { errorMessage, useToast } from '../composables/useToast'
 import { errorStatus, handled, noop } from '../lib/async'
 import { pluralize } from '../lib/format'
+import { formatDateMedium, todayIso } from '../lib/dates'
 import { isEmptyHtml } from '../lib/html'
 import { between, bottomOf, topOf } from '../lib/positions'
+import { toRule } from '../lib/repeat'
 import type {
   BulkTaskUpdate,
   BulkUpdateResponse,
@@ -132,6 +136,8 @@ export const useTasks = defineStore('tasks', () => {
   const listLoads = new Map<Uuid, Promise<void>>()
   /** Tasks with a description editor on screen, which sends its own draft again. */
   const descriptionHolders = new Map<Uuid, number>()
+  /** Each task's nextRepeatId as the server last reported it, whatever the local row shows. */
+  const knownNext: Record<Uuid, Uuid | null> = {}
 
   // ---- Indexes ----
 
@@ -246,6 +252,7 @@ export const useTasks = defineStore('tasks', () => {
    * (reactive writes of equal plain values trigger nothing).
    */
   function writeRow(t: Task, keepCounts = false): void {
+    knownNext[t.id] = t.nextRepeatId
     const existing = byId[t.id]
     if (existing) {
       const count = existing.subtaskCount
@@ -484,6 +491,8 @@ export const useTasks = defineStore('tasks', () => {
     if (patch.dueDate !== undefined) m.set(t, 'dueDate', patch.dueDate)
     if (patch.assigneeIds !== undefined) m.set(t, 'assigneeIds', orderAssignees(t.assigneeIds, patch.assigneeIds))
     if (patch.tagIds !== undefined) m.set(t, 'tagIds', orderTags(patch.tagIds))
+    // The server fits the rule to the task (and may give it a due date); its answer replaces this.
+    if (patch.repeat !== undefined) m.set(t, 'repeat', patch.repeat ? toRule(patch.repeat) : null)
     if (patch.listId !== undefined && patch.listId !== t.listId) applyList(m, t, patch.listId, patch.statusId, patch.position)
     else if (patch.statusId !== undefined) applyStatus(m, t, patch.statusId, patch.position)
     else if (patch.position !== undefined) m.set(t, 'position', patch.position)
@@ -498,6 +507,11 @@ export const useTasks = defineStore('tasks', () => {
     if (patch.dueDate !== undefined) inv.dueDate = t.dueDate
     if (patch.assigneeIds !== undefined) inv.assigneeIds = [...t.assigneeIds]
     if (patch.tagIds !== undefined) inv.tagIds = [...t.tagIds]
+    if (patch.repeat !== undefined) {
+      inv.repeat = t.repeat ? { ...t.repeat, weekdays: [...t.repeat.weekdays] } : null
+      // Setting a rule can give the task a due date: undo takes that away again.
+      if (t.dueDate === null && patch.dueDate === undefined) inv.dueDate = null
+    }
     if (patch.listId !== undefined && patch.listId !== t.listId) {
       inv.listId = t.listId
       inv.statusId = t.statusId
@@ -774,6 +788,34 @@ export const useTasks = defineStore('tasks', () => {
     }
   }
 
+  // ---- Repeating tasks ----
+
+  /**
+   * A write's response for task `id`: a new nextRepeatId means completing it created the next task
+   * of its series, which is fetched (with its subtasks) unless a later response unlinks it first; a
+   * link that is gone means the server took that task back, so it leaves the store. `onNext` gets
+   * the next task once it is in the store (the completion toast names its due date).
+   */
+  function followRepeat(server: Task, onNext?: (next: Task) => void): void {
+    const prev = knownNext[server.id] ?? null
+    const next = server.nextRepeatId
+    knownNext[server.id] = next
+    if (prev === next) return
+    if (prev && byId[prev] && !isProtected(prev, Number.POSITIVE_INFINITY)) removeLocal(prev, { adjustParent: false, forget: true })
+    if (!next) return
+    const gen = generation
+    void api.get<TaskDetail>(`/api/tasks/${next}`).then(
+      (d) => {
+        if (gen !== generation || knownNext[server.id] !== next || d.workspaceId !== useWorkspaces().currentId) return
+        upsert([d.task, ...d.subtasks])
+        changedAt[next] = Date.now()
+        const row = byId[next]
+        if (row) onNext?.(row)
+      },
+      noop,
+    )
+  }
+
   // ---- Create ----
 
   /**
@@ -816,6 +858,8 @@ export const useTasks = defineStore('tasks', () => {
       subtaskDoneCount: 0,
       commentCount: 0,
       attachmentCount: 0,
+      repeat: r.repeat && !parentTaskId ? toRule(r.repeat) : null,
+      nextRepeatId: null,
     }
     byId[id] = task
     creating.add(id)
@@ -911,6 +955,12 @@ export const useTasks = defineStore('tasks', () => {
         if (typeof patch.description === 'string') clearDescriptionDraft(id, patch.description)
         if (gen !== generation) return server
         settle(id)
+        followRepeat(server, (next) => {
+          // "Completed “Weekly report” · Next one due Mon, Nov 23", while that toast is still up.
+          if (undoToast && typeof o.undo === 'string' && next.dueDate) {
+            toast.retext(undoToast, `${o.undo} · Next one due ${formatDateMedium(next.dueDate, todayIso())}`)
+          }
+        })
         if (seq[id] === s) writeRow(server, parentsWithBusyChildren().has(id))
         clearRetry(id, fields)
         return byId[id] ?? server
@@ -1034,6 +1084,7 @@ export const useTasks = defineStore('tasks', () => {
       (server) => {
         if (gen !== generation) return server
         settle(id)
+        followRepeat(server)
         if (seq[id] === s) writeRow(server, parentsWithBusyChildren().has(id))
         clearRetry(id, fields)
         return byId[id] ?? server
@@ -1119,6 +1170,7 @@ export const useTasks = defineStore('tasks', () => {
         (res) => {
           if (gen !== generation) return
           for (const id of ids) settle(id)
+          for (const row of res.tasks) followRepeat(row)
           const busyParents = parentsWithBusyChildren()
           for (const row of res.tasks) if (seq[row.id] === seqs.get(row.id)) writeRow(row, busyParents.has(row.id))
         },
@@ -1371,6 +1423,7 @@ export const useTasks = defineStore('tasks', () => {
     for (const key of Object.keys(seq)) delete seq[key]
     for (const key of Object.keys(inflight)) delete inflight[key]
     for (const key of Object.keys(lastWrite)) delete lastWrite[key]
+    for (const key of Object.keys(knownNext)) delete knownNext[key]
     queues.clear()
     createChains.clear()
     failedCreates.clear()

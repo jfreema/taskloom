@@ -36,7 +36,7 @@ const shown = computed(() => {
 
 <template>
   <div v-if="shown" class="meta">
-    <DueDate v-if="task.dueDate" :date="task.dueDate" :done="done" size="sm" />
+    <DueDate v-if="task.dueDate" :date="task.dueDate" :done="done" size="sm" :repeat="!!task.repeat" />
     <PriorityFlag v-if="task.priority !== 'None'" :priority="task.priority" :size="14" />
     <SubtaskProgress :done="task.subtaskDoneCount" :total="task.subtaskCount" />
     <TaskCounts :task="task" />

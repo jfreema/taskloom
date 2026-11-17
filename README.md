@@ -24,12 +24,19 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
   tray lists overdue and undated tasks. Drag a chip onto a day to reschedule it, or onto "No due date" to clear
   its date. On narrow screens the month becomes an agenda list.
 - **Task detail:** opens as a side panel, as a full page (`/t/<id>`) or as a sheet on phones. It holds:
-  - the status, title and assignees (several per task), start and due dates, priority and tags
+  - the status, title and assignees (several per task), start and due dates, a repeat rule, priority and tags
   - a rich-text description with a formatting toolbar and checklists. It saves as you type; if a save fails (for
     example offline), it keeps your text and sends it again when you're back online
   - subtasks
   - attachments: upload, drag and drop or paste a file; images show thumbnails and open in a lightbox
   - one activity feed of changes and comments; you can edit or delete your own comments
+- **Repeating tasks:** the Repeat row offers Daily, Every weekday, Weekly, Monthly and Yearly, worded for the due
+  date, or Custom: every N days, weeks, months or years, on chosen weekdays, on a day of the month or its nth or last
+  weekday, either on a schedule or counted from when it's done, with an optional end date. Completing a repeating
+  task creates the next one (same title, description, priority, tags, assignees and subtasks, due on the next date)
+  and the rule moves to it. A task finished late skips the dates already past, so the next one is never overdue.
+  Undo or Reopen takes the new one back if nobody has touched it yet. Subtasks can't repeat. Repeating tasks show a
+  repeat icon by their due date. The server works out every date, using the browser's local date as "today".
 - **Command palette** (Mod+K): search task titles and descriptions, lists and actions, or create a task from what
   you typed.
 - **Quick create** (N, or the "New task" button): every field in one dialog, prefilled from where you are.
@@ -67,7 +74,7 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
   agenda calendar and a "+" button, with 44px touch targets. The app is keyboard-first and targets WCAG 2.2 AA;
   the end-to-end tests run axe on the screens in both themes.
 
-Not in this version: folders, custom fields, Gantt and timeline views, time tracking, recurring tasks,
+Not in this version: folders, custom fields, Gantt and timeline views, time tracking,
 notifications and @mentions, real-time or offline sync, and Planner import.
 
 ## Keyboard shortcuts

@@ -146,7 +146,8 @@ public class DevSeed(TaskloomDbContext db)
         AddTask(website, ToDo(websiteStatuses), "Plan Q1 roadmap", today.AddDays(3), TaskPriority.Normal, [], [], tags);
         AddTask(website, ToDo(websiteStatuses), "Update pricing page", today.AddDays(10), TaskPriority.None, Ana(), ["design"], tags);
         AddTask(website, Done(websiteStatuses), "Set up analytics", today.AddDays(-3), TaskPriority.None, Me(), [], tags, completedAt: _now.AddDays(-3));
-        AddTask(admin, ToDo(adminStatuses), "Send invoice to Contoso", today.AddDays(-2), TaskPriority.High, Me(), ["ops"], tags);
+        var invoice = AddTask(admin, ToDo(adminStatuses), "Send invoice to Contoso", today.AddDays(-2), TaskPriority.High, Me(), ["ops"], tags);
+        invoice.Repeat = Recurrence.Normalize(new RepeatRule { Unit = RepeatUnit.Month }, invoice.DueDate!.Value);
         AddTask(admin, InProgress(adminStatuses), "Renew domain names", today.AddDays(1), TaskPriority.None, Me(), [], tags);
         AddTask(admin, ToDo(adminStatuses), "Book team offsite", null, TaskPriority.None, Me(), [], tags);
         AddTask(admin, Done(adminStatuses), "Archive old receipts", null, TaskPriority.None, Me(), [], tags, completedAt: _now.AddDays(-2));
@@ -184,6 +185,8 @@ public class DevSeed(TaskloomDbContext db)
             (TaskActivityKind.AttachmentAdded, null, "brief.pdf", me),
             (TaskActivityKind.AttachmentRemoved, "brief.pdf", null, me),
             (TaskActivityKind.SubtaskAdded, null, "Draft outline", me),
+            (TaskActivityKind.Repeated, null, ActivityValues.Date(today.AddDays(6)), me),
+            (TaskActivityKind.RepeatChanged, ActivityValues.Repeat(Recurrence.Normalize(new RepeatRule { Unit = RepeatUnit.Week }, today)), null, me),
         ];
         db.Activities.AddRange(history.Select((h, i) => new TaskActivity
         {

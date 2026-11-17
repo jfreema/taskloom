@@ -91,6 +91,7 @@ function onDue(v: IsoDate | null): void {
       kind="due"
       variant="cell"
       :done="done"
+      :repeat="!!task.repeat"
       :readonly="readonly"
       :lazy="lazy"
       :tabindex="inner"

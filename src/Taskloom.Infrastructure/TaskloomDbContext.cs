@@ -104,6 +104,9 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
             e.HasOne<ListStatus>().WithMany().HasForeignKey(x => x.StatusId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne<TaskItem>().WithMany(x => x.Subtasks).HasForeignKey(x => x.ParentTaskId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.Repeat).HasColumnType("jsonb").HasConversion(RepeatRuleJson.Converter);
+            // Deleting the next task of a series leaves the completed one without a link.
+            e.HasOne<TaskItem>().WithMany().HasForeignKey(x => x.NextRepeatId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => new { x.ListId, x.StatusId, x.Position });
             e.HasIndex(x => x.ParentTaskId);
         });

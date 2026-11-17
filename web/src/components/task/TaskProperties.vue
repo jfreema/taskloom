@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // The top of the task detail (8.10): the status pill with Mark complete / Reopen, the title, the
-// property rows (labels in a 112px column, values as ghost triggers) and "Created by … · date".
+// property rows (labels in a 112px column, values as ghost triggers; Repeat only on top-level
+// tasks) and "Created by … · date".
 // S, A, D and P open the pickers through openPicker().
 import { computed, reactive } from 'vue'
 import { Check, Undo2 } from '@lucide/vue'
@@ -11,10 +12,11 @@ import { formatDateShort, formatTimestamp, toIso } from '../../lib/dates'
 import { useMembers } from '../../stores/members'
 import { useTasks } from '../../stores/tasks'
 import { useWorkspaces } from '../../stores/workspaces'
-import type { IsoDate, Priority, Task, TaskPatch, User, Uuid } from '../../types'
+import type { IsoDate, Priority, RepeatRequest, Task, TaskPatch, User, Uuid } from '../../types'
 import AssigneePicker from '../fields/AssigneePicker.vue'
 import DateField from '../fields/DateField.vue'
 import PriorityPicker from '../fields/PriorityPicker.vue'
+import RepeatPicker from '../fields/RepeatPicker.vue'
 import StatusPicker from '../fields/StatusPicker.vue'
 import TagPicker from '../fields/TagPicker.vue'
 import UiButton from '../ui/UiButton.vue'
@@ -143,6 +145,17 @@ defineExpose({ openPicker })
             @update:model-value="(v: IsoDate | null) => onDate('dueDate', v)"
           />
           <span v-if="!canEdit && !task.startDate && !task.dueDate" class="none">None</span>
+        </dd>
+      </div>
+      <div v-if="!task.parentTaskId && (canEdit || task.repeat)" class="prop">
+        <dt class="label">Repeat</dt>
+        <dd class="value">
+          <RepeatPicker
+            :model-value="task.repeat"
+            :due-date="task.dueDate"
+            :readonly="!canEdit"
+            @update:model-value="(r: RepeatRequest | null) => patch({ repeat: r })"
+          />
         </dd>
       </div>
       <div class="prop">

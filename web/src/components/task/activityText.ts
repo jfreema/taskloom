@@ -1,6 +1,7 @@
 // The wording of system activity entries (8.10), as text segments so names can be bold without
 // v-html. The actor's name is rendered separately, before these segments.
 import { formatDateShort, isIsoDate } from '../../lib/dates'
+import { describeRepeat, parseRepeat } from '../../lib/repeat'
 import { PRIORITY_LABEL, type Activity, type IsoDate, type Priority } from '../../types'
 
 export interface ActivitySegment {
@@ -21,6 +22,21 @@ function dateChange(what: string, from: string | null, to: string | null, today:
   if (!to) return [{ text: `removed the ${what}` }]
   if (!from) return [{ text: `set the ${what} to ${day(to, today)}` }]
   return [{ text: `changed the ${what} from ${day(from, today)} to ${day(to, today)}` }]
+}
+
+/** A rule from an activity value, in words (lower-cased after "repeat"): "weekly on Mon", "2 weeks after done". */
+function rule(json: string | null, today: IsoDate): string | null {
+  const r = parseRepeat(json)
+  if (!r) return null
+  const text = describeRepeat(r, today)
+  return /^[A-Z][a-z]/.test(text) ? text[0].toLowerCase() + text.slice(1) : text
+}
+
+function repeatChange(from: string | null, to: string | null, today: IsoDate): ActivitySegment[] {
+  const after = rule(to, today)
+  if (!after) return [{ text: 'stopped repeating this' }]
+  const before = rule(from, today)
+  return before ? [{ text: `changed the repeat from ${before} to ${after}` }] : [{ text: `set this to repeat ${after}` }]
 }
 
 function priorityLabel(p: string): string {
@@ -57,6 +73,10 @@ export function activitySegments(a: Pick<Activity, 'kind' | 'from' | 'to'>, toda
       return [{ text: `attached ${to ?? from ?? 'a file'}` }]
     case 'AttachmentRemoved':
       return [{ text: `removed ${from ?? to ?? 'a file'}` }]
+    case 'RepeatChanged':
+      return repeatChange(from, to, today)
+    case 'Repeated':
+      return [{ text: to ? `completed this and created the next one, due ${day(to, today)}` : 'completed this and created the next one' }]
     case 'SubtaskAdded':
       return [{ text: `added subtask ${quoted(to ?? from)}` }]
     default:

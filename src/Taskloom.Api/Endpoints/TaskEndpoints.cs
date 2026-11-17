@@ -46,7 +46,7 @@ public static class TaskEndpoints
     }
 
     // ---- POST /api/lists/{id}/tasks (spec 5.5 Create task) ----
-    private static async Task<IResult> CreateAsync(Guid id, CreateTaskRequest req, Access access, TaskloomDbContext db)
+    private static async Task<IResult> CreateAsync(Guid id, CreateTaskRequest req, Access access, TaskloomDbContext db, HttpContext http)
     {
         var (list, workspaceId) = await access.RequireListAsync(id, WorkspaceRole.Member);
         var title = Text.Require(req.Title, Limits.TaskTitle, "Enter a task title.", "Task titles can be up to 500 characters.");
@@ -71,6 +71,17 @@ public static class TaskEndpoints
         await RequireAssignableAsync(db, list.SpaceId, assigneeIds);
         var tagIds = (req.TagIds ?? []).Distinct().ToList();
         if (!await AreWorkspaceTagsAsync(db, workspaceId, tagIds)) throw ProblemException.BadRequest(TagsMustBelongToWorkspace);
+        var now = Clock.Now();
+        var today = ClientDate.Today(http, now);
+        RepeatRule? repeat = null;
+        var dueDate = req.DueDate;
+        if (req.Repeat is { } repeatRequest)
+        {
+            if (parent is not null) throw ProblemException.BadRequest(Repeats.SubtaskMessage);
+            // Like PATCH: fitted to the task, and a task without a due date gets the rule's first date.
+            repeat = Recurrence.Normalize(Repeats.Check(repeatRequest), dueDate ?? today);
+            dueDate ??= Recurrence.First(repeat, today);
+        }
 
         // Placement among tasks with the same list, status and parent: Top = lowest − 1024, Bottom = highest + 1024.
         var siblings = db.Tasks.Where(t => t.ListId == id && t.StatusId == status.Id && t.ParentTaskId == req.ParentTaskId);
@@ -78,7 +89,6 @@ public static class TaskEndpoints
             ? Positions.Between(null, await siblings.MinAsync(t => (double?)t.Position))
             : Positions.Between(await siblings.MaxAsync(t => (double?)t.Position), null);
 
-        var now = Clock.Now();
         var description = RichText.Sanitize(req.Description);
         var task = new TaskItem
         {
@@ -91,7 +101,8 @@ public static class TaskEndpoints
             DescriptionText = RichText.ToPlainText(description),
             Priority = req.Priority ?? TaskPriority.None,
             StartDate = req.StartDate,
-            DueDate = req.DueDate,
+            DueDate = dueDate,
+            Repeat = repeat,
             Position = position,
             CreatedById = access.UserId,
             CreatedAt = now,
@@ -136,7 +147,7 @@ public static class TaskEndpoints
     }
 
     // ---- PATCH /api/tasks/{id} (spec 5.5 Patch task, through TaskPatcher) ----
-    private static async Task<IResult> PatchAsync(Guid id, JsonElement body, Access access, TaskloomDbContext db)
+    private static async Task<IResult> PatchAsync(Guid id, JsonElement body, Access access, TaskloomDbContext db, HttpContext http)
     {
         var (task, workspaceId) = await access.RequireTaskAsync(id, WorkspaceRole.Member);
         Json.RequireReadable(body);
@@ -146,7 +157,8 @@ public static class TaskEndpoints
         await db.Entry(task).Collection(t => t.Assignees).LoadAsync();
         await db.Entry(task).Collection(t => t.Tags).LoadAsync();
         var now = Clock.Now();
-        var patcher = await TaskPatcher.CreateAsync(db, access, workspaceId, new ActivityRecorder(db, access.UserId, now), now, [(task, change)]);
+        var patcher = await TaskPatcher.CreateAsync(db, access, workspaceId, new ActivityRecorder(db, access.UserId, now), now,
+            ClientDate.Today(http, now), [(task, change)]);
         await patcher.ApplyAsync(task, change);
         await db.SaveChangesAsync();
         await tx.CommitAsync();
@@ -154,7 +166,7 @@ public static class TaskEndpoints
     }
 
     // ---- POST /api/tasks/{id}/move (spec 5.5 Move) ----
-    private static async Task<IResult> MoveAsync(Guid id, MoveTaskRequest req, Access access, TaskloomDbContext db)
+    private static async Task<IResult> MoveAsync(Guid id, MoveTaskRequest req, Access access, TaskloomDbContext db, HttpContext http)
     {
         var (task, _) = await access.RequireTaskAsync(id, WorkspaceRole.Member);
         await using var tx = await db.Database.BeginTransactionAsync();
@@ -209,14 +221,18 @@ public static class TaskEndpoints
 
         var now = Clock.Now();
         var changed = position != task.Position;
+        var before = Repeater.Snapshot(task);
+        var activity = new ActivityRecorder(db, access.UserId, now);
         if (status.Id != task.StatusId)
         {
-            new ActivityRecorder(db, access.UserId, now).Record(task.Id, TaskActivityKind.StatusChanged, oldStatus.Name, status.Name);
+            activity.Record(task.Id, TaskActivityKind.StatusChanged, oldStatus.Name, status.Name);
             TaskPatcher.SetStatus(task, oldStatus, status, now);
             changed = true;
         }
         task.Position = position;
         if (changed) task.UpdatedAt = now;
+        // Dropping a repeating task in Done creates its next one; dragging it back out takes that back.
+        await new Repeater(db, activity, now, ClientDate.Today(http, now)).AfterChangeAsync(task, before);
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         return Results.Ok(await TaskProjections.LoadAsync(db, id));

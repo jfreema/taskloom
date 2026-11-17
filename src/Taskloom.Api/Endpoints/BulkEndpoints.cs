@@ -22,7 +22,7 @@ public static class BulkEndpoints
     /// Every update follows the PATCH rules (title and description are ignored). One transaction: if any update is
     /// invalid the response is a 400 naming the problem and nothing changes. Results keep the request order.
     /// </summary>
-    private static async Task<IResult> UpdateAsync(JsonElement body, Access access, TaskloomDbContext db)
+    private static async Task<IResult> UpdateAsync(JsonElement body, Access access, TaskloomDbContext db, HttpContext http)
     {
         Json.RequireReadable(body);
         if (!body.TryGetPropertyIgnoreCase("updates", out var updates) || updates.ValueKind != JsonValueKind.Array)
@@ -52,7 +52,8 @@ public static class BulkEndpoints
 
         var pairs = ids.Select((id, i) => (tasks[id], TaskChange.Parse(items[i], TaskChangeKind.Bulk))).ToList();
         var now = Clock.Now();
-        var patcher = await TaskPatcher.CreateAsync(db, access, workspaceIds[0], new ActivityRecorder(db, access.UserId, now), now, pairs);
+        var patcher = await TaskPatcher.CreateAsync(db, access, workspaceIds[0], new ActivityRecorder(db, access.UserId, now), now,
+            ClientDate.Today(http, now), pairs);
         foreach (var (task, change) in pairs) await patcher.ApplyAsync(task, change);
         await db.SaveChangesAsync();
         await tx.CommitAsync();

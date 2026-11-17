@@ -126,7 +126,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
 
         string[] taskKeys = Sorted("id", "listId", "statusId", "parentTaskId", "title", "hasDescription", "priority", "assigneeIds", "tagIds",
             "startDate", "dueDate", "position", "createdById", "createdAt", "updatedAt", "completedAt",
-            "subtaskCount", "subtaskDoneCount", "commentCount", "attachmentCount");
+            "subtaskCount", "subtaskDoneCount", "commentCount", "attachmentCount", "repeat", "nextRepeatId");
         using var tasks = await GetJsonAsync(user.Client, $"/api/lists/{website.Id}/tasks");
         Assert.All(tasks.RootElement.EnumerateArray(), t => Assert.Equal(taskKeys, t.Keys()));
 
@@ -149,9 +149,9 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
             Assert.Equal(Sorted("id", "email", "displayName"), c.GetProperty("author").Keys());
         });
         Assert.Equal(Sorted("id", "taskId", "fileName", "contentType", "sizeBytes", "uploadedById", "createdAt"), Assert.Single(d.GetProperty("attachments").EnumerateArray()).Keys());
-        // The seed's 14 rows, then the upload above.
+        // The seed's 16 rows, then the upload above.
         var activity = d.GetProperty("activity").EnumerateArray().ToList();
-        Assert.Equal(15, activity.Count);
+        Assert.Equal(17, activity.Count);
         Assert.All(activity, a =>
         {
             Assert.Equal(Sorted("id", "taskId", "actor", "kind", "from", "to", "createdAt"), a.Keys());
@@ -173,7 +173,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         (await user.Client.SeedAsync(user.Workspace.Id, fillers: 0)).EnsureSuccessStatusCode();
         string[] taskKeys = Sorted("id", "listId", "statusId", "parentTaskId", "title", "hasDescription", "priority", "assigneeIds", "tagIds",
             "startDate", "dueDate", "position", "createdById", "createdAt", "updatedAt", "completedAt",
-            "subtaskCount", "subtaskDoneCount", "commentCount", "attachmentCount");
+            "subtaskCount", "subtaskDoneCount", "commentCount", "attachmentCount", "repeat", "nextRepeatId");
         string[] userKeys = Sorted("id", "email", "displayName");
 
         using var tags = await GetJsonAsync(user.Client, $"/api/workspaces/{user.Workspace.Id}/tags");

@@ -14,9 +14,9 @@ public readonly record struct Optional<T>(bool Has, T Value)
 
 public enum TaskChangeKind
 {
-    /// <summary>PATCH /api/tasks/{id} (<c>TaskPatch</c>): title and description allowed; add/remove sets ignored.</summary>
+    /// <summary>PATCH /api/tasks/{id} (<c>TaskPatch</c>): title, description and repeat allowed; add/remove sets ignored.</summary>
     Patch,
-    /// <summary>One item of POST /api/tasks/bulk (<c>BulkTaskUpdate</c>): title and description ignored; add/remove sets allowed.</summary>
+    /// <summary>One item of POST /api/tasks/bulk (<c>BulkTaskUpdate</c>): title, description and repeat ignored; add/remove sets allowed.</summary>
     Bulk,
 }
 
@@ -32,6 +32,8 @@ public sealed class TaskChange
     public Optional<TaskPriority> Priority { get; private set; }
     public Optional<DateOnly?> StartDate { get; private set; }
     public Optional<DateOnly?> DueDate { get; private set; }
+    /// <summary>A rule, not yet normalized; null stops the task repeating. PATCH only.</summary>
+    public Optional<RepeatRule?> Repeat { get; private set; }
     public Guid? StatusId { get; private set; }
     public Guid? ListId { get; private set; }
     public double? Position { get; private set; }
@@ -79,6 +81,9 @@ public sealed class TaskChange
                     break;
                 case "duedate":
                     c.DueDate = Json.ReadDate(v);
+                    break;
+                case "repeat" when patch:
+                    c.Repeat = Repeats.Read(v);
                     break;
                 case "statusid":
                     c.StatusId = Json.ReadGuid(v, StatusMessage);
@@ -138,11 +143,13 @@ public sealed class TaskPatcher
     private readonly Dictionary<Guid, HashSet<Guid>> _privatePeople;
     private readonly ILookup<Guid, TaskItem> _subtasks;
     private readonly PositionBook _positions;
+    private readonly Repeater _repeater;
     private int _assigned;
 
     private TaskPatcher(TaskloomDbContext db, ActivityRecorder activity, DateTimeOffset now, Dictionary<Guid, TaskList> lists,
         List<ListStatus> statuses, Dictionary<Guid, string> memberNames, Dictionary<Guid, string> formerMemberNames,
-        Dictionary<Guid, Tag> tags, Dictionary<Guid, HashSet<Guid>> privatePeople, ILookup<Guid, TaskItem> subtasks, PositionBook positions)
+        Dictionary<Guid, Tag> tags, Dictionary<Guid, HashSet<Guid>> privatePeople, ILookup<Guid, TaskItem> subtasks, PositionBook positions,
+        Repeater repeater)
     {
         _db = db;
         _activity = activity;
@@ -157,6 +164,7 @@ public sealed class TaskPatcher
         _privatePeople = privatePeople;
         _subtasks = subtasks;
         _positions = positions;
+        _repeater = repeater;
     }
 
     public const string AssigneesMustBeMembers = "Everyone assigned must be a member of this workspace.";
@@ -166,8 +174,9 @@ public sealed class TaskPatcher
     /// <param name="access">The caller: only the lists they can see are loaded, so a task can't move into a private space
     /// they aren't in.</param>
     /// <param name="items">The tasks (tracked, with <c>Assignees</c> and <c>Tags</c> loaded) and their changes.</param>
+    /// <param name="today">The caller's own date (<see cref="ClientDate"/>), for repeating tasks.</param>
     public static async Task<TaskPatcher> CreateAsync(TaskloomDbContext db, Access access, Guid workspaceId, ActivityRecorder activity,
-        DateTimeOffset now, IReadOnlyList<(TaskItem Task, TaskChange Change)> items)
+        DateTimeOffset now, DateOnly today, IReadOnlyList<(TaskItem Task, TaskChange Change)> items)
     {
         var visibleListIds = access.VisibleListIds(workspaceId);
         var lists = await db.Lists.AsNoTracking().Where(l => visibleListIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id);
@@ -206,14 +215,18 @@ public sealed class TaskPatcher
         var positions = await PositionBook.LoadAsync(db, targets);
 
         return new TaskPatcher(db, activity, now, lists, statuses, memberNames, formerNames, tags, privatePeople,
-            subtasks.ToLookup(t => t.ParentTaskId!.Value), positions);
+            subtasks.ToLookup(t => t.ParentTaskId!.Value), positions, new Repeater(db, activity, now, today));
     }
 
-    /// <summary>Applies one change to a tracked task. Throws a 400 <see cref="ProblemException"/> when a rule fails.</summary>
+    /// <summary>
+    /// Applies one change to a tracked task. Throws a 400 <see cref="ProblemException"/> when a rule fails. A repeating
+    /// task that this completes creates its next task (<see cref="Repeater"/>), after every other field is applied.
+    /// </summary>
     public async Task ApplyAsync(TaskItem task, TaskChange change)
     {
         var changed = false;
         var oldStatus = _statuses[task.StatusId];
+        var before = Repeater.Snapshot(task);
 
         // ---- list and status (resolved first: a statusId must belong to listId's list when both are sent) ----
         TaskList? targetList = null;
@@ -306,10 +319,37 @@ public sealed class TaskPatcher
             changed = true;
         }
 
+        changed |= ApplyRepeat(task, change);
         changed |= ApplyAssignees(task, change);
         changed |= ApplyTags(task, change);
 
         if (changed) task.UpdatedAt = _now;
+        if (await _repeater.AfterChangeAsync(task, before) is { } next)
+            _positions.Note(next.ListId, next.StatusId, null, next.Position);
+    }
+
+    /// <summary>
+    /// A rule is fitted to the task (<see cref="Recurrence.Normalize"/>). A task with no due date gets the first date a
+    /// rule on schedule falls on, from today, so it shows on Home and the calendar.
+    /// </summary>
+    private bool ApplyRepeat(TaskItem task, TaskChange change)
+    {
+        if (!change.Repeat.Has) return false;
+        var rule = change.Repeat.Value;
+        if (rule is not null)
+        {
+            if (task.ParentTaskId is not null) throw ProblemException.BadRequest(Repeats.SubtaskMessage);
+            rule = Recurrence.Normalize(rule, task.DueDate ?? _repeater.Today);
+        }
+        if (rule == task.Repeat) return false;
+        _activity.Record(task.Id, TaskActivityKind.RepeatChanged, ActivityValues.Repeat(task.Repeat), ActivityValues.Repeat(rule));
+        task.Repeat = rule;
+        if (rule is not null && task.DueDate is null && Recurrence.First(rule, _repeater.Today) is { } first)
+        {
+            _activity.Record(task.Id, TaskActivityKind.DueDateChanged, null, ActivityValues.Date(first));
+            task.DueDate = first;
+        }
+        return true;
     }
 
     private bool ApplyAssignees(TaskItem task, TaskChange change)

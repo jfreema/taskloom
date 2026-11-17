@@ -169,6 +169,48 @@ public class ListStatus
 
 public enum TaskPriority { None = 0, Urgent = 1, High = 2, Normal = 3, Low = 4 }
 
+/// <summary>The unit of a repeat rule's interval.</summary>
+public enum RepeatUnit { Day = 0, Week = 1, Month = 2, Year = 3 }
+
+/// <summary>What a repeating task's next due date counts from.</summary>
+public enum RepeatBasis
+{
+    /// <summary>The rule's own dates, counted from the due date ("every Monday", "the 1st of each month").</summary>
+    Schedule = 0,
+    /// <summary>The day the task is completed ("a week after it's done").</summary>
+    Completion = 1,
+}
+
+/// <summary>Days of the week, for weekly rules.</summary>
+[Flags]
+public enum WeekdaySet
+{
+    None = 0,
+    Sunday = 1 << 0, Monday = 1 << 1, Tuesday = 1 << 2, Wednesday = 1 << 3, Thursday = 1 << 4, Friday = 1 << 5, Saturday = 1 << 6,
+}
+
+/// <summary>
+/// How a task repeats; immutable, stored as JSON on the task. Only the parts that fit the unit and basis are set
+/// (Taskloom.Application Recurrence.Normalize): weekdays for weekly rules on schedule, a day of the month or a
+/// weekday of the month for monthly ones.
+/// </summary>
+public sealed record RepeatRule
+{
+    public RepeatUnit Unit { get; init; }
+    /// <summary>Every 1 to 365 units.</summary>
+    public int Every { get; init; } = 1;
+    public RepeatBasis Basis { get; init; }
+    /// <summary>Weekly on schedule: the days it falls on (at least one).</summary>
+    public WeekdaySet Weekdays { get; init; }
+    /// <summary>Monthly on schedule by date: 1 to 31 (the month's last day when shorter), or -1 for the last day.</summary>
+    public int? MonthDay { get; init; }
+    /// <summary>Monthly on schedule by weekday: the 1st to 4th, or -1 for the last, <see cref="MonthWeekday"/> of the month.</summary>
+    public int? MonthWeek { get; init; }
+    public DayOfWeek? MonthWeekday { get; init; }
+    /// <summary>The last day a new task may be due; none is created after it.</summary>
+    public DateOnly? Until { get; init; }
+}
+
 public class TaskItem
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -190,6 +232,16 @@ public class TaskItem
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CompletedAt { get; set; }
+    /// <summary>
+    /// Set on a top-level task that repeats. Completing the task creates the next one, which takes the rule over, so only
+    /// the newest task of a series carries it.
+    /// </summary>
+    public RepeatRule? Repeat { get; set; }
+    /// <summary>
+    /// The task this one's completion created (the next of its series). Reopening this task while that one is still
+    /// untouched deletes it and takes the rule back, so an accidental tick and its undo leave no trace.
+    /// </summary>
+    public Guid? NextRepeatId { get; set; }
 
     public List<TaskAssignee> Assignees { get; set; } = [];
     public List<TaskTag> Tags { get; set; } = [];
@@ -233,7 +285,11 @@ public enum TaskActivityKind
 {
     Renamed, StatusChanged, AssigneeAdded, AssigneeRemoved, DueDateChanged, StartDateChanged,
     PriorityChanged, TagAdded, TagRemoved, DescriptionChanged, MovedList, AttachmentAdded,
-    AttachmentRemoved, SubtaskAdded
+    AttachmentRemoved, SubtaskAdded,
+    /// <summary>The repeat rule was set, changed or removed; values are the rule as JSON (ActivityValues.Repeat).</summary>
+    RepeatChanged,
+    /// <summary>Completing the task created the next one; the value is its due date.</summary>
+    Repeated,
 }
 
 /// <summary>One change to a task. Values are display values copied at the time (spec 5.6).</summary>

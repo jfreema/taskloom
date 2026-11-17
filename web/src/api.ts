@@ -1,5 +1,7 @@
 // HTTP client for the Taskloom API (spec section 5). Same origin; the session is the HTTP-only
-// cookie `taskloom.auth`. Every request carries `X-Taskloom: 1` (the CSRF guard of 5.1).
+// cookie `taskloom.auth`. Every request carries `X-Taskloom: 1` (the CSRF guard of 5.1) and
+// `X-Taskloom-Date`, the browser's local date, which the server uses as "today" for repeating tasks.
+import { todayIso } from './lib/dates'
 import type { ProblemDetails, Uuid } from './types'
 
 /** A failed API call. `status` is 0 for network failures and aborted uploads. */
@@ -48,7 +50,7 @@ async function readProblem(res: Response): Promise<ProblemDetails | undefined> {
 }
 
 async function request<T>(method: string, url: string, body: unknown, o: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = { 'X-Taskloom': '1', Accept: 'application/json' }
+  const headers: Record<string, string> = { 'X-Taskloom': '1', 'X-Taskloom-Date': todayIso(), Accept: 'application/json' }
   let payload: BodyInit | undefined
   if (body instanceof FormData) payload = body
   else if (body !== undefined) {
