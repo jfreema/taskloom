@@ -1,10 +1,12 @@
 <script setup lang="ts">
 // Text input (spec 7.10). Attributes other than class and style (aria-*, name, @paste, @keydown…)
-// go to the <input>; class and style stay on the frame.
+// go to the <input>; class and style stay on the frame. `marks` tints ranges of the text (UiTextMarks).
 import { computed, onMounted, ref, useAttrs, type Component, type InputHTMLAttributes } from 'vue'
 import { X } from '@lucide/vue'
 import UiIcon from './UiIcon.vue'
 import UiIconButton from './UiIconButton.vue'
+import UiTextMarks from './UiTextMarks.vue'
+import type { TextMark } from './textMarks'
 
 defineOptions({ inheritAttrs: false })
 
@@ -27,6 +29,8 @@ const props = withDefaults(
     id?: string
     autocomplete?: string
     inputmode?: string
+    /** Ranges of the text to tint, such as the parts quick add recognised. */
+    marks?: readonly TextMark[]
   }>(),
   {
     type: 'text',
@@ -43,6 +47,7 @@ const props = withDefaults(
     id: undefined,
     autocomplete: undefined,
     inputmode: undefined,
+    marks: () => [],
   },
 )
 
@@ -134,6 +139,7 @@ defineExpose({ focus, select, el })
       @focus="onFocus"
       @blur="emit('blur', $event)"
     />
+    <UiTextMarks v-if="marks.length" :input="el" :text="model" :marks="marks" />
     <UiIconButton v-if="showClear" class="clear" :icon="X" label="Clear" size="xs" @click="clear" />
     <span v-if="$slots.suffix" class="affix"><slot name="suffix" /></span>
   </div>

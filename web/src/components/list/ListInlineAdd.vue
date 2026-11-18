@@ -7,17 +7,24 @@
 //   one at a time, so quick Enters keep their order.
 // - Esc clears the text, or on an empty input closes the row and returns focus to its button
 //   (the header's "+" for a Top row). Clicking away closes an empty row.
-// - Pasting 2–100 lines asks "Create N tasks?" and creates them in the pasted order.
+// - Pasting 2–100 lines asks "Create N tasks?" and creates them in the pasted order, titles as pasted.
+// - Type-to-fill (Look 1): a typed date, "!high", "#tag" or "@name" sets that field over the group's
+//   defaults (useQuickAdd). The parts are tinted in the input and shown as small chips after it; a
+//   chip's × keeps its text in the title.
 import { computed, nextTick, ref, watch } from 'vue'
 import { Plus } from '@lucide/vue'
 import { newId } from '../../api'
 import { useConfirm } from '../../composables/useConfirm'
+import { useQuickAdd } from '../../composables/useQuickAdd'
 import { useToast } from '../../composables/useToast'
 import { noop } from '../../lib/async'
 import { MAX_PASTED_TASKS, pasteSummary, splitPastedLines } from '../../lib/paste'
+import type { QuickToken } from '../../lib/quickAdd'
 import { useTasks } from '../../stores/tasks'
 import type { CreateTaskRequest, Uuid } from '../../types'
+import QuickAddChips from '../quick-add/QuickAddChips.vue'
 import UiIcon from '../ui/UiIcon.vue'
+import UiTextMarks from '../ui/UiTextMarks.vue'
 import { useListTable } from './listTable'
 
 const open = defineModel<boolean>('open', { default: false })
@@ -53,6 +60,13 @@ const inputLabel = computed(() => (sub.value ? 'Subtask name' : 'Task name'))
 const shownPlaceholder = computed(() => props.placeholder ?? (sub.value ? 'Subtask name' : 'Task name'))
 let pasting = false
 
+const qa = useQuickAdd(draft, table.listId)
+
+function dismiss(token: QuickToken): void {
+  qa.dismiss(token)
+  input.value?.focus({ preventScroll: true })
+}
+
 table.dnd.target(
   rowEl,
   () =>
@@ -79,9 +93,10 @@ watch(
   { immediate: true },
 )
 
-function create(title: string): void {
+/** One task: `fields` are the defaults with anything typed into the title over them. */
+function create(fields: Partial<CreateTaskRequest> & { title: string }): void {
   const id = newId()
-  const r: CreateTaskRequest = { ...props.defaults, id, title, placement: props.placement }
+  const r: CreateTaskRequest = { ...fields, id, placement: props.placement }
   if (props.parentId) r.parentTaskId = props.parentId
   table.created(id, { groupKey: props.groupKey, placement: props.placement, parentId: props.parentId })
   void tasks.create(table.listId.value, r).catch(noop)
@@ -92,10 +107,11 @@ function keepInView(): void {
 }
 
 function submit(): void {
-  const title = draft.value.trim()
-  if (!title) return
+  if (!draft.value.trim()) return
+  const fields = qa.apply(props.defaults)
   draft.value = ''
-  create(title)
+  qa.reset()
+  create(fields)
   keepInView()
 }
 
@@ -150,7 +166,7 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
   }
   if (!ok) return
   // Each Top create lands above the last one, so they are sent in reverse to keep the pasted order.
-  for (const title of top.value ? [...lines].reverse() : lines) create(title)
+  for (const title of top.value ? [...lines].reverse() : lines) create({ ...props.defaults, title })
   toast.success(`Created ${n} tasks`)
   if (open.value) {
     input.value?.focus({ preventScroll: true })
@@ -187,6 +203,8 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
           @blur="onBlur"
           @paste="onPaste"
         />
+        <UiTextMarks :input="input" :text="draft" :marks="qa.tokens.value" />
+        <QuickAddChips v-if="qa.tokens.value.length" class="recognised" size="sm" :tokens="qa.tokens.value" @dismiss="dismiss" />
       </template>
       <button
         v-else
@@ -289,6 +307,14 @@ async function onPaste(e: ClipboardEvent): Promise<void> {
   font-size: var(--fs-md);
   line-height: var(--lh-md);
   box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.recognised {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  max-width: 50%;
+  margin-left: var(--space-2);
+  overflow: hidden;
 }
 
 .add-input::placeholder {

@@ -41,6 +41,14 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
   you typed.
 - **Quick create** (N, or the "New task" button): every field in one dialog, prefilled from where you are.
   "Create more" keeps it open, and pasting several lines offers one task per line.
+- **Type-to-fill:** in Home's quick add, a list's add row and the New task dialog, "Pay rent tomorrow !high #home
+  @ana" saves "Pay rent", due tomorrow, High priority, tagged home and assigned to Ana. Dates can be "today",
+  "tomorrow", a weekday ("fri", "this fri", "next fri"), "this weekend", "next week" or "next month", "in 3 days",
+  "end of month", "nov 20", "11/20" or "2026-11-20", optionally after "due", "on" or "by". Priority is "!urgent",
+  "!high", "!normal" or "!low" (or "!1" to "!4"); "#name" picks a tag, or creates it; "@name" assigns someone who can
+  see the list, or "@me". The recognised parts are tinted and listed as chips under the title; a chip's × keeps that
+  text in the title. Nothing is read when it would leave the title empty, and pasted lines are kept as pasted. The
+  date picker has a box to type a date the same way.
 - **Undo:** completing, moving, rescheduling, bulk edits and deletes all show a toast with Undo (Mod+Z works too).
 - **Settings:**
   - Profile: your display name, and "Sign out other devices" for browsers you no longer use.

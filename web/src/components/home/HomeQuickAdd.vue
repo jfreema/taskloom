@@ -3,17 +3,24 @@
 // "due today". Enter creates { title, dueDate: today, assigneeIds: [me] under "Assigned to me" }
 // in the list's default status, so the task always lands in Today; the input keeps focus, there is
 // no toast and no paste handling (the single-line input joins pasted lines). Esc clears it.
+// Type-to-fill (Look 1): a typed date, "!high", "#tag" or "@name" fills that field instead
+// (useQuickAdd); the parts are tinted in the input and shown as chips under it, each with an × that
+// keeps its text in the title, and the muted hint names the due date the task will get.
 // Below 640px of page width the chip moves under the input and shows only while quick add has focus.
 import { computed, ref, watch } from 'vue'
 import { Plus } from '@lucide/vue'
+import { useQuickAdd } from '../../composables/useQuickAdd'
 import { useToday } from '../../composables/useToday'
 import { newId } from '../../api'
+import { formatDue } from '../../lib/dates'
+import type { QuickToken } from '../../lib/quickAdd'
 import { useRecents } from '../../stores/recents'
 import { useSession } from '../../stores/session'
 import { useTasks } from '../../stores/tasks'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { Uuid } from '../../types'
 import ListPicker from '../fields/ListPicker.vue'
+import QuickAddChips from '../quick-add/QuickAddChips.vue'
 import UiInput from '../ui/UiInput.vue'
 import UiKbd from '../ui/UiKbd.vue'
 
@@ -65,20 +72,30 @@ watch(() => workspaces.currentId, () => {
 
 const open = computed(() => focusWithin.value || pickerOpen.value)
 
+const qa = useQuickAdd(title, listId)
+
+/** "due today", "due tomorrow", "due Fri", "due Nov 27". */
+const dueHint = computed(() => {
+  const text = formatDue(qa.parsed.value.dueDate ?? today.value, today.value)
+  return `due ${text === 'Today' || text === 'Tomorrow' ? text.toLowerCase() : text}`
+})
+
+function dismiss(token: QuickToken): void {
+  qa.dismiss(token)
+  focus()
+}
+
 function submit(): void {
   const text = title.value.trim()
   const target = listId.value
   if (!text || !target) return
   const me = session.user?.id
   const id = newId()
-  void tasks.create(target, {
-    id,
-    title: text,
-    dueDate: today.value,
-    assigneeIds: props.assignToMe && me ? [me] : [],
-  })
+  const fields = qa.apply({ dueDate: today.value, assigneeIds: props.assignToMe && me ? [me] : [] })
+  void tasks.create(target, { ...fields, id })
   recents.setLastList(target)
   title.value = ''
+  qa.reset()
   emit('created', id)
 }
 
@@ -112,6 +129,7 @@ defineExpose({ focus })
       placeholder="Add a task…"
       aria-label="Add a task"
       :maxlength="500"
+      :marks="qa.tokens.value"
       autocomplete="off"
       enterkeyhint="done"
       @enter="submit"
@@ -120,12 +138,13 @@ defineExpose({ focus })
       <template #suffix>
         <span class="extras">
           <ListPicker v-model="listId" v-model:open="pickerOpen" variant="chip" />
-          <span class="due-hint">due today</span>
+          <span class="due-hint">{{ dueHint }}</span>
         </span>
         <span class="kbd" aria-hidden="true"><UiKbd keys="Enter" /></span>
       </template>
     </UiInput>
-    <p v-if="hint" class="hint">Enter to add · <UiKbd keys="N" /> from anywhere</p>
+    <QuickAddChips v-if="qa.tokens.value.length" class="recognised" :tokens="qa.tokens.value" @dismiss="dismiss" />
+    <p v-if="hint" class="hint">Enter to add · <UiKbd keys="N" /> from anywhere · type “fri”, “!high” or “#tag” to fill them in</p>
   </div>
 </template>
 
@@ -155,6 +174,11 @@ defineExpose({ focus })
 .kbd {
   display: inline-flex;
   margin-left: var(--space-2);
+}
+
+.recognised {
+  display: flex;
+  margin-top: var(--space-2);
 }
 
 .hint {

@@ -4,8 +4,11 @@
 // Create more, Cancel and "Create task". Enter in the title creates; Mod+Enter anywhere in the
 // dialog creates and opens the task; Enter in the description is a line break; Esc discards.
 // Pasting two or more lines into the title offers to create one task per line.
+// Type-to-fill (Look 1): typed parts of the title are tinted and listed under it as chips, each with
+// an × that keeps its text in the title; the field chips show the values they set.
 import { computed, ref, watch } from 'vue'
 import { useShortcut } from '../../composables/useShortcut'
+import type { QuickToken } from '../../lib/quickAdd'
 import { useUi } from '../../stores/ui'
 import AssigneePicker from '../fields/AssigneePicker.vue'
 import DateField from '../fields/DateField.vue'
@@ -13,6 +16,7 @@ import ListPicker from '../fields/ListPicker.vue'
 import PriorityPicker from '../fields/PriorityPicker.vue'
 import StatusPicker from '../fields/StatusPicker.vue'
 import TagPicker from '../fields/TagPicker.vue'
+import QuickAddChips from '../quick-add/QuickAddChips.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiDialog from '../ui/UiDialog.vue'
 import UiInput from '../ui/UiInput.vue'
@@ -35,7 +39,13 @@ const content = ref<HTMLElement | null>(null)
 const panelEl = computed(() => content.value?.closest<HTMLElement>('[role="dialog"]') ?? null)
 
 const qc = useQuickCreate({ focusTitle: () => titleInput.value?.focus() })
-const { title, description, listId, statusId, assigneeIds, tagIds, priority, dueDate, startDate, more, canCreate } = qc
+const { title, description, listId, statusId, assigneeIds, tagIds, priority, dueDate, startDate, more, canCreate, quick } = qc
+const tokens = quick.tokens
+
+function dismiss(token: QuickToken): void {
+  quick.dismiss(token)
+  titleInput.value?.focus()
+}
 
 // Every opening starts from the defaults (no saved draft).
 watch(open, (on) => {
@@ -80,11 +90,13 @@ useShortcut(
         aria-label="Task title"
         data-quick-create-title
         :maxlength="500"
+        :marks="tokens"
         autocomplete="off"
         enterkeyhint="done"
         @enter="onTitleEnter"
         @paste="onPaste"
       />
+      <QuickAddChips v-if="tokens.length" class="recognised" :tokens="tokens" @dismiss="dismiss" />
       <UiTextarea v-model="description" class="description" :rows="2" :max-rows="8" placeholder="Add a description" aria-label="Description" />
       <div class="chips">
         <ListPicker v-model="listId" variant="chip" />
@@ -108,6 +120,11 @@ useShortcut(
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+.recognised {
+  display: flex;
+  margin-top: calc(var(--space-1) * -1);
 }
 
 .chips {

@@ -1,15 +1,21 @@
 // Quick create's state (8.12): the defaults rule, the fields, creating (one task, or one per pasted
 // line) and what follows: Create more keeps the dialog open with the title and description cleared,
 // otherwise it closes with "Task created" and Open. `recents.setLastList` runs either way.
+// Type-to-fill (Look 1): a date, "!high", "#tag" or "@name" typed into the title fills that field
+// (useQuickAdd). The field chips show what the task will get, the typed value over the one chosen;
+// choosing a value by hand while a typed one is in force takes the typed text out of the title.
+// Pasted lines are created as pasted, with the chosen values.
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { newId } from '../../api'
 import { useConfirm } from '../../composables/useConfirm'
+import { useQuickAdd, type QuickAdd } from '../../composables/useQuickAdd'
 import { useTaskPanel } from '../../composables/useTaskPanel'
 import { useToast } from '../../composables/useToast'
 import { noop } from '../../lib/async'
 import { plainTextToHtml } from '../../lib/html'
 import { MAX_PASTED_TASKS, splitPastedLines } from '../../lib/paste'
+import { removeToken, type QuickToken } from '../../lib/quickAdd'
 import { readString, writeString } from '../../lib/storage'
 import { useRecents } from '../../stores/recents'
 import { useTasks } from '../../stores/tasks'
@@ -25,6 +31,7 @@ export interface QuickCreate {
   description: Ref<string>
   listId: Ref<Uuid | null>
   statusId: Ref<Uuid | null>
+  /** The field chips' values: what the task will get, typed values included. */
   assigneeIds: Ref<Uuid[]>
   tagIds: Ref<Uuid[]>
   priority: Ref<Priority>
@@ -32,6 +39,8 @@ export interface QuickCreate {
   startDate: Ref<IsoDate | null>
   more: Ref<boolean>
   canCreate: ComputedRef<boolean>
+  /** What was typed into the title (Look 1). */
+  quick: QuickAdd
   /** Fills the fields from the defaults rule; called each time the dialog opens. */
   reset(): void
   /** Creates the task. Returns its id, or null when nothing was created. */
@@ -73,6 +82,55 @@ export function useQuickCreate(o: { focusTitle(): void }): QuickCreate {
   const more = ref(readString(MORE_KEY) === 'on')
   watch(more, (on) => writeString(MORE_KEY, on ? 'on' : 'off'))
 
+  const quick = useQuickAdd(title, listId)
+
+  /** The title without these tokens (taken out from the end, so the earlier positions hold). */
+  function stripTokens(tokens: QuickToken[]): void {
+    let text = title.value
+    for (const t of [...tokens].sort((a, b) => b.start - a.start)) text = removeToken(text, t)
+    title.value = text
+  }
+
+  const typedOf = (kind: QuickToken['kind']) => quick.tokens.value.filter((t) => t.kind === kind)
+
+  const dueShown = computed<IsoDate | null>({
+    get: () => quick.parsed.value.dueDate ?? dueDate.value,
+    set: (v) => {
+      stripTokens(typedOf('date'))
+      dueDate.value = v
+    },
+  })
+
+  const priorityShown = computed<Priority>({
+    get: () => quick.parsed.value.priority ?? priority.value,
+    set: (v) => {
+      stripTokens(typedOf('priority'))
+      priority.value = v
+    },
+  })
+
+  /** A set field (tags, assignees): the chosen ids plus the typed ones; unticking a typed one takes its text out. */
+  function setField(chosen: Ref<Uuid[]>, kind: 'tag' | 'assignee', idOf: (t: QuickToken) => Uuid | undefined) {
+    return computed<Uuid[]>({
+      get: () => {
+        const typed = typedOf(kind).flatMap((t) => idOf(t) ?? [])
+        return [...new Set([...chosen.value, ...typed])]
+      },
+      set: (next) => {
+        const tokens = typedOf(kind)
+        const kept = new Set(tokens.flatMap((t) => idOf(t) ?? []).filter((id) => next.includes(id)))
+        stripTokens(tokens.filter((t) => {
+          const id = idOf(t)
+          return !!id && !next.includes(id)
+        }))
+        chosen.value = next.filter((id) => !kept.has(id))
+      },
+    })
+  }
+
+  const tagIdsShown = setField(tagIds, 'tag', (t) => t.tagId)
+  const assigneeIdsShown = setField(assigneeIds, 'assignee', (t) => t.userId)
+
   function inWorkspace(id: Uuid | null | undefined): Uuid | null {
     return id && workspaces.allLists.some((x) => x.list.id === id) ? id : null
   }
@@ -109,6 +167,7 @@ export function useQuickCreate(o: { focusTitle(): void }): QuickCreate {
     dueDate.value = d.dueDate ?? null
     startDate.value = d.startDate ?? null
     parentTaskId.value = d.parentTaskId ?? null
+    quick.reset()
   }
 
   // A new list: keep the status only when it belongs there; a parent from another list goes.
@@ -121,8 +180,9 @@ export function useQuickCreate(o: { focusTitle(): void }): QuickCreate {
 
   const canCreate = computed(() => !!title.value.trim() && !!listId.value && workspaces.canEdit())
 
-  function request(name: string): CreateTaskRequest {
-    const r: CreateTaskRequest = { id: newId(), title: name.slice(0, TITLE_MAX) }
+  /** The request for one task: `typed` reads the title for typed fields, otherwise `name` is the title as is. */
+  function request(name: string, typed: boolean): CreateTaskRequest {
+    const r: Partial<CreateTaskRequest> = {}
     if (statusId.value) r.statusId = statusId.value
     if (parentTaskId.value) r.parentTaskId = parentTaskId.value
     const text = description.value.trim()
@@ -132,7 +192,8 @@ export function useQuickCreate(o: { focusTitle(): void }): QuickCreate {
     if (tagIds.value.length) r.tagIds = [...tagIds.value]
     if (startDate.value) r.startDate = startDate.value
     if (dueDate.value) r.dueDate = dueDate.value
-    return r
+    const fields = typed ? quick.apply(r) : { ...r, title: name }
+    return { ...fields, id: newId(), title: fields.title.slice(0, TITLE_MAX) }
   }
 
   /** In the panel on Home or a list page (focusing its root), otherwise the full page. */
@@ -162,7 +223,7 @@ export function useQuickCreate(o: { focusTitle(): void }): QuickCreate {
     const name = title.value.trim()
     const list = listId.value
     if (!name || !list || !workspaces.canEdit()) return null
-    const r = request(name)
+    const r = request(name, true)
     const id = r.id!
     void tasks.create(list, r)
     recents.setLastList(list)
@@ -187,7 +248,7 @@ export function useQuickCreate(o: { focusTitle(): void }): QuickCreate {
       const list = listId.value
       if (!ok || !list || !ui.quickCreate.open || !workspaces.canEdit()) return
       // Creates for one list and status go one at a time (the store queues them), in pasted order.
-      for (const line of lines) void tasks.create(list, request(line))
+      for (const line of lines) void tasks.create(list, request(line, false))
       recents.setLastList(list)
       after({ toast: `Created ${n} tasks`, always: true })
     })
@@ -199,13 +260,14 @@ export function useQuickCreate(o: { focusTitle(): void }): QuickCreate {
     description,
     listId,
     statusId,
-    assigneeIds,
-    tagIds,
-    priority,
-    dueDate,
+    assigneeIds: assigneeIdsShown,
+    tagIds: tagIdsShown,
+    priority: priorityShown,
+    dueDate: dueShown,
     startDate,
     more,
     canCreate,
+    quick,
     reset,
     create,
     pasteLines,
