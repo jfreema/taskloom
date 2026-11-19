@@ -57,6 +57,7 @@ builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = c =>
     if (c.ProblemDetails.Status == StatusCodes.Status413PayloadTooLarge) c.ProblemDetails.Detail ??= RequestLimits.MessageFor(c.HttpContext);
 });
 builder.Services.AddHealthChecks();
+builder.Services.AddTaskloomCompression();
 
 // Azure Container Apps (and most hosts) terminate TLS at an ingress proxy.
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
@@ -87,6 +88,8 @@ if (config.GetValue("Database:MigrateOnStartup", true))
 }
 
 app.UseForwardedHeaders();
+// Efficiency 1: compresses what the build hasn't already (AppFiles); outermost, so error pages are compressed too.
+app.UseResponseCompression();
 // Spec 5.8: every HTML response (index.html and the SPA fallback) carries the Content-Security-Policy.
 app.UseContentSecurityPolicyOnHtml();
 // No response is ever to be sniffed into another type than its Content-Type says (attachments set this themselves too).
@@ -146,7 +149,10 @@ static bool IsUnstorableText(Exception? e)
 
 app.UseRequestBodyLimits();
 app.UseDefaultFiles();
-app.UseStaticFiles();
+// Efficiency 1: the build's compressed copies, and cache headers that let the browser keep /assets for a year.
+var appFiles = AppFiles.StaticFileOptions();
+app.UsePrecompressedAppFiles();
+app.UseStaticFiles(appFiles);
 // Static files are served above, so they are never rate limited. The sign-in limit covers the providers' callbacks,
 // which UseAuthentication answers, so it comes first; the /api limit counts per user, so it needs the signed-in user.
 app.UseSignInRateLimit();
@@ -173,7 +179,7 @@ if (authOptions.DevLogin.Enabled) api.MapDevEndpoints();
 api.MapApiFallback();
 
 // The Vue app handles every other route.
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html", appFiles);
 
 app.Run();
 

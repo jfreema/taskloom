@@ -341,6 +341,15 @@ deploy/azure/              Bicep for Azure Container Apps, PostgreSQL Flexible S
 Cloud services sit behind interfaces, and a setting picks the implementation, so moving between local, Azure or
 another cloud changes configuration, not code.
 
+## Compression and caching
+
+`npm run build` writes a Brotli (`.br`) and a gzip (`.gz`) copy beside each script, style sheet and page, and the API
+sends whichever copy the browser accepts (`src/Taskloom.Api/AppFiles.cs`). Files under `/assets` carry a content hash
+in their names, so browsers may keep them for a year (`Cache-Control: public, max-age=31536000, immutable`).
+`index.html` and `theme-init.js` are `no-cache`: checked on every visit and answered 304 when unchanged, so a new
+release shows on the next page load. The API compresses its JSON as it sends it, HTTPS included. Nothing in front of
+the app (Docker, Cloud Run, Azure Container Apps) needs to compress anything.
+
 ## Deploying to Azure
 
 See [deploy/azure/README.md](deploy/azure/README.md); its `entraTenantId` parameter sets
