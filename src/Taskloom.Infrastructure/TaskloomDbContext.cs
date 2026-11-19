@@ -8,6 +8,7 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<UserIdentity> UserIdentities => Set<UserIdentity>();
+    public DbSet<UserPhoto> UserPhotos => Set<UserPhoto>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
@@ -34,7 +35,16 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
             e.Property(x => x.Email).HasMaxLength(320);
             e.HasIndex(x => x.Email).IsUnique();
             e.Property(x => x.DisplayName).HasMaxLength(200);
+            e.Property(x => x.PhotoVersion).HasMaxLength(32);
             e.HasMany(x => x.Identities).WithOne().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<UserPhoto>(e =>
+        {
+            e.ToTable("user_photos");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.ContentType).HasMaxLength(50);
+            e.Property(x => x.Source).HasMaxLength(50);
+            e.HasOne<User>().WithOne().HasForeignKey<UserPhoto>(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<UserIdentity>(e =>
         {
@@ -84,6 +94,8 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
         {
             e.ToTable("lists");
             e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Color).HasMaxLength(20);
+            e.Property(x => x.Icon).HasMaxLength(40);
             e.HasMany(x => x.Statuses).WithOne().HasForeignKey(x => x.ListId).OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<ListStatus>(e =>

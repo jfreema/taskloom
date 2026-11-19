@@ -2,6 +2,8 @@
  * Loom design tokens (spec 7.3 to 7.8). The only stylesheet that holds colour values.
  * Theme: data-theme is absent for "System", and "light" or "dark" for an explicit choice
  * (public/theme-init.js sets it before first paint; composables/useTheme.ts keeps it in sync).
+ * Density (Look 2): data-density="compact" tightens rows and cards, set the same way
+ * (composables/useDensity.ts). Touch screens keep their 44px rows either way.
  */
 :root {
   color-scheme: light;
@@ -37,7 +39,8 @@
   --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px; --space-16: 64px;
   --control-xs: 24px; --control-sm: 28px; --control-md: 32px; --control-lg: 40px;
-  --row-list: 36px; --row-sidebar: 30px; --row-menu: 32px; --touch-min: 44px;
+  --row-list: 36px; --row-sidebar: 30px; --row-menu: 32px; --row-home: 40px; --touch-min: 44px;
+  --card-pad-y: 10px; --card-gap: var(--space-2);
   --sidebar-w: 248px; --drawer-w: min(288px, 85vw); --topbar-h: 48px; --toolbar-h: 44px; --appbar-h: 52px;
   --inset: 8px; --reading-w: 760px; --panel-w: clamp(440px, 36vw, 680px); --palette-w: 640px;
   --modal-sm: 400px; --modal-md: 560px; --modal-lg: 720px;
@@ -102,6 +105,12 @@
   }
 }
 
+@media not all and (pointer: coarse) {
+  :root[data-density="compact"] {
+    --row-list: 30px; --row-sidebar: 26px; --row-home: 32px;
+    --card-pad-y: 6px; --card-gap: var(--space-1-5);
+  }
+}
 @media (pointer: coarse) {
   :root { --row-list: 44px; --row-sidebar: 44px; --row-menu: 44px; }
 }

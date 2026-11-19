@@ -9,6 +9,7 @@ import { Ellipsis, SquarePen } from '@lucide/vue'
 import { useListPageContext } from '../../composables/useListPageContext'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
+import ListGlyph from '../fields/ListGlyph.vue'
 import SpaceTile from '../fields/SpaceTile.vue'
 import PageHeader from '../shell/PageHeader.vue'
 import { useHierarchyMenus } from '../shell/hierarchyMenus'
@@ -51,6 +52,7 @@ function newTask(): void {
           <span v-tooltip="{ text: ctx.space.value.name, overflowOnly: true }" class="space-name truncate">{{ ctx.space.value.name }}</span>
           <span class="sep" aria-hidden="true">/</span>
         </template>
+        <ListGlyph v-if="ctx.list.value" :list="ctx.list.value" :size="20" class="list-glyph" />
         <h1 class="list-name">
           <UiInlineEdit
             v-if="canEdit"
@@ -117,6 +119,10 @@ function newTask(): void {
 
 .menu-button {
   flex-shrink: 0;
+}
+
+.list-glyph {
+  margin-left: var(--space-0-5);
 }
 
 .tabs {

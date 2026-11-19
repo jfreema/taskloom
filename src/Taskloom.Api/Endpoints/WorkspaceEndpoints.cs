@@ -57,7 +57,7 @@ public static class WorkspaceEndpoints
                     s.WorkspaceId,
                     Dto = new SpaceDto(s.Id, s.Name, s.Color, s.Position, s.IsPrivate,
                         s.Members.OrderBy(m => m.AddedAt).ThenBy(m => m.UserId).Select(m => m.UserId).ToList(),
-                        s.Lists.OrderBy(l => l.Position).ThenBy(l => l.Id).Select(l => new ListSummaryDto(l.Id, l.SpaceId, l.Name, l.Position,
+                        s.Lists.OrderBy(l => l.Position).ThenBy(l => l.Id).Select(l => new ListSummaryDto(l.Id, l.SpaceId, l.Name, l.Position, l.Color, l.Icon,
                             l.Statuses.OrderBy(x => x.Position).ThenBy(x => x.Id)
                                 .Select(x => new StatusDto(x.Id, x.ListId, x.Name, x.Color, x.Category, x.Position)).ToList()))
                             .ToList()),
@@ -105,7 +105,8 @@ public static class WorkspaceEndpoints
             await access.RequireWorkspaceAsync(id);
             return await db.WorkspaceMembers.Where(m => m.WorkspaceId == id)
                 .OrderBy(m => m.User!.DisplayName.ToLower()).ThenBy(m => m.User!.DisplayName).ThenBy(m => m.UserId)
-                .Select(m => new MemberDto(m.UserId, m.User!.Email, m.User.DisplayName, m.Role, !m.User.Identities.Any(), m.User.DisabledAt != null))
+                .Select(m => new MemberDto(m.UserId, m.User!.Email, m.User.DisplayName, m.Role, !m.User.Identities.Any(), m.User.DisabledAt != null,
+                    UserPhotos.UrlFor(m.UserId, m.User.PhotoVersion)))
                 .ToListAsync();
         });
 
@@ -135,7 +136,7 @@ public static class WorkspaceEndpoints
             }
             db.WorkspaceMembers.Add(new WorkspaceMember { WorkspaceId = id, UserId = user.Id, Role = req.Role });
             await db.SaveChangesAsync();
-            return Results.Ok(new MemberDto(user.Id, user.Email, user.DisplayName, req.Role, pending, user.DisabledAt != null));
+            return Results.Ok(new MemberDto(user.Id, user.Email, user.DisplayName, req.Role, pending, user.DisabledAt != null, UserPhotos.UrlFor(user.Id, user.PhotoVersion)));
         });
 
         // Admins may change other Admins; nobody changes their own role or the Owner's, and nobody becomes Owner.
@@ -174,7 +175,8 @@ public static class WorkspaceEndpoints
         });
     }
 
-    private static MeDto Me(User u, AuthOptions options) => new(u.Id, u.Email, u.DisplayName, options.IsSiteAdmin(u.Email));
+    public static MeDto Me(User u, AuthOptions options) =>
+        new(u.Id, u.Email, u.DisplayName, options.IsSiteAdmin(u.Email), UserPhotos.UrlFor(u.Id, u.PhotoVersion), u.PhotoChosen);
 
     private static bool IsAssignable(WorkspaceRole role) => role is WorkspaceRole.Admin or WorkspaceRole.Member or WorkspaceRole.Guest;
 }

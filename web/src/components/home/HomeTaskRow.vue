@@ -147,7 +147,7 @@ defineExpose({ el: root })
   grid-template-areas: "toggle main meta actions";
   align-items: center;
   column-gap: var(--space-3);
-  min-height: 40px;
+  min-height: var(--row-home);
   padding: 0 var(--space-1) 0 var(--space-2);
   border-radius: var(--radius-md);
   color: var(--text-primary);

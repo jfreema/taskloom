@@ -22,7 +22,7 @@ public class CommentTests(TaskloomFactory factory) : IClassFixture<TaskloomFacto
         var commentId = Guid.NewGuid();
         var comment = await (await guest.PostAsJsonAsync(url, new { id = commentId, body = "  First!\nSecond line  " })).ReadAsync<CommentDto>();
         Assert.Equal((commentId, task.Id, "First!\nSecond line", (DateTimeOffset?)null), (comment.Id, comment.TaskId, comment.Body, comment.EditedAt));
-        Assert.Equal(new UserDto(guestInfo.UserId, guestInfo.Email, "Gus Guest"), comment.Author);
+        Assert.Equal(new UserDto(guestInfo.UserId, guestInfo.Email, "Gus Guest", null), comment.Author);
         Assert.InRange(comment.CreatedAt, start, DateTimeOffset.UtcNow.AddSeconds(1));
         foreach (var body in new[] { "", "   ", null })
             Assert.Equal("Write a comment first.", await (await guest.PostAsJsonAsync(url, new { body })).ProblemAsync(HttpStatusCode.BadRequest));

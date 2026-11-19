@@ -4,13 +4,16 @@
 //   mock painted with that theme's canvas, surface and accent; System shows both halves. The colours
 //   come from the token rules in styles/tokens.css (read once through the CSSOM), so this file holds
 //   no colour values and the previews follow any change to the tokens.
+// - "Density" (Look 2): UiRadioCards (Comfortable, Compact) bound to useDensity, each with a mock of
+//   rows at that spacing.
 // - "Single-key shortcuts": UiSwitch bound to shortcutsEnabled (taskloom.shortcuts.singleKey,
 //   default on).
-// Both are saved in this browser only.
+// All are saved in this browser only.
 import { computed, useId } from 'vue'
 import SettingsPage from '../../components/settings/SettingsPage.vue'
 import UiRadioCards, { type RadioCardOption } from '../../components/ui/UiRadioCards.vue'
 import UiSwitch from '../../components/ui/UiSwitch.vue'
+import { useDensity } from '../../composables/useDensity'
 import { shortcutsEnabled } from '../../composables/useShortcut'
 import { useTheme } from '../../composables/useTheme'
 import type { ThemePreference } from '../../types'
@@ -87,6 +90,27 @@ const options: RadioCardOption[] = [
   { value: 'dark', label: 'Dark' },
 ]
 
+const { density, setDensity } = useDensity()
+
+const densityModel = computed<string>({
+  get: () => density.value,
+  set: (v) => {
+    if (v === 'comfortable' || v === 'compact') setDensity(v)
+  },
+})
+
+const densityOptions: RadioCardOption[] = [
+  { value: 'comfortable', label: 'Comfortable', description: 'Room to breathe' },
+  { value: 'compact', label: 'Compact', description: 'More tasks on screen' },
+]
+
+/** The mock's rows (their middles) and the gap between them: four rows 11 apart, or six 7.5 apart. */
+function densityRows(value: string): { ys: number[]; gap: number } {
+  const gap = value === 'compact' ? 7.5 : 11
+  const count = value === 'compact' ? 6 : 4
+  return { ys: Array.from({ length: count }, (_, i) => 8 + i * gap), gap }
+}
+
 const uid = useId()
 const clipId = `${uid}-half`
 
@@ -136,6 +160,26 @@ function halves(value: string): { palette: Palette; clip?: string }[] {
       </UiRadioCards>
     </section>
 
+    <section class="block" aria-labelledby="appearance-density">
+      <h3 id="appearance-density" class="block-title">Density</h3>
+      <p class="block-text">How tightly lists, Home and Board cards are packed. Touch screens keep larger rows.</p>
+      <UiRadioCards v-model="densityModel" name="density" aria-label="Density" :options="densityOptions">
+        <template #preview="{ option }">
+          <span class="stage">
+            <svg class="mock density-mock" viewBox="0 0 96 56" aria-hidden="true" focusable="false">
+              <rect class="d-surface" width="96" height="56" rx="6" />
+              <g v-for="(y, i) in densityRows(option.value).ys" :key="y">
+                <circle class="d-accent" cx="12" :cy="y" r="2.25" />
+                <rect class="d-line" x="19" :y="y - 1.5" :width="i % 2 ? 44 : 58" height="3" rx="1.5" />
+                <line class="d-rule" x1="6" :y1="y + densityRows(option.value).gap / 2" x2="90" :y2="y + densityRows(option.value).gap / 2" />
+              </g>
+              <rect class="d-frame" x="0.5" y="0.5" width="95" height="55" rx="5.5" />
+            </svg>
+          </span>
+        </template>
+      </UiRadioCards>
+    </section>
+
     <section class="block" aria-labelledby="appearance-keyboard">
       <h3 id="appearance-keyboard" class="block-title">Keyboard</h3>
       <UiSwitch
@@ -166,6 +210,13 @@ function halves(value: string): { palette: Palette; clip?: string }[] {
   color: var(--text-primary);
 }
 
+.block-text {
+  margin-top: calc(var(--space-2) * -1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-secondary);
+}
+
 .stage {
   display: flex;
   justify-content: center;
@@ -173,6 +224,13 @@ function halves(value: string): { palette: Palette; clip?: string }[] {
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
 }
+
+/* Painted with the live theme's tokens. */
+.density-mock .d-surface { fill: var(--bg-surface); }
+.density-mock .d-accent { fill: var(--accent); }
+.density-mock .d-line { fill: var(--border-default); }
+.density-mock .d-rule { stroke: var(--border-subtle); stroke-width: 0.75; }
+.density-mock .d-frame { fill: none; stroke: var(--border-default); }
 
 .mock {
   display: block;

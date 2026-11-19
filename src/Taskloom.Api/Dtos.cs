@@ -7,15 +7,20 @@ namespace Taskloom.Api;
 
 // ---- Responses ----
 
-public record UserDto(Guid Id, string Email, string DisplayName);
+/// <param name="PhotoUrl">Where their photo is (<see cref="UserPhotos.UrlFor"/>); null when they have none.</param>
+public record UserDto(Guid Id, string Email, string DisplayName, string? PhotoUrl)
+{
+    public static UserDto Of(User u) => new(u.Id, u.Email, u.DisplayName, UserPhotos.UrlFor(u.Id, u.PhotoVersion));
+}
 
-/// <summary>GET and PATCH /api/me: the signed-in user.</summary>
+/// <summary>GET and PATCH /api/me, and the photo endpoints: the signed-in user.</summary>
 /// <param name="IsSiteAdmin">Their email is in Auth:SiteAdmins, so the app shows Settings › People.</param>
-public record MeDto(Guid Id, string Email, string DisplayName, bool IsSiteAdmin);
+/// <param name="PhotoChosen">They uploaded or removed their photo by hand, so signing in no longer replaces it.</param>
+public record MeDto(Guid Id, string Email, string DisplayName, bool IsSiteAdmin, string? PhotoUrl, bool PhotoChosen);
 
 /// <param name="Pending">The user has no sign-in identity yet (invited, never signed in).</param>
 /// <param name="Disabled">A site admin turned the account off; they stay a member.</param>
-public record MemberDto(Guid UserId, string Email, string DisplayName, WorkspaceRole Role, bool Pending, bool Disabled);
+public record MemberDto(Guid UserId, string Email, string DisplayName, WorkspaceRole Role, bool Pending, bool Disabled, string? PhotoUrl);
 
 /// <summary>A row of GET /api/admin/users (site admins only).</summary>
 /// <param name="Pending">No sign-in identity yet (invited, never signed in).</param>
@@ -24,10 +29,12 @@ public record MemberDto(Guid UserId, string Email, string DisplayName, Workspace
 /// <param name="Workspaces">How many workspaces they are a member of.</param>
 public record AdminUserDto(
     Guid Id, string Email, string DisplayName, bool Pending, bool Disabled, bool IsSiteAdmin,
-    DateTimeOffset CreatedAt, DateTimeOffset? LastSeenAt, int ActiveSessions, int Workspaces);
+    DateTimeOffset CreatedAt, DateTimeOffset? LastSeenAt, int ActiveSessions, int Workspaces, string? PhotoUrl);
 
 public record StatusDto(Guid Id, Guid ListId, string Name, string Color, StatusCategory Category, double Position);
-public record ListSummaryDto(Guid Id, Guid SpaceId, string Name, double Position, List<StatusDto> Statuses);
+/// <param name="Color">"#RRGGBB" for the list's icon, or null (grey).</param>
+/// <param name="Icon">One of <see cref="ListIcons.All"/>, or null for the plain list icon.</param>
+public record ListSummaryDto(Guid Id, Guid SpaceId, string Name, double Position, string? Color, string? Icon, List<StatusDto> Statuses);
 /// <param name="IsPrivate">Only <paramref name="MemberIds"/> can see it.</param>
 /// <param name="MemberIds">The people of a private space, by when they were added; empty for a space everyone can see.</param>
 public record SpaceDto(Guid Id, string Name, string Color, double Position, bool IsPrivate, List<Guid> MemberIds, List<ListSummaryDto> Lists);
@@ -92,8 +99,12 @@ public record CreateSpaceRequest(Guid? Id, string? Name, string? Color, bool? Is
 /// <param name="IsPrivate">true keeps the space to its people (the caller is added); false shows it to everyone and clears the people.</param>
 public record UpdateSpaceRequest(string? Name, string? Color, double? Position, bool? IsPrivate = null);
 public record AddSpaceMembersRequest(List<Guid>? UserIds);
-public record CreateListRequest(Guid? Id, string? Name, StatusPreset? StatusPreset, Guid? StatusesFromListId);
-public record UpdateListRequest(string? Name, double? Position, Guid? SpaceId);
+/// <param name="Color">"#RRGGBB", or absent, null or "" for none.</param>
+/// <param name="Icon">One of <see cref="ListIcons.All"/>, or absent, null or "" for the plain list icon.</param>
+public record CreateListRequest(Guid? Id, string? Name, StatusPreset? StatusPreset, Guid? StatusesFromListId, string? Color = null, string? Icon = null);
+/// <param name="Color">"#RRGGBB" sets the icon's colour and "" takes it away; absent or null leaves it.</param>
+/// <param name="Icon">An icon of <see cref="ListIcons.All"/> sets it and "" goes back to the plain list icon; absent or null leaves it.</param>
+public record UpdateListRequest(string? Name, double? Position, Guid? SpaceId, string? Color = null, string? Icon = null);
 public record CreateStatusRequest(Guid? Id, string? Name, string? Color, StatusCategory? Category);
 public record UpdateStatusRequest(string? Name, string? Color, StatusCategory? Category, double? Position);
 /// <param name="Repeat">Top-level tasks only; a task without a due date gets the rule's first date.</param>

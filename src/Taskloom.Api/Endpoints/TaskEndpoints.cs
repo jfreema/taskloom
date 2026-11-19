@@ -126,13 +126,13 @@ public static class TaskEndpoints
         var (task, workspaceId) = await access.RequireTaskAsync(id);
         var dto = await TaskProjections.LoadAsync(db, id, ct);
         var createdBy = await db.Users.Where(u => u.Id == task.CreatedById)
-            .Select(u => new UserDto(u.Id, u.Email, u.DisplayName)).FirstAsync(ct);
+            .Select(u => new UserDto(u.Id, u.Email, u.DisplayName, UserPhotos.UrlFor(u.Id, u.PhotoVersion))).FirstAsync(ct);
         var parent = task.ParentTaskId is null ? null
             : await db.Tasks.Where(t => t.Id == task.ParentTaskId).Select(t => new TaskRefDto(t.Id, t.Title, t.ListId)).FirstOrDefaultAsync(ct);
         var subtasks = await db.Tasks.Where(t => t.ParentTaskId == id).InOrder()
             .Select(TaskProjections.ToDto).AsSplitQuery().ToListAsync(ct);
         var comments = await db.Comments.Where(c => c.TaskId == id).OrderBy(c => c.CreatedAt).ThenBy(c => c.Id)
-            .Select(c => new CommentDto(c.Id, c.TaskId, new UserDto(c.AuthorId, c.Author!.Email, c.Author.DisplayName), c.Body, c.CreatedAt, c.EditedAt))
+            .Select(c => new CommentDto(c.Id, c.TaskId, new UserDto(c.AuthorId, c.Author!.Email, c.Author.DisplayName, UserPhotos.UrlFor(c.AuthorId, c.Author.PhotoVersion)), c.Body, c.CreatedAt, c.EditedAt))
             .ToListAsync(ct);
         var attachments = await db.Attachments.Where(a => a.TaskId == id).OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
             .Select(a => new AttachmentDto(a.Id, a.TaskId, a.FileName, a.ContentType, a.SizeBytes, a.UploadedById, a.CreatedAt))
@@ -140,7 +140,7 @@ public static class TaskEndpoints
         // The latest 200 rows, returned oldest first.
         var activity = await db.Activities.Where(a => a.TaskId == id)
             .OrderByDescending(a => a.CreatedAt).ThenByDescending(a => a.Id).Take(200)
-            .Select(a => new ActivityDto(a.Id, a.TaskId, new UserDto(a.ActorId, a.Actor!.Email, a.Actor.DisplayName), a.Kind, a.FromValue, a.ToValue, a.CreatedAt))
+            .Select(a => new ActivityDto(a.Id, a.TaskId, new UserDto(a.ActorId, a.Actor!.Email, a.Actor.DisplayName, UserPhotos.UrlFor(a.ActorId, a.Actor.PhotoVersion)), a.Kind, a.FromValue, a.ToValue, a.CreatedAt))
             .ToListAsync(ct);
         activity.Reverse();
         return new TaskDetailDto(dto, task.Description, workspaceId, createdBy, parent, subtasks, comments, attachments, activity);

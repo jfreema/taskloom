@@ -53,7 +53,11 @@ public class SignInFactory : TaskloomFactory
     /// Runs the provider's real OnTokenValidated event with a principal carrying <paramref name="claims"/>, as the
     /// handler does after validating a token. Returns the principal that would be signed in, or the redirect it sent.
     /// </summary>
-    public async Task<TokenOutcome> ValidateTokenAsync(string providerKey, params (string Type, string Value)[] claims)
+    public Task<TokenOutcome> ValidateTokenAsync(string providerKey, params (string Type, string Value)[] claims) =>
+        ValidateTokenAsync(providerKey, accessToken: null, claims);
+
+    /// <summary>As above, with the access token the token endpoint would have sent alongside the ID token.</summary>
+    public async Task<TokenOutcome> ValidateTokenAsync(string providerKey, string? accessToken, params (string Type, string Value)[] claims)
     {
         using var scope = Services.CreateScope();
         var schemes = scope.ServiceProvider.GetRequiredService<IAuthenticationSchemeProvider>();
@@ -62,6 +66,7 @@ public class SignInFactory : TaskloomFactory
         var http = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims.Select(c => new Claim(c.Type, c.Value)), "oidc"));
         var context = new TokenValidatedContext(http, scheme, options, principal, new AuthenticationProperties());
+        if (accessToken is not null) context.TokenEndpointResponse = new OpenIdConnectMessage { AccessToken = accessToken };
         await options.Events.TokenValidated(context);
         if (context.Result?.Handled == true)
             return new TokenOutcome(null, http.Response.Headers.Location.ToString());

@@ -44,7 +44,7 @@ export function useComments(): {
     const local: LocalComment = {
       id,
       taskId,
-      author: { id: user.id, email: user.email, displayName: user.displayName },
+      author: { id: user.id, email: user.email, displayName: user.displayName, photoUrl: user.photoUrl },
       body: text,
       createdAt: new Date().toISOString(),
       editedAt: null,

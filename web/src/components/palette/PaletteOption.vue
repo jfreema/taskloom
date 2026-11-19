@@ -1,11 +1,12 @@
 <script setup lang="ts">
-// One palette result (8.11), 40px: the status icon, space tile or action icon, the label with the
+// One palette result (8.11), 40px: the status icon, list icon, space tile or action icon, the label with the
 // query's match in weight 600, the location in --text-tertiary, then the due date, the key hint or
 // the current-theme check. The palette's input keeps focus (aria-activedescendant), so a press on
 // the row never takes it.
 import { computed } from 'vue'
 import { Check } from '@lucide/vue'
 import DueDate from '../fields/DueDate.vue'
+import ListGlyph from '../fields/ListGlyph.vue'
 import SpaceTile from '../fields/SpaceTile.vue'
 import StatusIcon from '../fields/StatusIcon.vue'
 import UiIcon from '../ui/UiIcon.vue'
@@ -35,6 +36,7 @@ const segments = computed(() =>
   >
     <span class="lead">
       <StatusIcon v-if="option.status" :status="option.status" :size="16" />
+      <ListGlyph v-else-if="option.list" :list="option.list" />
       <SpaceTile v-else-if="option.space" :space="option.space" :size="16" />
       <UiIcon v-else-if="option.icon" :icon="option.icon" :size="16" />
     </span>

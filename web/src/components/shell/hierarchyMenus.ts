@@ -1,8 +1,8 @@
-// The space and list "..." menus (3.4, 8.3) and the deletes behind them. The sidebar uses both;
+// The space and list "..." menus (3.4, 8.3; "Icon and colour…" is Look 2) and the deletes behind them. The sidebar uses both;
 // the list page header can use `listMenuItems` for its own list menu ("the same items as the
 // sidebar list menu", 8.4). Items follow the role rules of 9.4: guests get only "Copy link" on lists
 // and no space menu at all; deleting a space needs Admin. "Share space…" (Member+) says who can see it.
-import { FolderInput, Link, ListChecks, Lock, Pencil, Plus, Trash2, Users } from '@lucide/vue'
+import { FolderInput, Link, ListChecks, Lock, Palette, Pencil, Plus, Trash2, Users } from '@lucide/vue'
 import { useClipboard } from '../../composables/useClipboard'
 import { useConfirm } from '../../composables/useConfirm'
 import { useToast } from '../../composables/useToast'
@@ -105,6 +105,7 @@ export function useHierarchyMenus(): {
     const items: MenuItem[] = []
     if (o.onRename) items.push({ id: 'rename', label: 'Rename', icon: Pencil, kbd: o.renameKbd, onSelect: o.onRename })
     items.push(
+      { id: 'look', label: 'Icon and colour…', icon: Palette, onSelect: () => ui.openListLook(listId) },
       { id: 'statuses', label: 'Edit statuses', icon: ListChecks, onSelect: () => ui.openStatusEditor(listId) },
       {
         id: 'move',

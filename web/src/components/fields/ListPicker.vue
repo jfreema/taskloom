@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // List picker (7.11): a single-select, searchable listbox of the current workspace's lists, one
-// group per space in sidebar order, each option with its SpaceTile. The space name is a search
+// group per space in sidebar order, each option with the list's icon (Look 2). The space name is a search
 // keyword, so "work" finds every list in Work. `excludeListId` leaves out the tasks' own list.
 // Triggers, named "List: <name>, change" or "List: none, add":
 // - 'chip': a round chip "[W] Work / Admin ⌄" (quick create);
@@ -14,6 +14,7 @@ import UiIcon from '../ui/UiIcon.vue'
 import UiListbox from '../ui/UiListbox.vue'
 import UiPopover from '../ui/UiPopover.vue'
 import FieldTrigger from './FieldTrigger.vue'
+import ListGlyph from './ListGlyph.vue'
 import SpaceTile from './SpaceTile.vue'
 import { triggerLabel } from './fieldLabel'
 
@@ -42,7 +43,7 @@ const chosen = computed(() => (props.modelValue ? workspaces.findList(props.mode
 const label = computed(() => triggerLabel('List', chosen.value?.list.name ?? null))
 const tip = computed(() => (chosen.value ? `${chosen.value.space.name} / ${chosen.value.list.name}` : undefined))
 
-const spaceByList = computed(() => new Map(workspaces.allLists.map((x) => [x.list.id, x.space])))
+const listById = computed(() => new Map(workspaces.allLists.map((x) => [x.list.id, x.list])))
 
 function options(): ListboxOption[] {
   return workspaces.allLists
@@ -95,7 +96,7 @@ function update(next: string | string[] | null): void {
         @update:model-value="update"
       >
         <template #option="{ option }">
-          <SpaceTile v-if="spaceByList.get(option.value)" :space="spaceByList.get(option.value)!" :size="16" />
+          <ListGlyph v-if="listById.get(option.value)" :list="listById.get(option.value)!" />
           <span class="option-label">{{ option.label }}</span>
         </template>
         <template #empty="{ query }">

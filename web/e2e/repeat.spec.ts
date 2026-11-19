@@ -114,6 +114,9 @@ test.describe('Repeating tasks', () => {
       await page.getByRole('menu', { name: 'Repeat' }).getByRole('menuitem', { name: "Don't repeat" }).click()
       await expect(panel.getByRole('button', { name: 'Repeat: none, add' })).toBeVisible()
       await expect.poll(async () => (await api(page).task(task.id)).task.repeat).toBeNull()
+      // Undo's status change, the custom rule and this stop came in a row, so the feed folds them into one line.
+      await expect(panel.getByText('updated the status and repeat')).toBeVisible()
+      await panel.getByRole('button', { name: 'Show 3 changes' }).click()
       await expect(panel.getByText('stopped repeating this')).toBeVisible()
       await expect(panel.getByText(`set this to repeat weekly on ${shortDay}`)).toBeVisible()
     })

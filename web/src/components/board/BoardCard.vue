@@ -178,7 +178,7 @@ function onFocusOut(e: FocusEvent): void {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px var(--space-3);
+  padding: var(--card-pad-y) var(--space-3);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: linear-gradient(var(--card-tint), var(--card-tint)), var(--card-bg);

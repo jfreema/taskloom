@@ -130,6 +130,12 @@ public class MicrosoftOptions
     /// <summary>The tenant id when it is a GUID; a domain name or "organizations" would not pin sign-in to one tenant.</summary>
     public Guid? Tenant => Guid.TryParse(TenantId?.Trim(), out var id) && id != Guid.Empty ? id : null;
 
+    /// <summary>
+    /// Read the person's photo from Microsoft Graph at sign-in, for their avatar (Look 2). This asks for the delegated
+    /// Graph permission User.Read, which new app registrations have; turn it off if the tenant doesn't allow it.
+    /// </summary>
+    public bool Photos { get; set; } = true;
+
     public static string AuthorityFor(Guid tenant) => $"https://login.microsoftonline.com/{tenant:D}/v2.0";
 }
 

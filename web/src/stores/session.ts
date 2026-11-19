@@ -85,7 +85,7 @@ export const useSession = defineStore('session', () => {
       return await api.get<Me>('/api/me', { ignoreUnauthorized: true })
     } catch {
       // Signed in all the same. Without the flag the Admin settings stay hidden until the next load().
-      return { ...signedIn, isSiteAdmin: false }
+      return { ...signedIn, isSiteAdmin: false, photoChosen: false }
     }
   }
 
@@ -145,6 +145,25 @@ export const useSession = defineStore('session', () => {
     )
   }
 
+  /** A new photo, or none, for the signed-in user, mirrored into the members lists. */
+  function applyPhoto(me: Me): void {
+    if (user.value && user.value.id !== me.id) return
+    user.value = me
+    useMembers().setPhotoLocal(me.id, me.photoUrl)
+  }
+
+  /** POST /api/me/photo with a photo made by lib/photo.ts squarePhoto. Rejects with the ApiError (the profile page shows it). */
+  function uploadPhoto(photo: Blob): Promise<void> {
+    const form = new FormData()
+    form.append('file', photo, 'photo.jpg')
+    return handled(api.upload<Me>('/api/me/photo', form).then(applyPhoto))
+  }
+
+  /** DELETE /api/me/photo: initials from now on, also after signing in again. Rejects with the ApiError. */
+  function removePhoto(): Promise<void> {
+    return handled(api.del<Me>('/api/me/photo').then(applyPhoto))
+  }
+
   /**
    * POST /api/me/sign-out-others: ends this account's sessions in every other browser and keeps
    * this one. Rejects without a toast (the profile page words both outcomes).
@@ -164,5 +183,5 @@ export const useSession = defineStore('session', () => {
     return handled(providersCache)
   }
 
-  return { user, loaded, error, load, devLogin, logout, updateMe, signOutOthers, providers }
+  return { user, loaded, error, load, devLogin, logout, updateMe, uploadPhoto, removePhoto, signOutOthers, providers }
 })

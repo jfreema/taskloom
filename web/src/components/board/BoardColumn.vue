@@ -201,7 +201,7 @@ defineExpose({ openTop })
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--card-gap);
   min-height: 0;
   padding: 2px var(--space-2) var(--space-2);
   overflow-x: hidden;

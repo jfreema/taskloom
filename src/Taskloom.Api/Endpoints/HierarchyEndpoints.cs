@@ -138,7 +138,7 @@ public static class HierarchyEndpoints
         {
             var space = await access.RequireSpaceAsync(id, WorkspaceRole.Member);
             var name = ListName(req.Name);
-            var list = new TaskList { Id = req.Id ?? Guid.NewGuid(), SpaceId = id, Name = name };
+            var list = new TaskList { Id = req.Id ?? Guid.NewGuid(), SpaceId = id, Name = name, Color = ListColor(req.Color), Icon = ListIcon(req.Icon) };
             List<ListStatus> statuses;
             if (req.StatusesFromListId is { } fromId)
             {
@@ -154,7 +154,7 @@ public static class HierarchyEndpoints
             db.Lists.Add(list);
             db.Statuses.AddRange(statuses);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/lists/{list.Id}", new ListSummaryDto(list.Id, list.SpaceId, list.Name, list.Position,
+            return Results.Created($"/api/lists/{list.Id}", new ListSummaryDto(list.Id, list.SpaceId, list.Name, list.Position, list.Color, list.Icon,
                 statuses.OrderBy(s => s.Position).ThenBy(s => s.Id).Select(ToStatusDto).ToList()));
         });
 
@@ -169,7 +169,7 @@ public static class HierarchyEndpoints
                 .Where(m => m.WorkspaceId == workspaceId &&
                             db.Spaces.Any(s => s.Id == spaceId && (!s.IsPrivate || s.Members.Any(x => x.UserId == m.UserId))))
                 .OrderBy(m => m.User!.DisplayName.ToLower()).ThenBy(m => m.User!.DisplayName).ThenBy(m => m.UserId)
-                .Select(m => new UserDto(m.UserId, m.User!.Email, m.User.DisplayName)).ToListAsync();
+                .Select(m => new UserDto(m.UserId, m.User!.Email, m.User.DisplayName, UserPhotos.UrlFor(m.UserId, m.User.PhotoVersion))).ToListAsync();
             return new ListDetailDto(list.Id, list.SpaceId, workspaceId, list.Name, statuses, members);
         });
 
@@ -179,6 +179,8 @@ public static class HierarchyEndpoints
         {
             var (list, workspaceId) = await access.RequireListAsync(id, WorkspaceRole.Member);
             if (req.Name is not null) list.Name = ListName(req.Name);
+            if (req.Color is not null) list.Color = ListColor(req.Color);
+            if (req.Icon is not null) list.Icon = ListIcon(req.Icon);
             if (req.SpaceId is { } spaceId && spaceId != list.SpaceId)
             {
                 if (!await db.Spaces.Where(s => s.WorkspaceId == workspaceId).VisibleTo(db, access.UserId).AnyAsync(s => s.Id == spaceId))
@@ -307,6 +309,16 @@ public static class HierarchyEndpoints
 
     private static string SpaceName(string? name) => Text.Require(name, Limits.Name, "Enter a space name.", "Space names can be up to 200 characters.");
     private static string ListName(string? name) => Text.Require(name, Limits.Name, "Enter a list name.", "List names can be up to 200 characters.");
+    public const string ListIconMessage = "Choose one of the list icons.";
+
+    /// <summary>A list's colour as sent: "" (or null) for none, else "#RRGGBB".</summary>
+    private static string? ListColor(string? color) => string.IsNullOrEmpty(color) ? null : Colors.Require(color);
+
+    /// <summary>A list's icon as sent: "" (or null, or the plain list icon) for none, else one of <see cref="ListIcons.All"/>.</summary>
+    private static string? ListIcon(string? icon) =>
+        string.IsNullOrEmpty(icon) || icon == ListIcons.Default ? null
+        : ListIcons.IsKnown(icon) ? icon : throw ProblemException.BadRequest(ListIconMessage);
+
     private static string StatusName(string? name) => Text.Require(name, Limits.StatusName, "Enter a status name.", "Status names can be up to 100 characters.");
 
     private static double Finite(double position) => double.IsFinite(position) ? position : throw ProblemException.BadRequest("Positions must be numbers.");

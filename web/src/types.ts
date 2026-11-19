@@ -51,12 +51,16 @@ export interface User {
   id: Uuid
   email: string
   displayName: string
+  /** Their photo ("/api/users/{id}/photo?v=…", same origin); null when they have none and avatars show initials. */
+  photoUrl: string | null
 }
 
-/** GET and PATCH /api/me: the signed-in user. Everywhere else a person is a plain User. */
+/** GET and PATCH /api/me and the photo calls: the signed-in user. Everywhere else a person is a plain User. */
 export interface Me extends User {
   /** Listed in Auth:SiteAdmins: sees Settings › People and may turn accounts off and on. */
   isSiteAdmin: boolean
+  /** They uploaded or removed their photo by hand, so signing in no longer brings the provider's photo. */
+  photoChosen: boolean
 }
 
 export interface Member {
@@ -68,6 +72,7 @@ export interface Member {
   pending: boolean
   /** A site admin turned the account off. The person stays a member and an assignee, but can't sign in. */
   disabled: boolean
+  photoUrl: string | null
 }
 
 /** One account in GET /api/admin/users (site admins only), ordered by display name. */
@@ -87,6 +92,7 @@ export interface AdminUser {
   activeSessions: number
   /** How many workspaces the person is a member of. */
   workspaces: number
+  photoUrl: string | null
 }
 
 export interface Status {
@@ -104,6 +110,10 @@ export interface ListSummary {
   spaceId: Uuid
   name: string
   position: number
+  /** "#RRGGBB" for the list's icon, or null: a grey icon. */
+  color: string | null
+  /** A key of lib/listIcons.ts LIST_ICONS, or null: the plain list icon. */
+  icon: string | null
   /** Ordered by position as the server sends them; display order comes from workspaces.statusesFor(). */
   statuses: Status[]
 }
@@ -371,6 +381,10 @@ export interface CreateListRequest {
   statusPreset?: StatusPreset
   /** Copies that list's statuses; wins over statusPreset. */
   statusesFromListId?: Uuid
+  /** "#RRGGBB"; absent or "" for none. */
+  color?: string
+  /** A LIST_ICONS key; absent, "" or "list" for the plain list icon. */
+  icon?: string
 }
 
 export interface UpdateListRequest {
@@ -378,6 +392,10 @@ export interface UpdateListRequest {
   position?: number
   /** Moves the list to another space of the same workspace. */
   spaceId?: Uuid
+  /** "#RRGGBB" sets the icon's colour, "" takes it away. */
+  color?: string
+  /** A LIST_ICONS key sets the icon, "" goes back to the plain list icon. */
+  icon?: string
 }
 
 export interface CreateStatusRequest {

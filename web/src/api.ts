@@ -86,7 +86,8 @@ export const api: {
   /** Sends `{}` when `body` is undefined. */
   post<T>(url: string, body?: unknown): Promise<T>
   patch<T>(url: string, body: unknown): Promise<T>
-  del(url: string): Promise<void>
+  /** Resolves with the response body when there is one (most deletes answer 204). */
+  del<T = void>(url: string): Promise<T>
   upload<T>(url: string, form: FormData, o?: { signal?: AbortSignal }): Promise<T>
   /** A request that survives page unload: `fetch` with `keepalive` and the X-Taskloom header. Never throws. */
   beacon(method: 'DELETE' | 'POST', url: string, body?: unknown): void
@@ -94,7 +95,7 @@ export const api: {
   get: <T>(url: string, o?: RequestOptions) => request<T>('GET', url, undefined, o),
   post: <T>(url: string, body?: unknown) => request<T>('POST', url, body ?? {}),
   patch: <T>(url: string, body: unknown) => request<T>('PATCH', url, body),
-  del: (url: string) => request<void>('DELETE', url, undefined),
+  del: <T = void>(url: string) => request<T>('DELETE', url, undefined),
   upload: <T>(url: string, form: FormData, o?: { signal?: AbortSignal }) => request<T>('POST', url, form, o),
   beacon(method: 'DELETE' | 'POST', url: string, body?: unknown): void {
     try {

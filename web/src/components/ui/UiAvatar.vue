@@ -1,15 +1,20 @@
 <script setup lang="ts">
-// Avatar (spec 7.10): initials on a colour derived from the user id (lib/colors.ts avatarColor),
-// so renaming never recolours anyone. A null user is a dashed circle labelled "Unassigned".
-import { computed } from 'vue'
+// Avatar (spec 7.10): the person's photo (Look 2), else initials on a colour derived from the user id
+// (lib/colors.ts avatarColor), so renaming never recolours anyone. A null user is a dashed circle
+// labelled "Unassigned". Most callers pass only an id and a name: the photo then comes from the
+// signed-in user or the workspace's members. A photo that fails to load falls back to the initials.
+import { computed, ref, watch } from 'vue'
 import { UserRoundPlus } from '@lucide/vue'
 import { avatarColor } from '../../lib/colors'
+import { useMembers } from '../../stores/members'
+import { useSession } from '../../stores/session'
 import UiIcon from './UiIcon.vue'
 
 const props = withDefaults(
   defineProps<{
-    user: { id: string; displayName: string } | null
-    size?: 16 | 20 | 24 | 28 | 32 | 40
+    /** `photoUrl` wins when given (null: initials); without it the photo is looked up by id. */
+    user: { id: string; displayName: string; photoUrl?: string | null } | null
+    size?: 16 | 20 | 24 | 28 | 32 | 40 | 64
     /** A 2px ring in --bg-surface, for stacks. */
     ring?: boolean
     /** A dashed ring, for invited people. */
@@ -30,11 +35,27 @@ const letters = computed(() => {
   return props.size <= 20 ? (Array.from(both)[0] ?? '') : both
 })
 
+const session = useSession()
+const members = useMembers()
+
+const photo = computed<string | null>(() => {
+  const u = props.user
+  if (!u) return null
+  if (u.photoUrl !== undefined) return u.photoUrl
+  if (session.user?.id === u.id) return session.user.photoUrl
+  return members.get(u.id)?.photoUrl ?? null
+})
+
+/** The photo that failed to load, so the initials show instead (until the photo changes). */
+const failed = ref<string | null>(null)
+watch(photo, () => (failed.value = null))
+
 const iconSize = computed(() => {
   if (props.size <= 20) return 12
   if (props.size <= 24) return 14
   if (props.size <= 32) return 16
-  return 20
+  if (props.size <= 40) return 20
+  return 24
 })
 
 const box = computed(() => ({
@@ -56,6 +77,17 @@ const box = computed(() => ({
     :aria-hidden="decorative ? 'true' : undefined"
   >
     <span class="initials" aria-hidden="true">{{ letters }}</span>
+    <img
+      v-if="photo && failed !== photo"
+      class="photo"
+      :src="photo"
+      alt=""
+      loading="lazy"
+      decoding="async"
+      draggable="false"
+      referrerpolicy="no-referrer"
+      @error="failed = photo"
+    />
   </span>
   <span
     v-else
@@ -90,6 +122,16 @@ const box = computed(() => ({
 
 .initials {
   font-size: inherit;
+}
+
+/* Over the initials, which show through only while it loads (or if it never does). */
+.photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .ui-avatar--empty {

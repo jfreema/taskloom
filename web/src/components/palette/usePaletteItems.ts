@@ -14,7 +14,7 @@ import { useRecents } from '../../stores/recents'
 import { useTasks } from '../../stores/tasks'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
-import type { IsoDate, Space, Status, Task, Uuid } from '../../types'
+import type { IsoDate, ListSummary, Space, Status, Task, Uuid } from '../../types'
 import { matches, prepare, startsWord } from './paletteMatch'
 import { usePaletteActions, type PaletteAction } from './usePaletteActions'
 import type { PaletteSearch } from './usePaletteSearch'
@@ -41,6 +41,8 @@ export interface PaletteOption {
   icon?: Component
   status?: Status
   space?: Space
+  /** List results: the list's own icon leads the row (Look 2). */
+  list?: ListSummary
   due?: IsoDate | null
   done?: boolean
   kbd?: string
@@ -162,7 +164,7 @@ export function usePaletteItems(o: {
       label: loc.list.name,
       highlight,
       meta: loc.space.name,
-      space: loc.space,
+      list: loc.list,
       run: closing(() => go(`/l/${listId}`)),
     }
   }

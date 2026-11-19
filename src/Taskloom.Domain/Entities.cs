@@ -12,8 +12,32 @@ public class User
     /// stay a member and assignee wherever they were.
     /// </summary>
     public DateTimeOffset? DisabledAt { get; set; }
+    /// <summary>
+    /// Names the current photo (<see cref="UserPhoto"/>): the first 16 hex digits of its SHA-256, so its URL changes
+    /// whenever the photo does and browsers may keep each one for good. Null when the person has no photo.
+    /// </summary>
+    public string? PhotoVersion { get; set; }
+    /// <summary>
+    /// The person uploaded or removed their photo by hand, so signing in no longer replaces it with the provider's.
+    /// </summary>
+    public bool PhotoChosen { get; set; }
     /// <summary>Empty for a pending user: invited, never signed in.</summary>
     public List<UserIdentity> Identities { get; set; } = [];
+}
+
+/// <summary>
+/// A person's photo, kept apart from <see cref="User"/> so loading users never loads image bytes. A JPEG, PNG, WebP or
+/// GIF of at most 512 KB and 2048 pixels a side, checked by Taskloom.Api ImageInfo.
+/// </summary>
+public class UserPhoto
+{
+    public Guid UserId { get; set; }
+    /// <summary>"image/jpeg", "image/png", "image/webp" or "image/gif", read from the bytes, never from the sender.</summary>
+    public required string ContentType { get; set; }
+    public required byte[] Data { get; set; }
+    /// <summary>"upload", or the key of the sign-in provider it came from.</summary>
+    public required string Source { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 /// <summary>An external sign-in identity: (provider, subject) is unique.</summary>
@@ -112,7 +136,34 @@ public class TaskList
     public Space? Space { get; set; }
     public required string Name { get; set; }
     public double Position { get; set; }
+    /// <summary>"#RRGGBB" for the list's icon, or null for none (the icon is then grey).</summary>
+    public string? Color { get; set; }
+    /// <summary>One of <see cref="ListIcons.All"/>, or null for the plain list icon.</summary>
+    public string? Icon { get; set; }
     public List<ListStatus> Statuses { get; set; } = [];
+}
+
+/// <summary>
+/// The icons a list can have, by name (the web app's lib/listIcons.ts draws each one; keep both in step). The first,
+/// "list", is what a list without an icon shows.
+/// </summary>
+public static class ListIcons
+{
+    public const string Default = "list";
+
+    public static readonly IReadOnlyList<string> All =
+    [
+        "list", "list-checks", "star", "flag", "target", "rocket", "zap",
+        "lightbulb", "bookmark", "book-open", "briefcase", "calendar", "clipboard-list", "file-text",
+        "code", "bug", "wrench", "palette", "megaphone", "message-circle", "mail",
+        "users", "heart", "house", "shopping-cart", "wallet", "chart-column", "graduation-cap",
+        "plane", "coffee", "headphones", "camera", "globe", "leaf", "dumbbell",
+        "gift", "trophy", "package", "inbox", "shield", "building", "sparkles",
+    ];
+
+    private static readonly HashSet<string> Known = new(All, StringComparer.Ordinal);
+
+    public static bool IsKnown(string? name) => name is not null && Known.Contains(name);
 }
 
 public enum StatusCategory { NotStarted = 0, Active = 1, Done = 2 }

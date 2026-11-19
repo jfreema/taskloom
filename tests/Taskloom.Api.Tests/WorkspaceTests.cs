@@ -37,7 +37,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
     {
         var user = await factory.NewUserAsync();
         var me = await (await user.Client.PatchAsJsonAsync("/api/me", new { displayName = "  Jared Doe  " })).ReadAsync<UserDto>();
-        Assert.Equal(new UserDto(user.Me.Id, user.Me.Email, "Jared Doe"), me);
+        Assert.Equal(new UserDto(user.Me.Id, user.Me.Email, "Jared Doe", null), me);
         Assert.Equal("Jared Doe", (await (await user.Client.GetAsync("/api/me")).ReadAsync<UserDto>()).DisplayName);
 
         foreach (var body in new object[] { new { displayName = (string?)null }, new { }, new { displayName = "  " } })
@@ -100,7 +100,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         (await user.Client.SeedAsync(user.Workspace.Id, fillers: 0)).EnsureSuccessStatusCode();
 
         using var me = await GetJsonAsync(user.Client, "/api/me");
-        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin"), me.RootElement.Keys());
+        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin", "photoUrl", "photoChosen"), me.RootElement.Keys());
 
         using var tree = await GetJsonAsync(user.Client, "/api/workspaces");
         var ws = tree.RootElement[0];
@@ -109,14 +109,14 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         var space = ws.GetProperty("spaces")[0];
         Assert.Equal(Sorted("id", "name", "color", "position", "isPrivate", "memberIds", "lists"), space.Keys());
         var list = space.GetProperty("lists")[0];
-        Assert.Equal(Sorted("id", "spaceId", "name", "position", "statuses"), list.Keys());
+        Assert.Equal(Sorted("id", "spaceId", "name", "position", "color", "icon", "statuses"), list.Keys());
         var status = list.GetProperty("statuses")[0];
         Assert.Equal(Sorted("id", "listId", "name", "color", "category", "position"), status.Keys());
         Assert.Equal("NotStarted", status.GetProperty("category").GetString());
         Assert.Equal(JsonValueKind.Number, status.GetProperty("position").ValueKind);
 
         using var members = await GetJsonAsync(user.Client, $"/api/workspaces/{user.Workspace.Id}/members");
-        Assert.All(members.RootElement.EnumerateArray(), m => Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending", "disabled"), m.Keys()));
+        Assert.All(members.RootElement.EnumerateArray(), m => Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending", "disabled", "photoUrl"), m.Keys()));
 
         var work = (await user.Client.TreeAsync()).Single().Spaces.Single(s => s.Name == "Work");
         var website = work.Lists.Single(l => l.Name == "Website refresh");
@@ -140,13 +140,13 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?\+00:00$", task.GetProperty("createdAt").GetString());
         Assert.Equal(JsonValueKind.Null, task.GetProperty("parentTaskId").ValueKind);
         Assert.Equal(JsonValueKind.Null, d.GetProperty("parent").ValueKind);
-        Assert.Equal(Sorted("id", "email", "displayName"), d.GetProperty("createdBy").Keys());
+        Assert.Equal(Sorted("id", "email", "displayName", "photoUrl"), d.GetProperty("createdBy").Keys());
         Assert.Equal(user.Workspace.Id.ToString(), d.GetProperty("workspaceId").GetString());
         Assert.All(d.GetProperty("subtasks").EnumerateArray(), s => Assert.Equal(taskKeys, s.Keys()));
         Assert.All(d.GetProperty("comments").EnumerateArray(), c =>
         {
             Assert.Equal(Sorted("id", "taskId", "author", "body", "createdAt", "editedAt"), c.Keys());
-            Assert.Equal(Sorted("id", "email", "displayName"), c.GetProperty("author").Keys());
+            Assert.Equal(Sorted("id", "email", "displayName", "photoUrl"), c.GetProperty("author").Keys());
         });
         Assert.Equal(Sorted("id", "taskId", "fileName", "contentType", "sizeBytes", "uploadedById", "createdAt"), Assert.Single(d.GetProperty("attachments").EnumerateArray()).Keys());
         // The seed's 16 rows, then the upload above.
@@ -155,7 +155,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         Assert.All(activity, a =>
         {
             Assert.Equal(Sorted("id", "taskId", "actor", "kind", "from", "to", "createdAt"), a.Keys());
-            Assert.Equal(Sorted("id", "email", "displayName"), a.GetProperty("actor").Keys());
+            Assert.Equal(Sorted("id", "email", "displayName", "photoUrl"), a.GetProperty("actor").Keys());
         });
         Assert.Equal("StatusChanged", activity[^2].GetProperty("kind").GetString());
         Assert.Equal(("AttachmentAdded", JsonValueKind.Null, "brief.pdf"),
@@ -174,7 +174,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         string[] taskKeys = Sorted("id", "listId", "statusId", "parentTaskId", "title", "hasDescription", "priority", "assigneeIds", "tagIds",
             "startDate", "dueDate", "position", "createdById", "createdAt", "updatedAt", "completedAt",
             "subtaskCount", "subtaskDoneCount", "commentCount", "attachmentCount", "repeat", "nextRepeatId");
-        string[] userKeys = Sorted("id", "email", "displayName");
+        string[] userKeys = Sorted("id", "email", "displayName", "photoUrl");
 
         using var tags = await GetJsonAsync(user.Client, $"/api/workspaces/{user.Workspace.Id}/tags");
         Assert.Equal(4, tags.RootElement.GetArrayLength());
@@ -214,16 +214,16 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         using var space = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/workspaces/{user.Workspace.Id}/spaces", new { name = "S" }));
         Assert.Equal(Sorted("id", "name", "color", "position", "isPrivate", "memberIds", "lists"), space.RootElement.Keys());
         using var newList = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/spaces/{space.RootElement.GetProperty("id").GetString()}/lists", new { name = "L", statusPreset = "Requests" }));
-        Assert.Equal(Sorted("id", "spaceId", "name", "position", "statuses"), newList.RootElement.Keys());
+        Assert.Equal(Sorted("id", "spaceId", "name", "position", "color", "icon", "statuses"), newList.RootElement.Keys());
         var listId = newList.RootElement.GetProperty("id").GetString();
         using var status = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/lists/{listId}/statuses", new { name = "Blocked", category = "Active" }));
         Assert.Equal(Sorted("id", "listId", "name", "color", "category", "position"), status.RootElement.Keys());
         using var statusPatched = await JsonAsync(await user.Client.PatchAsJsonAsync($"/api/statuses/{status.RootElement.GetProperty("id").GetString()}", new { name = "On hold" }));
         Assert.Equal(Sorted("id", "listId", "name", "color", "category", "position"), statusPatched.RootElement.Keys());
         using var member = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/workspaces/{user.Workspace.Id}/members", new { email = Builders.NewEmail(), role = "Member" }));
-        Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending", "disabled"), member.RootElement.Keys());
+        Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending", "disabled", "photoUrl"), member.RootElement.Keys());
         using var me = await JsonAsync(await user.Client.PatchAsJsonAsync("/api/me", new { displayName = "Me" }));
-        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin"), me.RootElement.Keys());
+        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin", "photoUrl", "photoChosen"), me.RootElement.Keys());
         using var workspace = await JsonAsync(await user.Client.PostAsJsonAsync("/api/workspaces", new { name = "W" }));
         Assert.Equal(Sorted("id", "name", "role", "spaces"), workspace.RootElement.Keys());
         using (var form = new MultipartFormDataContent { { new ByteArrayContent("x"u8.ToArray()), "file", "x.txt" } })

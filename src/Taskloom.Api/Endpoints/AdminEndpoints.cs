@@ -84,7 +84,7 @@ public static class AdminEndpoints
             .OrderBy(u => u.DisplayName.ToLower()).ThenBy(u => u.Id)
             .Select(u => new
             {
-                u.Id, u.Email, u.DisplayName, u.CreatedAt,
+                u.Id, u.Email, u.DisplayName, u.CreatedAt, u.PhotoVersion,
                 Pending = !u.Identities.Any(),
                 Disabled = u.DisabledAt != null,
                 LastSeenAt = db.UserSessions.Where(s => s.UserId == u.Id).Max(s => (DateTimeOffset?)s.LastSeenAt),
@@ -93,6 +93,6 @@ public static class AdminEndpoints
             })
             .ToListAsync();
         return rows.Select(r => new AdminUserDto(r.Id, r.Email, r.DisplayName, r.Pending, r.Disabled, options.IsSiteAdmin(r.Email),
-            r.CreatedAt, r.LastSeenAt, r.ActiveSessions, r.Workspaces)).ToList();
+            r.CreatedAt, r.LastSeenAt, r.ActiveSessions, r.Workspaces, UserPhotos.UrlFor(r.Id, r.PhotoVersion))).ToList();
     }
 }

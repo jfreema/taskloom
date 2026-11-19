@@ -3,7 +3,8 @@ using Microsoft.AspNetCore.Http.Features;
 namespace Taskloom.Api;
 
 /// <summary>Endpoint metadata: this endpoint takes a body up to <paramref name="MaxBytes"/> (the default is <see cref="RequestLimits.DefaultBodyBytes"/>).</summary>
-public sealed record LargeBody(long MaxBytes);
+/// <param name="Message">The detail of a 413 from this endpoint; the default is the attachment limit's.</param>
+public sealed record LargeBody(long MaxBytes, string? Message = null);
 
 /// <summary>
 /// How large a request body may be. Kestrel allows 30 MB everywhere by default, so any JSON endpoint would read and
@@ -22,7 +23,7 @@ public static class RequestLimits
 
     /// <summary>The detail of a 413 for this request: uploads say what the file limit is.</summary>
     public static string MessageFor(HttpContext ctx) =>
-        ctx.GetEndpoint()?.Metadata.GetMetadata<LargeBody>() is null ? TooLargeMessage : FileTooLargeMessage;
+        ctx.GetEndpoint()?.Metadata.GetMetadata<LargeBody>() is { } large ? large.Message ?? FileTooLargeMessage : TooLargeMessage;
 
     /// <summary>
     /// A declared length over the endpoint's limit gets a 413 before anything is read; a body that arrives without

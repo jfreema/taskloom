@@ -6,6 +6,7 @@ import App from './App.vue'
 import { router, safeReturnUrl } from './router'
 import { setUnauthorizedHandler } from './api'
 import { useSession } from './stores/session'
+import { useDensity } from './composables/useDensity'
 import { useTheme } from './composables/useTheme'
 import { vTooltip } from './components/ui/tooltip'
 
@@ -16,6 +17,8 @@ app.directive('tooltip', vTooltip)
 
 // Applies the stored theme (theme-init.js already did before first paint) and follows the OS.
 useTheme()
+// The same for the density (Look 2).
+useDensity()
 
 // A 401 means the session ended: forget the user and go to sign-in, coming back here afterwards.
 setUnauthorizedHandler(() => {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // The hierarchy dialogs (8.13), mounted once by AppShell. Each one opens from its ui store request
-// (ui.openNewSpace(), ui.openNewList(), ui.openMoveList(), ui.openShareSpace(), ui.openNewWorkspace(),
+// (ui.openNewSpace(), ui.openNewList(), ui.openMoveList(), ui.openListLook(), ui.openShareSpace(), ui.openNewWorkspace(),
 // ui.openInvite(), ui.openStatusEditor(), ui.openDeleteStatus()), which applies the role rules, so guests never get
 // one. Delete status comes after the status editor, so it opens above it.
 import DeleteStatusDialog from './DeleteStatusDialog.vue'
 import InviteDialog from './InviteDialog.vue'
+import ListLookDialog from './ListLookDialog.vue'
 import MoveListDialog from './MoveListDialog.vue'
 import NewListDialog from './NewListDialog.vue'
 import NewSpaceDialog from './NewSpaceDialog.vue'
@@ -17,6 +18,7 @@ import StatusEditorDialog from './StatusEditorDialog.vue'
   <NewSpaceDialog />
   <NewListDialog />
   <MoveListDialog />
+  <ListLookDialog />
   <ShareSpaceDialog />
   <NewWorkspaceDialog />
   <InviteDialog />

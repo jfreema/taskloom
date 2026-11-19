@@ -185,6 +185,14 @@ export const useMembers = defineStore('members', () => {
     }
   }
 
+  /** Mirrors a new or removed photo of `userId` into every workspace's list. */
+  function setPhotoLocal(userId: Uuid, photoUrl: string | null): void {
+    for (const members of Object.values(byWorkspace)) {
+      const m = members.find((x) => x.userId === userId)
+      if (m) m.photoUrl = photoUrl
+    }
+  }
+
   /** Mirrors a site admin turning an account off or on (Settings › People) into every workspace's list. */
   function setDisabledLocal(userId: Uuid, disabled: boolean): void {
     for (const members of Object.values(byWorkspace)) {
@@ -200,5 +208,5 @@ export const useMembers = defineStore('members', () => {
     inflight.clear()
   }
 
-  return { current, loadError, loading, get, nameOf, ensure, reload, invite, updateRole, remove, renameLocal, setDisabledLocal, reset }
+  return { current, loadError, loading, get, nameOf, ensure, reload, invite, updateRole, remove, renameLocal, setPhotoLocal, setDisabledLocal, reset }
 })

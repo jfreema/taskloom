@@ -26,6 +26,8 @@ export const useUi = defineStore('ui', () => {
   const newSpace = ref(false)
   const newList = ref<{ spaceId: Uuid | null } | null>(null)
   const moveList = ref<{ listId: Uuid } | null>(null)
+  /** The "Icon and colour" dialog of a list (Look 2). */
+  const listLook = ref<{ listId: Uuid } | null>(null)
   const shareSpace = ref<{ spaceId: Uuid } | null>(null)
   const invite = ref<{ email?: string; assignTo?: Uuid[] } | null>(null)
   const newWorkspace = ref(false)
@@ -109,6 +111,12 @@ export const useUi = defineStore('ui', () => {
     if (canEdit()) moveList.value = { listId }
   }
 
+  /** A list's icon and colour: Member+, like renaming it. */
+  function openListLook(listId: Uuid): void {
+    const found = useWorkspaces().findList(listId)
+    if (found && useWorkspaces().canEdit(found.workspace.id)) listLook.value = { listId }
+  }
+
   /** Who can see a space (Security 3): Member+, like renaming it. */
   function openShareSpace(spaceId: Uuid): void {
     const found = useWorkspaces().findSpace(spaceId)
@@ -148,6 +156,7 @@ export const useUi = defineStore('ui', () => {
     newSpace.value = false
     newList.value = null
     moveList.value = null
+    listLook.value = null
     shareSpace.value = null
     invite.value = null
     newWorkspace.value = false
@@ -169,6 +178,7 @@ export const useUi = defineStore('ui', () => {
     newSpace,
     newList,
     moveList,
+    listLook,
     shareSpace,
     invite,
     newWorkspace,
@@ -186,6 +196,7 @@ export const useUi = defineStore('ui', () => {
     openNewSpace,
     openNewList,
     openMoveList,
+    openListLook,
     openShareSpace,
     openInvite,
     openNewWorkspace,

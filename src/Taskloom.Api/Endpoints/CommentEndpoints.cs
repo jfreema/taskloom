@@ -59,7 +59,7 @@ public static class CommentEndpoints
         Text.Require(body, Limits.CommentBody, "Write a comment first.", "Comments can be up to 10,000 characters.");
 
     private static CommentDto ToDto(TaskComment c, User author) =>
-        new(c.Id, c.TaskId, new UserDto(author.Id, author.Email, author.DisplayName), c.Body, c.CreatedAt, c.EditedAt);
+        new(c.Id, c.TaskId, UserDto.Of(author), c.Body, c.CreatedAt, c.EditedAt);
 }
 
 /// <summary>Attachments (spec 5.4 #40–#42), stored through IFileStore: local disk or Azure Blob Storage.</summary>

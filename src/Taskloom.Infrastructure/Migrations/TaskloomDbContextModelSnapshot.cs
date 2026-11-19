@@ -371,6 +371,14 @@ namespace Taskloom.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Color")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Icon")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -426,6 +434,13 @@ namespace Taskloom.Infrastructure.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
 
+                    b.Property<bool>("PhotoChosen")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PhotoVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
@@ -461,6 +476,33 @@ namespace Taskloom.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("user_identities", (string)null);
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.UserPhoto", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("user_photos", (string)null);
                 });
 
             modelBuilder.Entity("Taskloom.Domain.UserSession", b =>
@@ -714,6 +756,15 @@ namespace Taskloom.Infrastructure.Migrations
                     b.HasOne("Taskloom.Domain.User", null)
                         .WithMany("Identities")
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.UserPhoto", b =>
+                {
+                    b.HasOne("Taskloom.Domain.User", null)
+                        .WithOne()
+                        .HasForeignKey("Taskloom.Domain.UserPhoto", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

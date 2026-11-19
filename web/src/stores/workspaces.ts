@@ -9,6 +9,7 @@ import { useToast } from '../composables/useToast'
 import { useWorkspaceSwitch } from '../composables/useWorkspaceSwitch'
 import { handled } from '../lib/async'
 import { DEFAULT_COLORS } from '../lib/colors'
+import { DEFAULT_LIST_ICON } from '../lib/listIcons'
 import { between } from '../lib/positions'
 import { readString, userKey, writeString } from '../lib/storage'
 import {
@@ -618,7 +619,10 @@ export const useWorkspaces = defineStore('workspaces', () => {
     )
   }
 
-  /** PATCH /api/lists/{id}: rename, reorder or move to another space (last there unless `position`). */
+  /**
+   * PATCH /api/lists/{id}: rename, reorder or move to another space (last there unless `position`), or change the
+   * icon or colour ("" for none).
+   */
   function updateList(listId: Uuid, r: UpdateListRequest): Promise<void> {
     const found = findList(listId)
     if (!found) return rejectWith('This list no longer exists.')
@@ -627,10 +631,20 @@ export const useWorkspaces = defineStore('workspaces', () => {
     const prevPosition = l.position
     const prevSpaceId = space.id
     const prevIndex = space.lists.indexOf(l)
+    const prevColor = l.color
+    const prevIcon = l.icon
     const body: UpdateListRequest = {}
     if (r.name !== undefined) {
       body.name = r.name.trim()
       l.name = body.name
+    }
+    if (r.color !== undefined) {
+      body.color = r.color
+      l.color = r.color || null
+    }
+    if (r.icon !== undefined) {
+      body.icon = r.icon === DEFAULT_LIST_ICON ? '' : r.icon
+      l.icon = body.icon || null
     }
     const target = r.spaceId !== undefined && r.spaceId !== space.id ? findSpace(r.spaceId)?.space : undefined
     if (target) {
@@ -650,6 +664,8 @@ export const useWorkspaces = defineStore('workspaces', () => {
         const now = findList(listId)
         if (!now) return
         if (body.name !== undefined) now.list.name = prevName
+        if (body.color !== undefined) now.list.color = prevColor
+        if (body.icon !== undefined) now.list.icon = prevIcon
         if (body.position !== undefined || body.spaceId !== undefined) now.list.position = prevPosition
         if (body.spaceId !== undefined && now.space.id !== prevSpaceId) {
           const back = findSpace(prevSpaceId)?.space

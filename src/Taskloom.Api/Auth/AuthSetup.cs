@@ -18,6 +18,10 @@ public static class AuthSetup
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<UserProvisioning>();
         services.AddScoped<SessionService>();
+        services.AddScoped<ProviderPhotos>();
+        // Photos come only from the providers' own hosts, which answer directly: no redirects are followed.
+        services.AddHttpClient(ProviderPhotos.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false });
 
         var auth = services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(o =>
@@ -53,6 +57,9 @@ public static class AuthSetup
                 o.Scope.Add("openid");
                 o.Scope.Add("profile");
                 o.Scope.Add("email");
+                // Look 2: Graph's /me/photo needs User.Read; the access token for it comes with the ID token.
+                var graphPhoto = provider.Key == SignInProvider.MicrosoftKey && options.Microsoft.Photos;
+                if (graphPhoto) o.Scope.Add("User.Read");
                 o.MapInboundClaims = false;
                 o.SaveTokens = false;
                 o.TokenValidationParameters.ValidateIssuer = true;
@@ -70,8 +77,14 @@ public static class AuthSetup
                         ctx.HandleResponse();
                         return;
                     }
-                    var session = await ctx.HttpContext.RequestServices.GetRequiredService<SessionService>()
+                    var services = ctx.HttpContext.RequestServices;
+                    var session = await services.GetRequiredService<SessionService>()
                         .CreateAsync(result.User.Id, provider.Key, ctx.Request.Headers.UserAgent, ctx.HttpContext.RequestAborted);
+                    // Look 2: the provider's photo for the avatar, unless the person chose their own. Never fails the sign-in.
+                    await services.GetRequiredService<ProviderPhotos>().RefreshAsync(
+                        services.GetRequiredService<Taskloom.Infrastructure.TaskloomDbContext>(), result.User.Id, provider, ctx.Principal!,
+                        graphPhoto ? ctx.TokenEndpointResponse?.AccessToken : null,
+                        Clock.Now(), ctx.HttpContext.RequestAborted);
                     ctx.Principal = UserProvisioning.PrincipalFor(result.User, provider.Key, session.Id);
                     SessionService.Stamp(ctx.Properties!, session);
                 };
@@ -128,7 +141,7 @@ public static class AuthSetup
             SessionService.Stamp(properties, session);
             await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
                 UserProvisioning.PrincipalFor(user, UserProvisioning.DevProvider, session.Id), properties);
-            return Results.Ok(new UserDto(user.Id, user.Email, user.DisplayName));
+            return Results.Ok(UserDto.Of(user));
         }).AddEndpointFilter<RequireTaskloomHeader>();
 
         // The session ends first, so a copy of the cookie stops working too (at its next check).

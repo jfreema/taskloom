@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // One list row of the sidebar tree (3.4, 8.3): a RouterLink to /l/:id (aria-current="page" while
-// the list is open), indented 28px, and its "..." menu (Rename, Edit statuses, Move to space…, Copy
-// link, Delete list; guests get only Copy link). F2 renames in place; Shift+F10 opens the menu.
+// the list is open), indented 28px, with the list's icon in its colour (Look 2), and its "..." menu
+// (Rename, Icon and colour, Edit statuses, Move to space…, Copy link, Delete list; guests get only
+// Copy link). F2 renames in place; Shift+F10 opens the menu.
 import { computed, nextTick, ref, watch } from 'vue'
-import { Ellipsis, List as ListIcon } from '@lucide/vue'
+import { Ellipsis } from '@lucide/vue'
 import { shortcutsEnabled } from '../../composables/useShortcut'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { ListSummary } from '../../types'
-import UiIcon from '../ui/UiIcon.vue'
+import ListGlyph from '../fields/ListGlyph.vue'
 import UiIconButton from '../ui/UiIconButton.vue'
 import UiInlineEdit from '../ui/UiInlineEdit.vue'
 import UiMenu from '../ui/UiMenu.vue'
@@ -76,11 +77,11 @@ function save(name: string): void {
         :aria-current="active ? 'page' : undefined"
         @keydown="onKeydown"
       >
-        <UiIcon :icon="ListIcon" :size="16" class="list-icon" />
+        <ListGlyph :list="list" :active="active" />
         <span class="name truncate">{{ list.name }}</span>
       </RouterLink>
       <div v-if="renaming" class="row-main is-editing">
-        <UiIcon :icon="ListIcon" :size="16" class="list-icon" />
+        <ListGlyph :list="list" :active="active" />
         <UiInlineEdit
           v-model:editing="renaming"
           class="edit"
@@ -116,11 +117,4 @@ function save(name: string): void {
   padding-left: 28px;
 }
 
-.list-icon {
-  color: var(--text-tertiary);
-}
-
-.is-active .list-icon {
-  color: var(--accent-text);
-}
 </style>

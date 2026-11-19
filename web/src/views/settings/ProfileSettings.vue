@@ -1,6 +1,9 @@
 <script setup lang="ts">
 // Settings › Profile (spec 8.13).
-// - UiAvatar 40 beside the name and email, then the "Display name" field: Save and Cancel appear
+// - UiAvatar 64 beside the name and email, with "Upload photo" (or "Change photo") and "Remove photo"
+//   (Look 2). The chosen picture is cropped to a 256-pixel square here (lib/photo.ts) before upload.
+//   A photo from Google or Microsoft sign-in is used until the person uploads or removes one.
+// - Then the "Display name" field: Save and Cancel appear
 //   once the value changes, Enter saves and Esc goes back. session.updateMe is optimistic (the
 //   sidebar's "Account: <name>" changes at once) and rejects without a toast, so a refusal shows
 //   under the field and the old name returns.
@@ -9,7 +12,7 @@
 // - "Other devices": "Sign out other devices" (secondary) ends this account's sessions everywhere
 //   but here (session.signOutOthers) and says so in a toast, or toasts why it failed.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { Check, LogOut, MonitorSmartphone } from '@lucide/vue'
+import { Camera, Check, LogOut, MonitorSmartphone, Trash2 } from '@lucide/vue'
 import SettingsPage from '../../components/settings/SettingsPage.vue'
 import UiAvatar from '../../components/ui/UiAvatar.vue'
 import UiButton from '../../components/ui/UiButton.vue'
@@ -18,6 +21,7 @@ import UiIcon from '../../components/ui/UiIcon.vue'
 import UiInput from '../../components/ui/UiInput.vue'
 import { useAnnouncer } from '../../composables/useAnnouncer'
 import { errorMessage, useToast } from '../../composables/useToast'
+import { PHOTO_TYPES, UnreadablePhotoError, squarePhoto } from '../../lib/photo'
 import { useSession } from '../../stores/session'
 
 const MAX_NAME = 200
@@ -103,6 +107,54 @@ function onEscape(e: KeyboardEvent): void {
   revert()
 }
 
+// ---- Photo ----
+const fileInput = ref<HTMLInputElement | null>(null)
+const photoBusy = ref<'upload' | 'remove' | null>(null)
+const photoError = ref('')
+
+const photoHint = computed(() =>
+  user.value?.photoChosen
+    ? 'Shown with your name on tasks, comments and in the sidebar.'
+    : 'Shown with your name on tasks, comments and in the sidebar. Until you choose one, Taskloom uses your Google or Microsoft photo when you sign in with them.',
+)
+
+function choosePhoto(): void {
+  photoError.value = ''
+  fileInput.value?.click()
+}
+
+async function onPhotoChosen(e: Event): Promise<void> {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || photoBusy.value) return
+  photoBusy.value = 'upload'
+  photoError.value = ''
+  try {
+    await session.uploadPhoto(await squarePhoto(file))
+    announce('Photo saved')
+  } catch (err) {
+    photoError.value =
+      err instanceof UnreadablePhotoError ? err.message : errorMessage(err).message || "Couldn't save your photo."
+  } finally {
+    photoBusy.value = null
+  }
+}
+
+async function removePhoto(): Promise<void> {
+  if (photoBusy.value) return
+  photoBusy.value = 'remove'
+  photoError.value = ''
+  try {
+    await session.removePhoto()
+    announce('Photo removed')
+  } catch (err) {
+    photoError.value = errorMessage(err).message || "Couldn't remove your photo."
+  } finally {
+    photoBusy.value = null
+  }
+}
+
 async function signOut(): Promise<void> {
   if (signingOut.value) return
   signingOut.value = true
@@ -132,13 +184,44 @@ async function signOutOthers(): Promise<void> {
     <template v-if="user">
       <section class="block">
         <div class="identity">
-          <UiAvatar :user="user" :size="40" decorative />
+          <UiAvatar :user="user" :size="64" decorative />
           <div class="identity-text">
             <p class="identity-name">{{ user.displayName }}</p>
             <p class="identity-email">
               <span class="sr-only">Email: </span>{{ user.email }}
             </p>
           </div>
+        </div>
+
+        <div class="photo" role="group" aria-labelledby="profile-photo">
+          <h3 id="profile-photo" class="sr-only">Photo</h3>
+          <input
+            ref="fileInput"
+            class="sr-only"
+            type="file"
+            :accept="PHOTO_TYPES"
+            tabindex="-1"
+            aria-hidden="true"
+            data-testid="photo-input"
+            @change="onPhotoChosen"
+          />
+          <div class="photo-actions">
+            <UiButton :icon="Camera" :loading="photoBusy === 'upload'" :disabled="photoBusy === 'remove'" @click="choosePhoto">
+              {{ user.photoUrl ? 'Change photo' : 'Upload photo' }}
+            </UiButton>
+            <UiButton
+              v-if="user.photoUrl"
+              variant="ghost"
+              :icon="Trash2"
+              :loading="photoBusy === 'remove'"
+              :disabled="photoBusy === 'upload'"
+              @click="removePhoto"
+            >
+              Remove photo
+            </UiButton>
+          </div>
+          <p v-if="photoError" class="photo-error" role="alert">{{ photoError }}</p>
+          <p v-else class="photo-hint">{{ photoHint }}</p>
         </div>
 
         <form class="name-form" novalidate @submit.prevent="save">
@@ -238,6 +321,31 @@ async function signOutOthers(): Promise<void> {
   line-height: var(--lh-sm);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
+}
+
+.photo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: calc(var(--space-2) * -1);
+}
+
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.photo-hint,
+.photo-error {
+  max-width: 560px;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-secondary);
+}
+
+.photo-error {
+  color: var(--danger-text);
 }
 
 /* The field keeps its width while Save, Cancel or "Saved" come and go beside it. */
