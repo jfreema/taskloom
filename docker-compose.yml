@@ -57,6 +57,15 @@ services:
       Auth__Microsoft__TenantId: ${ENTRA_TENANT_ID:-}
       Auth__Providers__microsoft__ClientId: ${ENTRA_CLIENT_ID:-}
       Auth__Providers__microsoft__ClientSecret: ${ENTRA_CLIENT_SECRET:-}
+      # Optional: send email (assignments, mentions, due-date reminders). "Log" only writes them to the log. See README.
+      Email__Provider: ${TASKLOOM_EMAIL_PROVIDER:-Log}
+      Email__From: ${TASKLOOM_EMAIL_FROM:-}
+      Email__Smtp__Host: ${TASKLOOM_SMTP_HOST:-}
+      Email__Smtp__Port: ${TASKLOOM_SMTP_PORT:-587}
+      Email__Smtp__Username: ${TASKLOOM_SMTP_USERNAME:-}
+      Email__Smtp__Password: ${TASKLOOM_SMTP_PASSWORD:-}
+      # The address you open Taskloom at, for the links in emails (http://localhost:8080 unless you changed the port).
+      App__PublicUrl: ${TASKLOOM_PUBLIC_URL:-}
 
 volumes:
   pgdata:

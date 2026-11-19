@@ -36,19 +36,19 @@ public class CommentTests(TaskloomFactory factory) : IClassFixture<TaskloomFacto
             Assert.Equal(HttpStatusCode.Forbidden, (await other.PatchAsJsonAsync(commentUrl, new { body = "Hijacked" })).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await other.DeleteAsync(commentUrl)).StatusCode);
         }
-        Assert.Equal([comment], (await owner.Client.TaskDetailAsync(task.Id)).Comments);
+        Assert.Equivalent(new[] { comment }, (await owner.Client.TaskDetailAsync(task.Id)).Comments, strict: true);
 
         // The author edits it: the body changes and EditedAt is set; CreatedAt stays.
         start = DateTimeOffset.UtcNow.AddSeconds(-1);
         var edited = await (await guest.PatchAsJsonAsync(commentUrl, new { body = " Edited " })).ReadAsync<CommentDto>();
-        Assert.Equal(comment with { Body = "Edited", EditedAt = edited.EditedAt }, edited);
+        Assert.Equivalent(comment with { Body = "Edited", EditedAt = edited.EditedAt }, edited, strict: true);
         Assert.InRange(edited.EditedAt!.Value, start, DateTimeOffset.UtcNow.AddSeconds(1));
-        Assert.Equal([edited], (await owner.Client.TaskDetailAsync(task.Id)).Comments);
+        Assert.Equivalent(new[] { edited }, (await owner.Client.TaskDetailAsync(task.Id)).Comments, strict: true);
         // Sending the same text again is not an edit.
-        Assert.Equal(edited, await (await guest.PatchAsJsonAsync(commentUrl, new { body = "Edited" })).ReadAsync<CommentDto>());
+        Assert.Equivalent(edited, await (await guest.PatchAsJsonAsync(commentUrl, new { body = "Edited" })).ReadAsync<CommentDto>(), strict: true);
         Assert.Equal("Write a comment first.", await (await guest.PatchAsJsonAsync(commentUrl, new { body = "  " })).ProblemAsync(HttpStatusCode.BadRequest));
         Assert.Equal("Comments can be up to 10,000 characters.", await (await guest.PatchAsJsonAsync(commentUrl, new { body = new string('c', 10_001) })).ProblemAsync(HttpStatusCode.BadRequest));
-        Assert.Equal([edited], (await owner.Client.TaskDetailAsync(task.Id)).Comments);
+        Assert.Equivalent(new[] { edited }, (await owner.Client.TaskDetailAsync(task.Id)).Comments, strict: true);
 
         // Comments come oldest first; the Owner's own comment is theirs to change.
         var mine = await (await owner.Client.PostAsJsonAsync(url, new { body = "Thanks" })).ReadAsync<CommentDto>();
@@ -83,7 +83,7 @@ public class CommentTests(TaskloomFactory factory) : IClassFixture<TaskloomFacto
         Assert.Equal(HttpStatusCode.NotFound, (await mia.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new { body = "Still here?" })).StatusCode);
 
         // The comment stays, still hers: the workspace sees it, and nobody else may change it.
-        Assert.Equal([comment], (await owner.Client.TaskDetailAsync(task.Id)).Comments);
+        Assert.Equivalent(new[] { comment }, (await owner.Client.TaskDetailAsync(task.Id)).Comments, strict: true);
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.Client.DeleteAsync(commentUrl)).StatusCode);
 
         // Invited back, she may edit it again.

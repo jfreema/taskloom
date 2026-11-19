@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Taskloom.Api.Notifications;
 using Taskloom.Application;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
@@ -46,7 +47,8 @@ public static class TaskEndpoints
     }
 
     // ---- POST /api/lists/{id}/tasks (spec 5.5 Create task) ----
-    private static async Task<IResult> CreateAsync(Guid id, CreateTaskRequest req, Access access, TaskloomDbContext db, HttpContext http)
+    private static async Task<IResult> CreateAsync(Guid id, CreateTaskRequest req, Access access, TaskloomDbContext db, HttpContext http,
+        NotifierFactory notifications)
     {
         var (list, workspaceId) = await access.RequireListAsync(id, WorkspaceRole.Member);
         var title = Text.Require(req.Title, Limits.TaskTitle, "Enter a task title.", "Task titles can be up to 500 characters.");
@@ -113,6 +115,9 @@ public static class TaskEndpoints
         // A microsecond apart, so the avatar stack keeps the order the people were sent in.
         db.TaskAssignees.AddRange(assigneeIds.Select((u, i) => new TaskAssignee { TaskId = task.Id, UserId = u, CreatedAt = now.AddTicks(10 * i) }));
         db.TaskTags.AddRange(tagIds.Select(tagId => new TaskTag { TaskId = task.Id, TagId = tagId }));
+        // Everyone it is created for hears of it (they were just checked: members who can see the list).
+        var notifier = notifications.Start(now);
+        foreach (var userId in assigneeIds) notifier.Assigned(task.Id, userId);
         if (parent is not null)
             new ActivityRecorder(db, access.UserId, now).Record(parent.Id, TaskActivityKind.SubtaskAdded, null, task.Title);
         await db.SaveChangesAsync();
@@ -139,7 +144,8 @@ public static class TaskEndpoints
         var parent = family.SingleOrDefault(t => t.Id == head.ParentTaskId) is { } p ? new TaskRefDto(p.Id, p.Title, p.ListId) : null;
         var subtasks = family.Where(t => t.ParentTaskId == id).ToList();
         var comments = await db.Comments.Where(c => c.TaskId == id).OrderBy(c => c.CreatedAt).ThenBy(c => c.Id)
-            .Select(c => new CommentDto(c.Id, c.TaskId, new UserDto(c.AuthorId, c.Author!.Email, c.Author.DisplayName, UserPhotos.UrlFor(c.AuthorId, c.Author.PhotoVersion)), c.Body, c.CreatedAt, c.EditedAt))
+            .Select(c => new CommentDto(c.Id, c.TaskId, new UserDto(c.AuthorId, c.Author!.Email, c.Author.DisplayName, UserPhotos.UrlFor(c.AuthorId, c.Author.PhotoVersion)), c.Body, c.CreatedAt, c.EditedAt,
+                c.Mentions.Select(m => new MentionDto(m.UserId, m.User!.DisplayName)).ToList()))
             .ToListAsync(ct);
         var attachments = await db.Attachments.Where(a => a.TaskId == id).OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
             .Select(a => new AttachmentDto(a.Id, a.TaskId, a.FileName, a.ContentType, a.SizeBytes, a.UploadedById, a.CreatedAt))
@@ -154,17 +160,19 @@ public static class TaskEndpoints
     }
 
     // ---- PATCH /api/tasks/{id} (spec 5.5 Patch task, through TaskPatcher) ----
-    private static async Task<IResult> PatchAsync(Guid id, JsonElement body, Access access, TaskloomDbContext db, HttpContext http)
+    private static async Task<IResult> PatchAsync(Guid id, JsonElement body, Access access, TaskloomDbContext db, HttpContext http,
+        NotifierFactory notifications)
     {
-        // Read first, so the access query knows whether to bring the task's assignees and tags.
+        // Read first, so the access query knows whether to bring the task's assignees, tags and watchers.
         Json.RequireReadable(body);
         var change = TaskChange.Parse(body, TaskChangeKind.Patch);
-        var (task, workspaceId) = await RequireForChangeAsync(access, db, id, change);
+        var now = Clock.Now();
+        var notifier = notifications.Start(now);
+        var (task, workspaceId) = await RequireForChangeAsync(access, db, id, change, notifier);
 
         await using var tx = await db.Database.BeginTransactionAsync();
-        var now = Clock.Now();
         var patcher = await TaskPatcher.CreateAsync(db, access, workspaceId, new ActivityRecorder(db, access.UserId, now), now,
-            ClientDate.Today(http, now), [(task, change)]);
+            ClientDate.Today(http, now), [(task, change)], notifier);
         await patcher.ApplyAsync(task, change);
         await db.SaveChangesAsync();
         await tx.CommitAsync();
@@ -172,9 +180,11 @@ public static class TaskEndpoints
     }
 
     // ---- POST /api/tasks/{id}/move (spec 5.5 Move) ----
-    private static async Task<IResult> MoveAsync(Guid id, MoveTaskRequest req, Access access, TaskloomDbContext db, HttpContext http)
+    private static async Task<IResult> MoveAsync(Guid id, MoveTaskRequest req, Access access, TaskloomDbContext db, HttpContext http,
+        NotifierFactory notifications)
     {
-        var (task, _) = await access.RequireTaskAsync(id, WorkspaceRole.Member);
+        // The watchers come with the access check: dropping a card in another column is news to them.
+        var (task, _, people) = await access.RequireTaskAsync(id, t => t, Audience.OfWatchers, WorkspaceRole.Member);
         await using var tx = await db.Database.BeginTransactionAsync();
         // The list's statuses in one query: the target, the current one, and the list's first open status should the
         // task repeat.
@@ -234,6 +244,9 @@ public static class TaskEndpoints
         if (status.Id != task.StatusId)
         {
             activity.Record(task.Id, TaskActivityKind.StatusChanged, oldStatus.Name, status.Name);
+            var notifier = notifications.Start(now);
+            notifier.Watch(task.Id, people);
+            notifier.Changed(task.Id, TaskPatcher.KindOf(oldStatus, status), oldStatus.Name, status.Name);
             TaskPatcher.SetStatus(task, oldStatus, status, now);
             changed = true;
         }
@@ -252,20 +265,25 @@ public static class TaskEndpoints
     /// The task (tracked) when the caller is Member or above, read in the access query together with its assignees if the
     /// change touches them and its tags if it touches those, as <see cref="TaskPatcher"/> needs them. A set left out
     /// comes back empty (the join's rows are filtered away), so a tick doesn't repeat the task's row for each assignee.
+    /// A change its watchers hear about (status, list, due date or priority) brings them too, handed to
+    /// <paramref name="notifier"/>; a rename reads none.
     /// </summary>
-    private static async Task<(TaskItem Task, Guid WorkspaceId)> RequireForChangeAsync(Access access, TaskloomDbContext db, Guid id, TaskChange change)
+    private static async Task<(TaskItem Task, Guid WorkspaceId)> RequireForChangeAsync(Access access, TaskloomDbContext db, Guid id, TaskChange change,
+        Notifier notifier)
     {
         bool assignees = change.ChangesAssignees, tags = change.ChangesTags;
-        var (row, workspaceId) = await access.RequireTaskAsync(id, t => new
+        var watched = change.StatusId is not null || change.ListId is not null || change.DueDate.Has || change.Priority.Has;
+        var (row, workspaceId, people) = await access.RequireTaskAsync(id, t => new
         {
             Task = t,
             Assignees = t.Assignees.Where(_ => assignees).ToList(),
             Tags = t.Tags.Where(_ => tags).ToList(),
-        }, WorkspaceRole.Member);
+        }, new Audience(watched), WorkspaceRole.Member);
         // The rows are tracked and fixed up into the task's collections; a set read is marked loaded so nothing reads it again.
         var entry = db.Entry(row.Task);
         if (assignees) entry.Collection(t => t.Assignees).IsLoaded = true;
         if (tags) entry.Collection(t => t.Tags).IsLoaded = true;
+        notifier.Watch(id, people);
         return (row.Task, workspaceId);
     }
 

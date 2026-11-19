@@ -260,7 +260,8 @@ test.describe('Settings', () => {
       await axeBothThemes(page, DIALOGS)
       await go.click()
       await expect(sidebar(page).getByRole('button', { name: 'Workspace: Doe family' })).toBeVisible()
-      expect((await api(page).workspaces()).map((w) => w.name)).not.toContain('Scratch')
+      // The sidebar switches at once; the server's delete follows.
+      await expect.poll(async () => (await api(page).workspaces()).map((w) => w.name)).not.toContain('Scratch')
     })
   })
 

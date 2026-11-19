@@ -100,7 +100,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         (await user.Client.SeedAsync(user.Workspace.Id, fillers: 0)).EnsureSuccessStatusCode();
 
         using var me = await GetJsonAsync(user.Client, "/api/me");
-        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin", "photoUrl", "photoChosen"), me.RootElement.Keys());
+        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin", "photoUrl", "photoChosen", "timeZone", "emailMentions", "emailReminders", "emailConfigured"), me.RootElement.Keys());
 
         using var tree = await GetJsonAsync(user.Client, "/api/workspaces");
         var ws = tree.RootElement[0];
@@ -145,7 +145,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         Assert.All(d.GetProperty("subtasks").EnumerateArray(), s => Assert.Equal(taskKeys, s.Keys()));
         Assert.All(d.GetProperty("comments").EnumerateArray(), c =>
         {
-            Assert.Equal(Sorted("id", "taskId", "author", "body", "createdAt", "editedAt"), c.Keys());
+            Assert.Equal(Sorted("id", "taskId", "author", "body", "createdAt", "editedAt", "mentions"), c.Keys());
             Assert.Equal(Sorted("id", "email", "displayName", "photoUrl"), c.GetProperty("author").Keys());
         });
         Assert.Equal(Sorted("id", "taskId", "fileName", "contentType", "sizeBytes", "uploadedById", "createdAt"), Assert.Single(d.GetProperty("attachments").EnumerateArray()).Keys());
@@ -204,10 +204,10 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         Assert.Equal(taskKeys, Assert.Single(bulk.RootElement.GetProperty("tasks").EnumerateArray()).Keys());
 
         using var comment = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new { body = "First" }));
-        Assert.Equal(Sorted("id", "taskId", "author", "body", "createdAt", "editedAt"), comment.RootElement.Keys());
+        Assert.Equal(Sorted("id", "taskId", "author", "body", "createdAt", "editedAt", "mentions"), comment.RootElement.Keys());
         Assert.Equal(JsonValueKind.Null, comment.RootElement.GetProperty("editedAt").ValueKind);
         using var edited = await JsonAsync(await user.Client.PatchAsJsonAsync($"/api/comments/{comment.RootElement.GetProperty("id").GetString()}", new { body = "Edited" }));
-        Assert.Equal(Sorted("id", "taskId", "author", "body", "createdAt", "editedAt"), edited.RootElement.Keys());
+        Assert.Equal(Sorted("id", "taskId", "author", "body", "createdAt", "editedAt", "mentions"), edited.RootElement.Keys());
         Assert.Equal(userKeys, edited.RootElement.GetProperty("author").Keys());
         Assert.Equal(JsonValueKind.String, edited.RootElement.GetProperty("editedAt").ValueKind);
 
@@ -223,7 +223,7 @@ public class WorkspaceTests(TaskloomFactory factory) : IClassFixture<TaskloomFac
         using var member = await JsonAsync(await user.Client.PostAsJsonAsync($"/api/workspaces/{user.Workspace.Id}/members", new { email = Builders.NewEmail(), role = "Member" }));
         Assert.Equal(Sorted("userId", "email", "displayName", "role", "pending", "disabled", "photoUrl"), member.RootElement.Keys());
         using var me = await JsonAsync(await user.Client.PatchAsJsonAsync("/api/me", new { displayName = "Me" }));
-        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin", "photoUrl", "photoChosen"), me.RootElement.Keys());
+        Assert.Equal(Sorted("id", "email", "displayName", "isSiteAdmin", "photoUrl", "photoChosen", "timeZone", "emailMentions", "emailReminders", "emailConfigured"), me.RootElement.Keys());
         using var workspace = await JsonAsync(await user.Client.PostAsJsonAsync("/api/workspaces", new { name = "W" }));
         Assert.Equal(Sorted("id", "name", "role", "spaces"), workspace.RootElement.Keys());
         using (var form = new MultipartFormDataContent { { new ByteArrayContent("x"u8.ToArray()), "file", "x.txt" } })

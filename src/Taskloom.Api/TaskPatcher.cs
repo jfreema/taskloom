@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Taskloom.Api.Notifications;
 using Taskloom.Application;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
@@ -133,7 +134,8 @@ public sealed class TaskChange
 /// all items: the lists and statuses a status or list change touches, the people and tags named, the subtasks of tasks
 /// moving list, and the edge positions of the statuses tasks may move into. A rename or a new due date reads nothing.
 /// Applying then makes no per-item queries. It only changes tracked entities and records activity; the caller saves,
-/// so a 400 from any item leaves nothing changed.
+/// so a 400 from any item leaves nothing changed. With a <see cref="Notifier"/>, a new status, due date or priority goes
+/// to the Inbox of the task's watchers, and each person newly assigned hears of it.
 /// </summary>
 public sealed class TaskPatcher
 {
@@ -150,12 +152,13 @@ public sealed class TaskPatcher
     private readonly ILookup<Guid, TaskItem> _subtasks;
     private readonly PositionBook _positions;
     private readonly Repeater _repeater;
+    private readonly Notifier? _notifier;
     private int _assigned;
 
     private TaskPatcher(TaskloomDbContext db, ActivityRecorder activity, DateTimeOffset now, Dictionary<Guid, TaskList> lists,
         List<ListStatus> statuses, Dictionary<Guid, string> memberNames, Dictionary<Guid, string> formerMemberNames,
         Dictionary<Guid, Tag> tags, Dictionary<Guid, HashSet<Guid>> privatePeople, ILookup<Guid, TaskItem> subtasks, PositionBook positions,
-        Repeater repeater)
+        Repeater repeater, Notifier? notifier)
     {
         _db = db;
         _activity = activity;
@@ -171,6 +174,7 @@ public sealed class TaskPatcher
         _subtasks = subtasks;
         _positions = positions;
         _repeater = repeater;
+        _notifier = notifier;
         foreach (var (listId, listStatuses) in _statusesByList) repeater.Know(listId, listStatuses);
     }
 
@@ -183,8 +187,9 @@ public sealed class TaskPatcher
     /// <param name="items">The tasks (tracked) and their changes. A task's <c>Assignees</c> must be loaded when its change
     /// touches them, and its <c>Tags</c> likewise.</param>
     /// <param name="today">The caller's own date (<see cref="ClientDate"/>), for repeating tasks.</param>
+    /// <param name="notifier">Tells people about the changes; it must already know each task's watchers.</param>
     public static async Task<TaskPatcher> CreateAsync(TaskloomDbContext db, Access access, Guid workspaceId, ActivityRecorder activity,
-        DateTimeOffset now, DateOnly today, IReadOnlyList<(TaskItem Task, TaskChange Change)> items)
+        DateTimeOffset now, DateOnly today, IReadOnlyList<(TaskItem Task, TaskChange Change)> items, Notifier? notifier = null)
     {
         // The lists, with their statuses, of tasks changing status or list or getting someone new (whose space decides
         // who may be assigned), and the lists they move to. One query.
@@ -268,7 +273,7 @@ public sealed class TaskPatcher
         var positions = await PositionBook.LoadAsync(db, targets);
 
         return new TaskPatcher(db, activity, now, lists, statuses, memberNames, formerNames, tags, privatePeople,
-            subtasks.ToLookup(t => t.ParentTaskId!.Value), positions, new Repeater(db, activity, now, today));
+            subtasks.ToLookup(t => t.ParentTaskId!.Value), positions, new Repeater(db, activity, now, today), notifier);
     }
 
     /// <summary>True when the change may add assignees, who must be able to see the task's space.</summary>
@@ -322,6 +327,7 @@ public sealed class TaskPatcher
         if (newStatus is not null && newStatus.Id != task.StatusId)
         {
             _activity.Record(task.Id, TaskActivityKind.StatusChanged, oldStatus!.Name, newStatus.Name);
+            _notifier?.Changed(task.Id, KindOf(oldStatus, newStatus), oldStatus.Name, newStatus.Name);
             SetStatus(task, oldStatus, newStatus, _now);
             // A task moved to another list goes to the bottom of its status there; a re-statused one to the top.
             if (change.Position is null)
@@ -360,6 +366,7 @@ public sealed class TaskPatcher
         if (change.Priority is { Has: true, Value: var priority } && priority != task.Priority)
         {
             _activity.Record(task.Id, TaskActivityKind.PriorityChanged, task.Priority.ToString(), priority.ToString());
+            _notifier?.Changed(task.Id, NotificationKind.PriorityChanged, task.Priority.ToString(), priority.ToString());
             task.Priority = priority;
             changed = true;
         }
@@ -372,6 +379,7 @@ public sealed class TaskPatcher
         if (change.DueDate is { Has: true, Value: var due } && due != task.DueDate)
         {
             _activity.Record(task.Id, TaskActivityKind.DueDateChanged, ActivityValues.Date(task.DueDate), ActivityValues.Date(due));
+            _notifier?.Changed(task.Id, NotificationKind.DueDateChanged, ActivityValues.Date(task.DueDate), ActivityValues.Date(due));
             task.DueDate = due;
             changed = true;
         }
@@ -439,6 +447,7 @@ public sealed class TaskPatcher
             // A microsecond apart, so people added together keep the order they were sent in.
             task.Assignees.Add(new TaskAssignee { TaskId = task.Id, UserId = userId, CreatedAt = _now.AddTicks(10 * _assigned++) });
             _activity.Record(task.Id, TaskActivityKind.AssigneeAdded, null, _memberNames[userId]);
+            _notifier?.Assigned(task.Id, userId);
         }
         foreach (var userId in removed)
         {
@@ -501,6 +510,10 @@ public sealed class TaskPatcher
                ?? statuses.FirstOrDefault(s => s.Category == from.Category)
                ?? statuses[0];
     }
+
+    /// <summary>Entering a Done status is "completed" in the Inbox; any other move is a change of status.</summary>
+    public static NotificationKind KindOf(ListStatus from, ListStatus to) =>
+        to.Category == StatusCategory.Done && from.Category != StatusCategory.Done ? NotificationKind.Completed : NotificationKind.StatusChanged;
 
     /// <summary>
     /// Moves a task to a status: CompletedAt is set when it enters Done, kept while it stays in Done, and cleared when

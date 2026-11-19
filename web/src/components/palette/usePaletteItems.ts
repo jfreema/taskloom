@@ -15,6 +15,7 @@ import { useTasks } from '../../stores/tasks'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { IsoDate, ListSummary, Space, Status, Task, Uuid } from '../../types'
+import { PANEL_ROUTE_NAMES } from '../shell/shellContext'
 import { matches, prepare, startsWord } from './paletteMatch'
 import { usePaletteActions, type PaletteAction } from './usePaletteActions'
 import type { PaletteSearch } from './usePaletteSearch'
@@ -136,7 +137,7 @@ export function usePaletteItems(o: {
     o.close()
     // A search result may come from a list this page never loaded: the panel can show it at once.
     if (t.listId && t.statusId && !tasks.get(t.id)) tasks.upsert(t as Task)
-    const panelRoute = route.name === 'home' || route.name === 'list'
+    const panelRoute = typeof route.name === 'string' && PANEL_ROUTE_NAMES.has(route.name)
     if (!mod && panelRoute) panel.open(t.id)
     else go(`/t/${t.id}`)
   }

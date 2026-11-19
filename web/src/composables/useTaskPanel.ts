@@ -1,4 +1,4 @@
-// The task panel's URL state (8.10). `?task=<uuid>` on Home and list pages opens the panel;
+// The task panel's URL state (8.10). `?task=<uuid>` on Home, the Inbox and list pages opens the panel;
 // TaskPanelHost (A2) renders it and reports its mode here. Opening uses router.replace, except in
 // sheet mode (phones), where it pushes an entry marked `taskloomSheet` so the browser's Back closes it.
 import { computed, effectScope, nextTick, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue'
@@ -9,7 +9,7 @@ import { appRouter } from './appRouter'
 export type TaskPanelMode = 'docked' | 'modal' | 'sheet' | null
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const PANEL_ROUTES = new Set(['home', 'list'])
+const PANEL_ROUTES = new Set(['home', 'inbox', 'list'])
 const SHEET_MAX = 639
 
 /** Set by TaskPanelHost whenever it measures. */

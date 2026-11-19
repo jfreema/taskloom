@@ -1,4 +1,4 @@
-// The global shortcuts AppShell registers (9.5): Mod+K, /, N, ?, [ and G then H. Mod+Z is
+// The global shortcuts AppShell registers (9.5): Mod+K, /, N, ?, [, G then H and G then I. Mod+Z is
 // registered by UiToastHost and the panel's Esc by TaskPanelHost. useShortcut applies the rules:
 // single keys never fire while typing, while a modal layer is open, or when single-key shortcuts
 // are off; handlers return false to pass the key on.
@@ -60,5 +60,10 @@ export function useShellShortcuts(): void {
 
   useShortcut('g h', () => {
     void router.push({ name: 'home' }).catch(() => undefined)
+  })
+
+  useShortcut('g i', () => {
+    if (!workspaces.current) return false
+    void router.push({ name: 'inbox' }).catch(() => undefined)
   })
 }

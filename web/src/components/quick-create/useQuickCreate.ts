@@ -22,6 +22,7 @@ import { useTasks } from '../../stores/tasks'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
 import type { CreateTaskRequest, IsoDate, Priority, Uuid } from '../../types'
+import { PANEL_ROUTE_NAMES } from '../shell/shellContext'
 
 const MORE_KEY = 'taskloom.quickCreate.more'
 const TITLE_MAX = 500
@@ -198,7 +199,7 @@ export function useQuickCreate(o: { focusTitle(): void }): QuickCreate {
 
   /** In the panel on Home or a list page (focusing its root), otherwise the full page. */
   function openTask(id: Uuid): void {
-    if (route.name === 'home' || route.name === 'list') panel.open(id)
+    if (typeof route.name === 'string' && PANEL_ROUTE_NAMES.has(route.name)) panel.open(id)
     else void router.push(`/t/${id}`).catch(noop)
   }
 

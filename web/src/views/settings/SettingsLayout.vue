@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Settings frame (spec 8.13): the "Settings" h1 in the page header, an inner
-// <nav aria-label="Settings"> (220px) with the groups Account (Profile, Appearance) and Workspace
+// <nav aria-label="Settings"> (220px) with the groups Account (Profile, Appearance, Notifications) and Workspace
 // (General, Members, Tags), plus Admin (People) for site admins only, and the child page (max
 // 720px). It stays beside the page while it scrolls. Below 640px of page width the nav becomes one
 // row of links that scrolls sideways, and the active link is scrolled into view.
@@ -22,6 +22,7 @@ const BASE_GROUPS: readonly NavGroup[] = [
     links: [
       { name: 'settings-profile', label: 'Profile' },
       { name: 'settings-appearance', label: 'Appearance' },
+      { name: 'settings-notifications', label: 'Notifications' },
     ],
   },
   {

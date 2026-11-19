@@ -6,7 +6,8 @@
 //   area is the `page` size container (7.5); <main id="main"> inside it scrolls.
 // - Below 1024px the sidebar is a modal left drawer that closes on navigation, Esc or the scrim.
 // - Start-up (8.2): the router guard has loaded the session; this loads the workspace tree, then
-//   members and tags of the current workspace, registers the global shortcuts, installs the
+//   members, tags and the Inbox's unread count of the current workspace (the count again every
+//   minute while the tab shows), registers the global shortcuts, installs the
 //   pagehide flush of pending deletes and the focus refresh of the tree. After a reload, #main
 //   takes focus once the first page has rendered.
 // - States: a page skeleton while the tree loads (after 200ms, or at once when App.vue's boot
@@ -22,6 +23,7 @@ import { useBreakpoint } from '../composables/useBreakpoint'
 import { useDelayedDelete } from '../composables/useDelayedDelete'
 import { useDelayedFlag } from '../composables/useDelayedFlag'
 import { useLayerStack } from '../composables/useLayerStack'
+import { INBOX_POLL_MS, useInbox } from '../stores/inbox'
 import { useMembers } from '../stores/members'
 import { useTags } from '../stores/tags'
 import { useUi } from '../stores/ui'
@@ -51,6 +53,7 @@ const ui = useUi()
 const workspaces = useWorkspaces()
 const members = useMembers()
 const tags = useTags()
+const inbox = useInbox()
 const route = useRoute()
 const { isDesktop, isPhone } = useBreakpoint()
 const layers = useLayerStack()
@@ -63,10 +66,13 @@ provide(contentPanelKey, contentPanel)
 void workspaces.load()
 watch(
   () => workspaces.currentId,
-  (id) => {
+  (id, previous) => {
+    // The Inbox and its unread count are per workspace.
+    if (previous && previous !== id) inbox.reset()
     if (!id) return
     void members.ensure(id)
     void tags.ensure(id)
+    void inbox.refreshCount()
   },
   { immediate: true },
 )
@@ -77,6 +83,13 @@ useDelayedDelete()
 function refreshIfStale(): void {
   if (document.visibilityState === 'hidden' || !workspaces.loaded) return
   void workspaces.refresh({ ifOlderThan: STALE_MS })
+  void inbox.refreshCount({ ifOlderThan: STALE_MS })
+}
+
+// The sidebar's unread count (Features 2): asked for every minute while the tab is showing.
+let inboxTimer: number | undefined
+function pollInbox(): void {
+  if (document.visibilityState === 'visible') void inbox.refreshCount()
 }
 
 function onVisibility(): void {
@@ -86,8 +99,10 @@ function onVisibility(): void {
 onMounted(() => {
   window.addEventListener('focus', refreshIfStale)
   document.addEventListener('visibilitychange', onVisibility)
+  inboxTimer = window.setInterval(pollInbox, INBOX_POLL_MS)
 })
 onBeforeUnmount(() => {
+  window.clearInterval(inboxTimer)
   window.removeEventListener('focus', refreshIfStale)
   document.removeEventListener('visibilitychange', onVisibility)
 })

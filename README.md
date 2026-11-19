@@ -29,7 +29,21 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
     example offline), it keeps your text and sends it again when you're back online
   - subtasks
   - attachments: upload, drag and drop or paste a file; images show thumbnails and open in a lightbox
-  - one activity feed of changes and comments; you can edit or delete your own comments
+  - one activity feed of changes and comments; you can edit or delete your own comments. Type "@" in a comment to
+    mention someone who can see the task
+- **Inbox:** what happened on your tasks while you were elsewhere, newest first: someone assigned you a task,
+  mentioned you, commented on, completed or changed the status, due date or priority of a task you created or are
+  assigned to, plus your due-date reminders. Your own changes never show. The sidebar counts what is unread. Opening
+  a task reads everything about it; rows can be marked read or unread one by one, or all at once. You only ever see
+  rows about tasks you can still see, so leaving a private space takes its rows with it. Rows are kept for 90 days.
+- **@mentions:** "@" in a comment lists the people who can see the task (in a private space, only its people). The
+  comment shows the mention as a chip, and the person finds it in their Inbox even if the task isn't theirs.
+- **Due-date reminders and email:** each morning (8:00 in your own time zone, which the app takes from your
+  browser) the Inbox gets a row for each open task of yours that is due that day or became overdue in the last week:
+  tasks assigned to you, and unassigned tasks you created. When the server is set up to send email (see
+  [Email and reminders](#email-and-reminders)), assignments and mentions are emailed after a minute unless you have
+  read them by then, and the morning's reminders arrive as one email. Both kinds can be turned off in
+  Settings › Notifications.
 - **Repeating tasks:** the Repeat row offers Daily, Every weekday, Weekly, Monthly and Yearly, worded for the due
   date, or Custom: every N days, weeks, months or years, on chosen weekdays, on a day of the month or its nth or last
   weekday, either on a schedule or counted from when it's done, with an optional end date. Completing a repeating
@@ -53,6 +67,7 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
 - **Settings:**
   - Profile: your display name, and "Sign out other devices" for browsers you no longer use.
   - Appearance: System, Light or Dark theme, and whether single-key shortcuts are on.
+  - Notifications: whether assignments and mentions, and due-date reminders, are also emailed to you.
   - Workspace: rename or delete it. Owner and Admins also see every private space here, with Join.
   - Members: invite several people at once, change roles, remove people, copy the sign-in link. People whose
     account is turned off are marked "Turned off".
@@ -82,8 +97,8 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
   agenda calendar and a "+" button, with 44px touch targets. The app is keyboard-first and targets WCAG 2.2 AA;
   the end-to-end tests run axe on the screens in both themes.
 
-Not in this version: folders, custom fields, Gantt and timeline views, time tracking,
-notifications and @mentions, real-time or offline sync, and Planner import.
+Not in this version: folders, custom fields, Gantt and timeline views, time tracking, push notifications,
+real-time or offline sync, and Planner import.
 
 ## Keyboard shortcuts
 
@@ -100,6 +115,7 @@ shortcuts never fire while you type, and you can turn them off in Settings › A
 | ? | Keyboard shortcuts |
 | [ | Show or hide the sidebar |
 | G then H | Go to Home |
+| G then I | Go to the Inbox |
 | Mod+Z | Undo the latest action |
 | Esc | Close the top menu or dialog, close the task panel, or clear the selection |
 
@@ -142,6 +158,7 @@ shortcuts never fire while you type, and you can turn them off in Settings › A
 | Mod+Enter | Complete or reopen |
 | Mod+Backspace | Delete the task, with undo |
 | Enter / Shift+Enter | In a comment: send, or start a new line |
+| @ | In a comment: list the people to mention (↑ ↓ to choose, Enter or Tab to pick, Esc to close the list) |
 
 In quick create, Enter creates the task and Mod+Enter creates it and opens it.
 
@@ -177,6 +194,12 @@ This upgrade only adds to the database (a `user_sessions` table and a `DisabledA
 data stays as it is. Sign-in cookies from before it have no session, so everyone signs in once more. If Google
 sign-in is on, set an allowlist first (`Auth__AllowedEmails__0` or `Auth__AllowedEmailDomains__0`, see
 Configuration) or `Auth__AllowAnyAccount=true`: without one the app refuses to start and says so.
+
+### Upgrading to the Inbox (Features 2)
+
+This upgrade only adds to the database (the `notifications` and `comment_mentions` tables and four columns on
+users), so existing data stays as it is. Everyone starts with an empty Inbox and with both kinds of email turned on;
+no email goes out until you set an email provider (see [Email and reminders](#email-and-reminders)).
 
 ## Run it locally
 
@@ -265,13 +288,13 @@ cd web && npm ci && npm run build                 # writes the app into src/Task
 npx playwright install chromium                   # once
 cd .. && ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5080 \
   ConnectionStrings__Taskloom="Host=localhost;Port=5432;Database=taskloom_e2e;Username=taskloom;Password=taskloom" \
-  Auth__DevLogin__Enabled=true Auth__SiteAdmins__0=e2e-site-admin@example.com \
+  Auth__DevLogin__Enabled=true Auth__SiteAdmins__0=e2e-site-admin@example.com Jobs__Enabled=false \
   dotnet run --project src/Taskloom.Api --no-launch-profile
 cd web && npm run e2e                             # in a second terminal
 ```
 
 `Auth__SiteAdmins__0` makes the address the tests sign in with for Settings › People a site admin; without it those
-tests fail.
+tests fail. `Jobs__Enabled=false` keeps the morning reminders from adding Inbox rows in the middle of a test.
 
 The API creates `taskloom_e2e` on its first start. Start each run on a fresh database, because one test expects
 the seeded invited people never to have signed in. Stop the API, drop the database, then start the API again:
@@ -311,6 +334,18 @@ The middle column is the variable `docker-compose.yml` reads for it, where there
 | `FileStore__Local__Root` | | `data/files` in the app folder | Where `Local` keeps attachments |
 | `FileStore__Azure__ConnectionString` or `FileStore__Azure__AccountUrl` | Azurite | empty | A connection string (Azurite), or an account URL plus managed identity in Azure |
 | `FileStore__Azure__Container` | | `attachments` | The blob container |
+| `App__PublicUrl` | `TASKLOOM_PUBLIC_URL` | empty | The address people open Taskloom at, like `https://tasks.example.com`. Emails link to tasks and the Inbox with it; without it they carry no links |
+| `Email__Provider` | `TASKLOOM_EMAIL_PROVIDER` | `Log` | `Log` writes each email's recipient and subject to the log and sends nothing. `Smtp` sends through the server below |
+| `Email__From` | `TASKLOOM_EMAIL_FROM` | empty | Who emails come from, like `Taskloom <taskloom@example.com>`. Needed with `Smtp` |
+| `Email__Smtp__Host` / `Port` | `TASKLOOM_SMTP_HOST` / `TASKLOOM_SMTP_PORT` | empty / `587` | The mail server. Needed with `Smtp` |
+| `Email__Smtp__Username` / `Password` | `TASKLOOM_SMTP_USERNAME` / `TASKLOOM_SMTP_PASSWORD` | empty | Leave empty for a server that takes mail without sign-in |
+| `Email__Smtp__Security` | | `Auto` | `Auto` uses TLS from the first byte on port 465 and STARTTLS on any other port. `None` sends in the clear, for a test server on your own machine only |
+| `Email__DelaySeconds` | | `60` | How long an assignment or mention waits before it is emailed; reading it in the Inbox first cancels the email |
+| `Reminders__Hour` | | `8` | The hour (0 to 23) of each person's own day from which their due-date reminders go out |
+| `Notifications__KeepDays` | | `90` | Inbox rows older than this are deleted |
+| `Jobs__Enabled` | | `true` | Runs the jobs (emails, reminders, clearing old Inbox rows) on a timer inside the app |
+| `Jobs__PollSeconds` | | `30` | How often that timer looks for work |
+| `Jobs__TriggerKey` | | empty | When set, `POST /jobs/run` with this value in the `X-Taskloom-Jobs-Key` header runs every job now (see below) |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | | empty | Sends OpenTelemetry data to Application Insights when set |
 
 docker compose also reads `TASKLOOM_PORT` (8080), `TASKLOOM_DB_PORT` (5432), `TASKLOOM_BLOB_PORT` (10000) and
@@ -322,15 +357,63 @@ on a server that clients reach directly, they can pick their own address and get
 behind one NAT address (an office network) shares the per-IP sign-in budget, and each sign-in uses two requests, so
 raise `RateLimits__SignInPerMinute` for an office (the Azure template sets 120).
 
+## Email and reminders
+
+Out of the box nothing is emailed: `Email__Provider` is `Log`, and Settings › Notifications says so. The Inbox, the
+unread count and the reminder rows work without email.
+
+To send email, point Taskloom at any SMTP server and tell it its own address:
+
+```bash
+Email__Provider=Smtp
+Email__From="Taskloom <taskloom@example.com>"
+Email__Smtp__Host=smtp.example.com
+Email__Smtp__Port=587
+Email__Smtp__Username=taskloom@example.com
+Email__Smtp__Password=<the password or app password>
+App__PublicUrl=https://tasks.example.com
+```
+
+With docker compose, put the `TASKLOOM_...` variables from the Configuration table in the `.env` file instead. The app
+refuses to start with `Smtp` and no host or From address, and says which setting is missing. To try it without a
+real mailbox, run a local catcher such as Mailpit and use `Email__Smtp__Host=localhost`, `Email__Smtp__Port=1025`,
+`Email__Smtp__Security=None`.
+
+What is sent:
+
+- **Assignments and mentions:** one email per person, a minute after the first one (`Email__DelaySeconds`), listing
+  what arrived in that minute. Rows already read in the Inbox are left out, so someone working in the app gets no
+  email. Comments, completions and other changes are Inbox only.
+- **Due-date reminders:** one email a morning with the tasks due that day and the ones that became overdue.
+- Nothing is sent to an account that is turned off, about a task the person can no longer see, or for a kind of
+  email they turned off in Settings › Notifications. A send that fails is tried again (after 2 minutes, then 4, 8
+  and so on up to an hour) and given up after a day.
+
+The work happens in a small job runner inside the API: every 30 seconds it sends the emails that are due, every 5
+minutes it writes the reminders of everyone whose morning has come, and once a day it deletes Inbox rows older than
+90 days. With several copies of the app, a database lock makes sure only one runs a job at a time.
+
+**Hosts that pause the app between requests.** On Cloud Run (CPU only during requests) and on Azure Container Apps
+scaled to zero, the timer doesn't run while nobody is using the app, so reminders and emails would wait for the next
+visit. There, set `Jobs__TriggerKey` to a long random value and have a scheduler (Cloud Scheduler, a Container Apps
+job, cron) call the app every few minutes:
+
+```bash
+curl -X POST -H "X-Taskloom-Jobs-Key: <the key>" https://tasks.example.com/jobs/run
+```
+
+It runs every job and answers with what each did. A wrong or missing key gets 404, and the route doesn't exist while
+the key is empty.
+
 ## Project layout
 
 ```
 src/
   Taskloom.Domain          entities: workspaces, spaces, lists, statuses, tasks, tags, comments, activity, attachments
   Taskloom.Application     interfaces (IFileStore, IEmailSender) and ordering helpers; no cloud or database code
-  Taskloom.Infrastructure  EF Core + PostgreSQL, migrations, local-disk file store
+  Taskloom.Infrastructure  EF Core + PostgreSQL, migrations, local-disk file store, SMTP and log-only email senders
   Taskloom.Cloud.Azure     Azure Blob Storage file store, Application Insights telemetry
-  Taskloom.Api             ASP.NET Core host: sign-in, REST endpoints, serves the built web app
+  Taskloom.Api             ASP.NET Core host: sign-in, REST endpoints, the Inbox and its jobs, serves the built web app
 tests/Taskloom.Api.Tests   API tests against a real PostgreSQL
 web/                       Vue 3 + TypeScript + Pinia + Vue Router (no cloud SDKs)
   src/components/ui        the Loom primitives (buttons, menus, popovers, dialogs, toasts...); /_ui shows them all

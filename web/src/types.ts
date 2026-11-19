@@ -37,6 +37,25 @@ export type ActivityKind =
   | 'RepeatChanged'
   /** Completing the task created the next one; `to` is its due date. */
   | 'Repeated'
+/** What an Inbox row tells its reader (Features 2). */
+export type NotificationKind =
+  /** The actor assigned the task to the reader. */
+  | 'Assigned'
+  /** The actor mentioned the reader in a comment; `to` is the comment on one line. */
+  | 'Mentioned'
+  /** The actor commented on a task of the reader's; `to` is the comment on one line. */
+  | 'Commented'
+  /** The actor moved the task into a Done status; `from` and `to` are status names. */
+  | 'Completed'
+  | 'StatusChanged'
+  /** `from` and `to` are dates, or null for none. */
+  | 'DueDateChanged'
+  /** `from` and `to` are priority names. */
+  | 'PriorityChanged'
+  /** The morning reminder: due today. `to` is the date; no actor. */
+  | 'DueToday'
+  /** The morning reminder: was due on `to` and is still open; no actor. */
+  | 'Overdue'
 /** Query parameter of GET /api/workspaces/{id}/tasks (lower case on the wire). */
 export type TaskScope = 'mine' | 'all'
 export type RepeatUnit = 'Day' | 'Week' | 'Month' | 'Year'
@@ -61,6 +80,14 @@ export interface Me extends User {
   isSiteAdmin: boolean
   /** They uploaded or removed their photo by hand, so signing in no longer brings the provider's photo. */
   photoChosen: boolean
+  /** The IANA time zone their browser last reported ("America/Chicago"); it sets when their morning reminder goes out. */
+  timeZone: string | null
+  /** Email me when someone assigns me a task or mentions me. */
+  emailMentions: boolean
+  /** Email me the morning reminder of tasks due today or overdue. */
+  emailReminders: boolean
+  /** The server really sends email (Email:Provider is not "Log"). */
+  emailConfigured: boolean
 }
 
 export interface Member {
@@ -234,14 +261,57 @@ export interface TaskRef {
   listId: Uuid
 }
 
+/** Someone a comment mentions, by the name they have now. */
+export interface Mention {
+  userId: Uuid
+  displayName: string
+}
+
 export interface Comment {
   id: Uuid
   taskId: Uuid
   author: User
-  /** Plain text. Render with linkify (lib/html.ts), never v-html. */
+  /**
+   * Plain text; a mention is the token `<@user id>` (lib/mentions.ts). Render with commentSegments,
+   * never v-html.
+   */
   body: string
   createdAt: IsoTimestamp
   editedAt: IsoTimestamp | null
+  /** The people the body mentions. */
+  mentions: Mention[]
+}
+
+/** One row of the Inbox (Features 2). Values are display values copied when it happened. */
+export interface InboxItem {
+  id: Uuid
+  kind: NotificationKind
+  taskId: Uuid
+  taskTitle: string
+  listId: Uuid
+  /** Who did it; null for reminders. */
+  actor: User | null
+  from: string | null
+  to: string | null
+  /** The comment of a Mentioned or Commented row. */
+  commentId: Uuid | null
+  createdAt: IsoTimestamp
+  readAt: IsoTimestamp | null
+}
+
+/** GET /api/workspaces/{id}/notifications: a page of the Inbox, newest first. */
+export interface InboxPage {
+  items: InboxItem[]
+  /** Every unread row, not only this page's. */
+  unread: number
+  hasMore: boolean
+}
+
+/** PATCH /api/me/notifications: only what is sent changes. */
+export interface UpdateNotificationSettingsRequest {
+  emailMentions?: boolean
+  emailReminders?: boolean
+  timeZone?: string
 }
 
 export interface Attachment {

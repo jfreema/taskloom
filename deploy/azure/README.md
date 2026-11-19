@@ -58,7 +58,20 @@ Container Apps ingress (`X-Forwarded-For`), so everyone behind one office NAT ad
 This template sets it to 120 sign-in requests a minute per address (`signInPerMinute`; each sign-in uses two) instead
 of the app's default of 20. Raise it if a whole office signs in at once. The root README lists the other settings.
 
+## 5. Email and reminders
+
+The Inbox works as deployed. Email is off until the app has a mail server: add `Email__Provider=Smtp`,
+`Email__From`, `Email__Smtp__Host`, `Email__Smtp__Port`, `Email__Smtp__Username`, `Email__Smtp__Password` (as a
+secret) and `App__PublicUrl` (the `appUrl` output) to the container app's environment. The root README's
+"Email and reminders" section explains each. This template doesn't set them yet.
+
+The app scales to zero, and a stopped app runs no timer: morning reminders and waiting emails would go out only when
+someone next opens Taskloom. Either keep one replica running (`minReplicas: 1`), or set `Jobs__TriggerKey` and have
+a scheduled Container Apps job call `POST /jobs/run` every few minutes with the key in `X-Taskloom-Jobs-Key`.
+
 ## Still to do before the org rollout
+
+- Email settings and the reminder schedule in this template (see step 5), with the SMTP password in Key Vault.
 
 - Move the Postgres password and Entra secret into Key Vault references.
 - VNet integration and a private endpoint for Postgres instead of the "Allow Azure services" firewall rule.

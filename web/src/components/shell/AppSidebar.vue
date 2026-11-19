@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // The sidebar (3.4, 8.3): <nav aria-label="Sidebar"> with the workspace menu and "Hide sidebar",
-// the search field (opens the palette) and the "New task" pen, Home, the Spaces tree and the
-// account menu. AppShell docks it at 1024px and wider and puts it in a left drawer below that
+// the search field (opens the palette) and the "New task" pen, Home, the Inbox with its unread
+// count (Features 2), the Spaces tree and the account menu. AppShell docks it at 1024px and wider and puts it in a left drawer below that
 // (`inDrawer`: no "Hide sidebar"; the drawer closes on navigation, Esc or the scrim).
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { House, PanelLeft, Search, SquarePen } from '@lucide/vue'
+import { House, Inbox, PanelLeft, Search, SquarePen } from '@lucide/vue'
 import { useDelayedFlag } from '../../composables/useDelayedFlag'
 import { isApple } from '../../lib/platform'
+import { useInbox } from '../../stores/inbox'
 import { useUi } from '../../stores/ui'
 import { useWorkspaces } from '../../stores/workspaces'
 import UiIcon from '../ui/UiIcon.vue'
@@ -23,6 +24,7 @@ withDefaults(defineProps<{ inDrawer?: boolean }>(), { inDrawer: false })
 
 const ui = useUi()
 const workspaces = useWorkspaces()
+const inbox = useInbox()
 const route = useRoute()
 
 const hasWorkspace = computed(() => !!workspaces.current)
@@ -32,6 +34,10 @@ const loadingTree = computed(() => !workspaces.loaded && !workspaces.error)
 const showWorkspaceSkeleton = useDelayedFlag(loadingTree, skeletonDelay())
 const canEdit = computed(() => workspaces.canEdit())
 const onHome = computed(() => route.name === 'home')
+const onInbox = computed(() => route.name === 'inbox')
+/** "12", or "99+" past two digits. */
+const unreadText = computed(() => (inbox.unread > 99 ? '99+' : String(inbox.unread)))
+const inboxLabel = computed(() => (inbox.unread > 0 ? `Inbox, ${inbox.unread} unread` : 'Inbox'))
 const keyShortcut = isApple ? 'Meta+K' : 'Control+K'
 
 function newTask(): void {
@@ -76,6 +82,18 @@ function newTask(): void {
       <RouterLink to="/" class="nav-item focus-inset" :class="{ 'is-active': onHome }" :aria-current="onHome ? 'page' : undefined">
         <UiIcon :icon="House" :size="16" class="nav-icon" />
         <span class="truncate">Home</span>
+      </RouterLink>
+      <RouterLink
+        v-if="hasWorkspace"
+        to="/inbox"
+        class="nav-item focus-inset"
+        :class="{ 'is-active': onInbox }"
+        :aria-current="onInbox ? 'page' : undefined"
+        :aria-label="inboxLabel"
+      >
+        <UiIcon :icon="Inbox" :size="16" class="nav-icon" />
+        <span class="truncate">Inbox</span>
+        <span v-if="inbox.unread > 0" class="nav-count" data-testid="inbox-unread" aria-hidden="true">{{ unreadText }}</span>
       </RouterLink>
       <SidebarTree v-if="hasWorkspace || !workspaces.loaded" />
     </div>
@@ -227,6 +245,23 @@ function newTask(): void {
 
 .nav-item.is-active .nav-icon {
   color: var(--accent-text);
+}
+
+/* The Inbox's unread count: an accent pill at the row's end. */
+.nav-count {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .foot {

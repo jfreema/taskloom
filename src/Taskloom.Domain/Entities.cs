@@ -21,6 +21,17 @@ public class User
     /// The person uploaded or removed their photo by hand, so signing in no longer replaces it with the provider's.
     /// </summary>
     public bool PhotoChosen { get; set; }
+    /// <summary>
+    /// The person's IANA time zone ("America/Chicago"), as their browser last reported it; null until they sign in.
+    /// It decides when their morning is, for due-date reminders (Features 2).
+    /// </summary>
+    public string? TimeZone { get; set; }
+    /// <summary>Email them, as well as their Inbox, when someone assigns them a task or mentions them.</summary>
+    public bool EmailMentions { get; set; } = true;
+    /// <summary>Email them each morning about tasks due that day and tasks that became overdue.</summary>
+    public bool EmailReminders { get; set; } = true;
+    /// <summary>Their own date on which the morning reminder last ran for them, so it runs once a day.</summary>
+    public DateOnly? RemindedOn { get; set; }
     /// <summary>Empty for a pending user: invited, never signed in.</summary>
     public List<UserIdentity> Identities { get; set; } = [];
 }
@@ -366,6 +377,16 @@ public class TaskComment
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     /// <summary>Set when the author edits the body.</summary>
     public DateTimeOffset? EditedAt { get; set; }
+    /// <summary>The people the body mentions (its <c>&lt;@user id&gt;</c> tokens), kept in step by the API.</summary>
+    public List<CommentMention> Mentions { get; set; } = [];
+}
+
+/// <summary>One person a comment mentions.</summary>
+public class CommentMention
+{
+    public Guid CommentId { get; set; }
+    public Guid UserId { get; set; }
+    public User? User { get; set; }
 }
 
 public class TaskAttachment
@@ -379,4 +400,70 @@ public class TaskAttachment
     public required string StorageKey { get; set; }
     public Guid UploadedById { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>What an Inbox notification tells its reader (Features 2).</summary>
+public enum NotificationKind
+{
+    /// <summary>The actor assigned the task to the reader.</summary>
+    Assigned,
+    /// <summary>The actor mentioned the reader in a comment; the value is the comment as plain text.</summary>
+    Mentioned,
+    /// <summary>The actor commented on a task of the reader's; the value is the comment as plain text.</summary>
+    Commented,
+    /// <summary>The actor moved the task into a Done status; values are the status names.</summary>
+    Completed,
+    /// <summary>Any other change of status; values are the status names.</summary>
+    StatusChanged,
+    /// <summary>Values are dates as yyyy-MM-dd, or null for none.</summary>
+    DueDateChanged,
+    /// <summary>Values are priority names.</summary>
+    PriorityChanged,
+    /// <summary>The morning reminder: the task is due today. The value is that date. No actor.</summary>
+    DueToday,
+    /// <summary>The morning reminder: the task was due and is still open. The value is its due date. No actor.</summary>
+    Overdue,
+}
+
+/// <summary>Whether a notification is also to go out by email.</summary>
+public enum NotificationEmail
+{
+    /// <summary>Inbox only.</summary>
+    None = 0,
+    /// <summary>Waiting for the email job, which sends it unless the reader has read it or turned these emails off.</summary>
+    Pending = 1,
+    Sent = 2,
+    /// <summary>Not sent: already read, emails turned off, the account is off, or the task can't be seen any more.</summary>
+    Skipped = 3,
+    /// <summary>The mail server kept refusing it for a day.</summary>
+    Failed = 4,
+}
+
+/// <summary>
+/// One line of a person's Inbox: something that happened to a task of theirs (they created it or are assigned to it),
+/// a mention, or a due-date reminder. Values are display values copied at the time, like <see cref="TaskActivity"/>.
+/// The Inbox only shows rows whose task the reader can still see.
+/// </summary>
+public class Notification
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>The reader.</summary>
+    public Guid UserId { get; set; }
+    public Guid TaskId { get; set; }
+    public TaskItem? Task { get; set; }
+    /// <summary>Who did it; null for reminders.</summary>
+    public Guid? ActorId { get; set; }
+    public User? Actor { get; set; }
+    public NotificationKind Kind { get; set; }
+    public string? FromValue { get; set; }
+    public string? ToValue { get; set; }
+    /// <summary>The comment of a Mentioned or Commented row; the row goes when the comment is deleted.</summary>
+    public Guid? CommentId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? ReadAt { get; set; }
+    public NotificationEmail Email { get; set; }
+    /// <summary>Failed sends so far.</summary>
+    public int EmailAttempts { get; set; }
+    /// <summary>Not before this time: the short wait before the first send, then the wait between retries.</summary>
+    public DateTimeOffset? EmailAfter { get; set; }
 }

@@ -41,6 +41,21 @@ namespace Taskloom.Infrastructure.Migrations
                     b.ToTable("data_protection_keys", (string)null);
                 });
 
+            modelBuilder.Entity("Taskloom.Domain.CommentMention", b =>
+                {
+                    b.Property<Guid>("CommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("CommentId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("comment_mentions", (string)null);
+                });
+
             modelBuilder.Entity("Taskloom.Domain.ListStatus", b =>
                 {
                     b.Property<Guid>("Id")
@@ -73,6 +88,75 @@ namespace Taskloom.Infrastructure.Migrations
                     b.HasIndex("ListId");
 
                     b.ToTable("list_statuses", (string)null);
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("EmailAfter")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EmailAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("CommentId");
+
+                    b.HasIndex("EmailAfter")
+                        .HasDatabaseName("IX_notifications_email_pending")
+                        .HasFilter("\"Email\" = 'Pending'");
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_notifications_UserId_unread")
+                        .HasFilter("\"ReadAt\" IS NULL");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("notifications", (string)null);
                 });
 
             modelBuilder.Entity("Taskloom.Domain.Space", b =>
@@ -434,12 +518,29 @@ namespace Taskloom.Infrastructure.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
 
+                    b.Property<bool>("EmailMentions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EmailReminders")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("PhotoChosen")
                         .HasColumnType("boolean");
 
                     b.Property<string>("PhotoVersion")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly?>("RemindedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("TimeZone")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.HasKey("Id");
 
@@ -584,6 +685,23 @@ namespace Taskloom.Infrastructure.Migrations
                     b.ToTable("workspace_members", (string)null);
                 });
 
+            modelBuilder.Entity("Taskloom.Domain.CommentMention", b =>
+                {
+                    b.HasOne("Taskloom.Domain.TaskComment", null)
+                        .WithMany("Mentions")
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Taskloom.Domain.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Taskloom.Domain.ListStatus", b =>
                 {
                     b.HasOne("Taskloom.Domain.TaskList", null)
@@ -591,6 +709,35 @@ namespace Taskloom.Infrastructure.Migrations
                         .HasForeignKey("ListId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.Notification", b =>
+                {
+                    b.HasOne("Taskloom.Domain.User", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Taskloom.Domain.TaskComment", null)
+                        .WithMany()
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Taskloom.Domain.TaskItem", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Taskloom.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("Task");
                 });
 
             modelBuilder.Entity("Taskloom.Domain.Space", b =>
@@ -802,6 +949,11 @@ namespace Taskloom.Infrastructure.Migrations
                     b.Navigation("Lists");
 
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Taskloom.Domain.TaskComment", b =>
+                {
+                    b.Navigation("Mentions");
                 });
 
             modelBuilder.Entity("Taskloom.Domain.TaskItem", b =>

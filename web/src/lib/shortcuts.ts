@@ -19,6 +19,7 @@ export const SHORTCUTS: ShortcutInfo[] = [
   { keys: '?', label: 'Show keyboard shortcuts', group: 'Global' },
   { keys: '[', label: 'Show or hide the sidebar', group: 'Global' },
   { keys: 'G H', label: 'Go to Home', group: 'Global' },
+  { keys: 'G I', label: 'Go to the Inbox', group: 'Global' },
   { keys: 'Mod+Z', label: 'Undo the latest action', group: 'Global' },
   { keys: 'Escape', label: 'Close the top menu or dialog, the task, or the selection', group: 'Global' },
   // Lists and boards

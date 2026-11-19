@@ -1,19 +1,23 @@
 <script setup lang="ts">
 // The comment composer (8.10), sticky at the bottom of the panel or page; guests can comment too.
-// Enter sends, Shift+Enter adds a line. Sending is optimistic (useComments). The unsent text is
-// kept per task, so J and K or closing the panel don't lose it.
+// Enter sends, Shift+Enter adds a line; "@" lists the people to mention (MentionTextarea). Sending
+// is optimistic (useComments). The unsent text and its mentions are kept per task, so J and K or
+// closing the panel don't lose them.
 import { computed } from 'vue'
+import { encodeMentions, type MentionPicks } from '../../lib/mentions'
 import { useSession } from '../../stores/session'
+import { useTasks } from '../../stores/tasks'
 import type { Uuid } from '../../types'
 import UiAvatar from '../ui/UiAvatar.vue'
 import UiButton from '../ui/UiButton.vue'
-import UiTextarea from '../ui/UiTextarea.vue'
+import MentionTextarea from './MentionTextarea.vue'
 import { detailState } from './taskDetailState'
 import { MAX_COMMENT_LENGTH, useComments } from './useComments'
 
 const props = withDefaults(defineProps<{ taskId: Uuid; layout?: 'panel' | 'page' }>(), { layout: 'panel' })
 
 const session = useSession()
+const tasks = useTasks()
 const comments = useComments()
 
 const draft = computed<string>({
@@ -23,13 +27,19 @@ const draft = computed<string>({
     else detailState.drafts.delete(props.taskId)
   },
 })
+const picks = computed<MentionPicks>({
+  get: () => detailState.draftMentions.get(props.taskId) ?? {},
+  set: (v) => detailState.draftMentions.set(props.taskId, v),
+})
 const empty = computed(() => !draft.value.trim())
 
 function send(): void {
   const text = draft.value.trim()
   if (!text) return
+  const { body } = encodeMentions(text, picks.value)
   draft.value = ''
-  comments.send(props.taskId, text)
+  detailState.draftMentions.delete(props.taskId)
+  comments.send(props.taskId, body)
 }
 </script>
 
@@ -38,17 +48,16 @@ function send(): void {
     <div class="inner">
       <UiAvatar class="avatar" :user="session.user" :size="28" decorative />
       <div class="field">
-        <UiTextarea
+        <MentionTextarea
           v-model="draft"
-          :rows="1"
-          :max-rows="8"
-          submit-on="enter"
+          v-model:picks="picks"
+          :list-id="tasks.get(taskId)?.listId"
           placeholder="Write a comment…"
-          aria-label="Write a comment"
+          label="Write a comment"
           :maxlength="MAX_COMMENT_LENGTH"
           @submit="send"
         />
-        <p class="hint">Enter to send, Shift+Enter for a new line</p>
+        <p class="hint">Enter to send, Shift+Enter for a new line, @ to mention someone</p>
       </div>
       <UiButton class="send" variant="primary" size="sm" :disabled="empty" @click="send">Send</UiButton>
     </div>

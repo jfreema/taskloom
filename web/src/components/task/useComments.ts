@@ -1,9 +1,12 @@
 // Comments (8.10): optimistic send with a client id, edit in place, and delete with Undo. The
-// changes live in detailState until a refetch of the task shows them (settleLocal).
+// changes live in detailState until a refetch of the task shows them (settleLocal). Bodies arrive
+// here as the server stores them, with mentions as tokens (lib/mentions.ts).
 import { api, newId } from '../../api'
 import { useDelayedDelete } from '../../composables/useDelayedDelete'
 import { useToast } from '../../composables/useToast'
 import { errorStatus } from '../../lib/async'
+import { decodeMentions, mentionsIn } from '../../lib/mentions'
+import { useMembers } from '../../stores/members'
 import { useSession } from '../../stores/session'
 import { useTasks } from '../../stores/tasks'
 import type { Comment, Uuid } from '../../types'
@@ -26,6 +29,7 @@ export function useComments(): {
   const tasks = useTasks()
   const toast = useToast()
   const session = useSession()
+  const members = useMembers()
   const delayed = useDelayedDelete()
 
   function isSending(id: Uuid): boolean {
@@ -46,6 +50,7 @@ export function useComments(): {
       taskId,
       author: { id: user.id, email: user.email, displayName: user.displayName, photoUrl: user.photoUrl },
       body: text,
+      mentions: mentionsIn(text, members.nameOf),
       createdAt: new Date().toISOString(),
       editedAt: null,
       sending: true,
@@ -72,11 +77,19 @@ export function useComments(): {
         setLocal(taskId, list.filter((c) => c.id !== id))
         tasks.adjustCounts(taskId, { commentCount: -1 })
         if (errorStatus(err) === 401) return
-        // The text goes back into the composer, unless the user has started another comment.
-        if (!detailState.drafts.get(taskId)?.trim()) detailState.drafts.set(taskId, text)
+        // The text goes back into the composer (mentions as "@Name" again), unless the user has
+        // started another comment.
+        const draft = decodeMentions(text, members.nameOf)
+        if (!detailState.drafts.get(taskId)?.trim()) {
+          detailState.drafts.set(taskId, draft.text)
+          detailState.draftMentions.set(taskId, { ...detailState.draftMentions.get(taskId), ...draft.picks })
+        }
         toast.error(err, {
           retry: () => {
-            if (detailState.drafts.get(taskId)?.trim() === text) detailState.drafts.delete(taskId)
+            if (detailState.drafts.get(taskId)?.trim() === draft.text) {
+              detailState.drafts.delete(taskId)
+              detailState.draftMentions.delete(taskId)
+            }
             send(taskId, text, { id })
           },
         })

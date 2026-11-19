@@ -84,6 +84,13 @@ public class AuthorizationMatrixTests(TaskloomFactory factory) : IClassFixture<T
         ["POST /api/spaces/{id}/join"] = new(Min.Admin, HttpStatusCode.NoContent, w => Post($"/api/spaces/{w.PrivateSpaceId}/join", new { })),
         ["#43 POST /api/dev/seed"] = new(Min.Owner, HttpStatusCode.NoContent, w => Post("/api/dev/seed", new { workspaceId = w.WorkspaceId, fillers = 0 })),
         ["GET /api/lists/{id}"] = new(Min.Guest, HttpStatusCode.OK, w => Get($"/api/lists/{w.ListId}")),
+        ["PATCH /api/me/notifications"] = new(Min.SignedIn, HttpStatusCode.OK, _ => Patch("/api/me/notifications", new { emailReminders = false })),
+        ["GET /api/workspaces/{id}/notifications"] = new(Min.Guest, HttpStatusCode.OK, w => Get($"/api/workspaces/{w.WorkspaceId}/notifications")),
+        ["GET /api/workspaces/{id}/notifications/count"] = new(Min.Guest, HttpStatusCode.OK, w => Get($"/api/workspaces/{w.WorkspaceId}/notifications/count")),
+        ["POST /api/workspaces/{id}/notifications/read-all"] = new(Min.Guest, HttpStatusCode.NoContent,
+            w => Post($"/api/workspaces/{w.WorkspaceId}/notifications/read-all", new { })),
+        // Everyone marks only their own rows, so anyone signed in may call it; for a task they can't see it changes nothing.
+        ["POST /api/notifications/read"] = new(Min.SignedIn, HttpStatusCode.NoContent, w => Post("/api/notifications/read", new { taskId = w.Task.Id })),
     };
 
     public static TheoryData<string> Endpoints => new(Rows.Keys);
@@ -213,6 +220,7 @@ public class AuthorizationMatrixTests(TaskloomFactory factory) : IClassFixture<T
                 (Owner.Client, $"/api/workspaces/{WorkspaceId}/tags"), (Owner.Client, $"/api/lists/{ListId}/tasks"),
                 (Owner.Client, $"/api/tasks/{Task.Id}"), (Owner.Client, $"/api/attachments/{Attachment.Id}"),
                 (Owner.Client, "/api/me"), (Outsider, "/api/me"), (Outsider, "/api/workspaces"), (Guest, "/api/me"),
+                (Owner.Client, $"/api/workspaces/{WorkspaceId}/notifications"),
             };
             var parts = new List<string>();
             foreach (var (client, path) in reads)

@@ -4,6 +4,7 @@
 // deletes stay hidden until their undo toast commits them (9.2).
 import { reactive } from 'vue'
 import type { Attachment, Comment, TaskDetail, Uuid } from '../../types'
+import type { MentionPicks } from '../../lib/mentions'
 
 const MAX_CACHED = 30
 
@@ -62,6 +63,8 @@ export const detailState = reactive({
   uploads: [] as Upload[],
   /** Per task: the comment composer's unsent text. */
   drafts: new Map<Uuid, string>(),
+  /** Per task: who the "@Name"s in the unsent text stand for (lib/mentions.ts). */
+  draftMentions: new Map<Uuid, MentionPicks>(),
 })
 
 function byCreatedAt<T extends { createdAt: string; id: string }>(a: T, b: T): number {

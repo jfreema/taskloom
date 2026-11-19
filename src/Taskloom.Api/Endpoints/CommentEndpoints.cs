@@ -1,65 +1,119 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using Taskloom.Api.Auth;
+using Taskloom.Api.Notifications;
 using Taskloom.Application;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
 
 namespace Taskloom.Api.Endpoints;
 
-/// <summary>Comments (spec 5.4 #37–#39). Guests can comment; only the author edits or deletes, whatever their role.</summary>
+/// <summary>
+/// Comments (spec 5.4 #37–#39). Guests can comment; only the author edits or deletes, whatever their role. A comment
+/// can mention people (<see cref="Mentions"/>): each must be able to see the task, and hears of it in their Inbox and by
+/// email. The task's watchers hear of every new comment.
+/// </summary>
 public static class CommentEndpoints
 {
     public static void MapCommentEndpoints(this RouteGroupBuilder api)
     {
-        api.MapPost("/tasks/{id:guid}/comments", async (Guid id, CreateCommentRequest req, Access access, TaskloomDbContext db) =>
+        api.MapPost("/tasks/{id:guid}/comments", async (Guid id, CreateCommentRequest req, Access access, TaskloomDbContext db, NotifierFactory notifications) =>
         {
-            await access.RequireTaskAsync(id, WorkspaceRole.Guest);
             var body = RequireBody(req.Body);
-            var c = new TaskComment { Id = req.Id ?? Guid.NewGuid(), TaskId = id, AuthorId = access.UserId, Body = body, CreatedAt = Clock.Now() };
+            var me = access.UserId;
+            var mentioned = Mentions.In(body);
+            // One query: the access check, the author, the task's watchers, and which of the people mentioned can see the task.
+            var (author, _, people) = await access.RequireTaskAsync(id,
+                t => db.Users.Where(u => u.Id == me).Select(u => new UserDto(u.Id, u.Email, u.DisplayName, UserPhotos.UrlFor(u.Id, u.PhotoVersion))).FirstOrDefault(),
+                new Audience(true, mentioned), WorkspaceRole.Guest);
+            if (author is null) throw new UnauthorizedAccessException();
+            var names = Names(people, author);
+            if (mentioned.Any(u => !names.ContainsKey(u))) throw ProblemException.BadRequest(Mentions.MustSeeTaskMessage);
+
+            var now = Clock.Now();
+            var c = new TaskComment { Id = req.Id ?? Guid.NewGuid(), TaskId = id, AuthorId = me, Body = body, CreatedAt = now };
+            c.Mentions.AddRange(mentioned.Select(u => new CommentMention { CommentId = c.Id, UserId = u }));
             db.Comments.Add(c);
+            // A mention is the news for the people mentioned; the other watchers hear that someone commented.
+            var preview = Mentions.Preview(body, names);
+            var notifier = notifications.Start(now);
+            notifier.Watch(id, people);
+            foreach (var userId in mentioned) notifier.Mentioned(id, userId, c.Id, preview);
+            notifier.Changed(id, NotificationKind.Commented, null, preview, c.Id, except: mentioned);
             await db.SaveChangesAsync();
-            var author = await db.Users.FirstAsync(u => u.Id == access.UserId);
-            return Results.Ok(ToDto(c, author));
+            return Results.Ok(ToDto(c, author, names));
         });
 
-        api.MapPatch("/comments/{id:guid}", async (Guid id, UpdateCommentRequest req, Access access, TaskloomDbContext db) =>
+        api.MapPatch("/comments/{id:guid}", async (Guid id, UpdateCommentRequest req, Access access, TaskloomDbContext db, NotifierFactory notifications) =>
         {
-            var c = await RequireAuthorAsync(id, access, db);
             var body = RequireBody(req.Body);
+            var mentioned = Mentions.In(body);
+            var me = access.UserId;
+            var c = await db.Comments.Include(x => x.Mentions).ThenInclude(m => m.User).Include(x => x.Author)
+                .FirstOrDefaultAsync(x => x.Id == id) ?? throw new NotFoundException();
+            // Membership comes first (a removed member gets 404 even for their own comment), then authorship (403). Only
+            // people the edit newly mentions must be able to see the task: someone mentioned before may have left since.
+            var before = c.Mentions.Select(m => m.UserId).ToHashSet();
+            var added = mentioned.Where(u => !before.Contains(u)).ToList();
+            var (_, _, people) = await access.RequireTaskAsync(c.TaskId, t => t.Id, new Audience(false, added), WorkspaceRole.Guest);
+            if (c.AuthorId != me) throw new ForbiddenException();
+            var author = UserDto.Of(c.Author!);
+            var names = Names(people, author);
+            foreach (var m in c.Mentions) names.TryAdd(m.UserId, m.User!.DisplayName);
+            if (added.Any(u => !names.ContainsKey(u))) throw ProblemException.BadRequest(Mentions.MustSeeTaskMessage);
+
             if (body != c.Body)
             {
+                var now = Clock.Now();
                 c.Body = body;
-                c.EditedAt = Clock.Now();
+                c.EditedAt = now;
+                var removed = c.Mentions.Where(m => !mentioned.Contains(m.UserId)).ToList();
+                foreach (var m in removed) c.Mentions.Remove(m);
+                c.Mentions.AddRange(added.Select(u => new CommentMention { CommentId = c.Id, UserId = u }));
+                var notifier = notifications.Start(now);
+                var preview = Mentions.Preview(body, names);
+                foreach (var userId in added) notifier.Mentioned(c.TaskId, userId, c.Id, preview);
+                await using var tx = await db.Database.BeginTransactionAsync();
+                // Someone no longer mentioned loses the mention from their Inbox, unless they have read it.
+                if (removed.Count > 0)
+                {
+                    var gone = removed.Select(m => m.UserId).ToList();
+                    await db.Notifications
+                        .Where(n => n.CommentId == c.Id && n.Kind == NotificationKind.Mentioned && n.ReadAt == null && gone.Contains(n.UserId))
+                        .ExecuteDeleteAsync();
+                }
                 await db.SaveChangesAsync();
+                await tx.CommitAsync();
             }
-            var author = await db.Users.FirstAsync(u => u.Id == c.AuthorId);
-            return Results.Ok(ToDto(c, author));
+            return Results.Ok(ToDto(c, author, names));
         });
 
         api.MapDelete("/comments/{id:guid}", async (Guid id, Access access, TaskloomDbContext db) =>
         {
-            var c = await RequireAuthorAsync(id, access, db);
+            var c = await db.Comments.FirstOrDefaultAsync(x => x.Id == id) ?? throw new NotFoundException();
+            await access.RequireTaskAsync(c.TaskId);
+            if (c.AuthorId != access.UserId) throw new ForbiddenException();
+            // Its mentions and the Inbox rows about it go with it (CASCADE).
             db.Comments.Remove(c);
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
     }
 
-    /// <summary>Membership comes first (a removed member gets 404 even for their own comment), then authorship (403).</summary>
-    private static async Task<TaskComment> RequireAuthorAsync(Guid id, Access access, TaskloomDbContext db)
-    {
-        var c = await db.Comments.FirstOrDefaultAsync(x => x.Id == id) ?? throw new NotFoundException();
-        await access.RequireTaskAsync(c.TaskId);
-        if (c.AuthorId != access.UserId) throw new ForbiddenException();
-        return c;
-    }
-
     private static string RequireBody(string? body) =>
         Text.Require(body, Limits.CommentBody, "Write a comment first.", "Comments can be up to 10,000 characters.");
 
-    private static CommentDto ToDto(TaskComment c, User author) =>
-        new(c.Id, c.TaskId, UserDto.Of(author), c.Body, c.CreatedAt, c.EditedAt);
+    /// <summary>The names of the people read with the access check, and the caller's own (who may mention themselves).</summary>
+    private static Dictionary<Guid, string> Names(List<TaskPerson> people, UserDto caller)
+    {
+        var names = people.ToDictionary(p => p.UserId, p => p.DisplayName);
+        names[caller.Id] = caller.DisplayName;
+        return names;
+    }
+
+    private static CommentDto ToDto(TaskComment c, UserDto author, Dictionary<Guid, string> names) =>
+        new(c.Id, c.TaskId, author, c.Body, c.CreatedAt, c.EditedAt,
+            c.Mentions.Select(m => new MentionDto(m.UserId, names.TryGetValue(m.UserId, out var name) ? name : "Former member")).ToList());
 }
 
 /// <summary>Attachments (spec 5.4 #40–#42), stored through IFileStore: local disk or Azure Blob Storage.</summary>

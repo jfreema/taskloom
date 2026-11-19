@@ -23,6 +23,8 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TaskTag> TaskTags => Set<TaskTag>();
     public DbSet<TaskActivity> Activities => Set<TaskActivity>();
+    public DbSet<CommentMention> CommentMentions => Set<CommentMention>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     /// <summary>ASP.NET Core data protection keys, so cookies survive restarts and work across replicas.</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
@@ -36,6 +38,10 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
             e.HasIndex(x => x.Email).IsUnique();
             e.Property(x => x.DisplayName).HasMaxLength(200);
             e.Property(x => x.PhotoVersion).HasMaxLength(32);
+            e.Property(x => x.TimeZone).HasMaxLength(64);
+            // Everyone who was here before Features 2 gets its emails, like everyone who joins after.
+            e.Property(x => x.EmailMentions).HasDefaultValue(true);
+            e.Property(x => x.EmailReminders).HasDefaultValue(true);
             e.HasMany(x => x.Identities).WithOne().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<UserPhoto>(e =>
@@ -173,6 +179,34 @@ public class TaskloomDbContext(DbContextOptions<TaskloomDbContext> options) : Db
             e.HasOne<TaskItem>().WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Actor).WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.TaskId, x.CreatedAt });
+        });
+        b.Entity<CommentMention>(e =>
+        {
+            e.ToTable("comment_mentions");
+            e.HasKey(x => new { x.CommentId, x.UserId });
+            e.HasOne<TaskComment>().WithMany(x => x.Mentions).HasForeignKey(x => x.CommentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.UserId);
+        });
+        b.Entity<Notification>(e =>
+        {
+            e.ToTable("notifications");
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30);
+            e.Property(x => x.Email).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.FromValue).HasMaxLength(500);
+            e.Property(x => x.ToValue).HasMaxLength(500);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Actor).WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<TaskComment>().WithMany().HasForeignKey(x => x.CommentId).OnDelete(DeleteBehavior.Cascade);
+            // The Inbox reads one person's rows newest first; the badge counts their unread ones.
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+            e.HasIndex(x => x.UserId).HasFilter("\"ReadAt\" IS NULL").HasDatabaseName("IX_notifications_UserId_unread");
+            e.HasIndex(x => x.TaskId);
+            e.HasIndex(x => x.CommentId);
+            e.HasIndex(x => x.ActorId);
+            // The email job's queue: only the few rows still waiting.
+            e.HasIndex(x => x.EmailAfter).HasFilter("\"Email\" = 'Pending'").HasDatabaseName("IX_notifications_email_pending");
         });
     }
 }

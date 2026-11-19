@@ -4,7 +4,7 @@
 // (Member+), then one "Switch to <workspace>" per other workspace.
 import { computed, type Component, type ComputedRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Building2, House, Keyboard, ListChecks, Monitor, Moon, Plus, Settings, SquarePen, Sun, UserPlus } from '@lucide/vue'
+import { Building2, House, Inbox, Keyboard, ListChecks, Monitor, Moon, Plus, Settings, SquarePen, Sun, UserPlus } from '@lucide/vue'
 import { useTheme } from '../../composables/useTheme'
 import { useWorkspaceSwitch } from '../../composables/useWorkspaceSwitch'
 import { noop } from '../../lib/async'
@@ -57,6 +57,9 @@ export function usePaletteActions(): ComputedRef<PaletteAction[]> {
       })
     }
     out.push({ key: 'home', label: 'Go to Home', icon: House, kbd: 'G H', keywords: 'my work', run: () => go('/') })
+    if (ws) {
+      out.push({ key: 'inbox', label: 'Go to Inbox', icon: Inbox, kbd: 'G I', keywords: 'notifications mentions unread reminders', run: () => go('/inbox') })
+    }
     for (const t of THEMES) {
       out.push({
         key: `theme-${t.value}`,

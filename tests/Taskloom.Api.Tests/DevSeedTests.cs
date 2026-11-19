@@ -120,6 +120,19 @@ public class DevSeedTests(TaskloomFactory factory) : IClassFixture<TaskloomFacto
         Assert.Equal(new DateTimeOffset(t.AddDays(-1).ToDateTime(new TimeOnly(9, 0)), TimeSpan.Zero), detail.Activity[0].CreatedAt);
         Assert.Equal((TaskActivityKind.Renamed, "Write onboarding doc", "Write onboarding guide"), (detail.Activity[0].Kind, detail.Activity[0].From, detail.Activity[0].To));
 
+        // The Inbox: Ana's comment, then this morning's reminders; unread, and none waits to be emailed.
+        var inbox = await user.Client.InboxAsync(user.Workspace.Id);
+        Assert.Equal((3, false), (inbox.Unread, inbox.HasMore));
+        Assert.Equal(
+            [
+                (NotificationKind.Commented, "Write onboarding guide", (Guid?)ana.UserId, "Looks good, can we add screenshots?", (Guid?)detail.Comments[1].Id),
+                (NotificationKind.DueToday, "Write onboarding guide", null, t.ToString("yyyy-MM-dd"), null),
+                (NotificationKind.Overdue, "Fix sign-in redirect", null, t.AddDays(-1).ToString("yyyy-MM-dd"), null),
+            ],
+            inbox.Items.Select(n => (n.Kind, n.TaskTitle, n.Actor?.Id, n.To!, n.CommentId)));
+        Assert.All(inbox.Items, n => Assert.Null(n.ReadAt));
+        Assert.All(await factory.NotificationRowsAsync(me), n => Assert.Equal(NotificationEmail.None, n.Email));
+
         // 48 fillers, top level: 20 in Website refresh, 16 in Admin, 12 in Personal / Tasks.
         var fillers = seeded.Tasks.Where(x => DevSeed.FillerTitles.Contains(x.Title)).ToList();
         Assert.Equal(48, fillers.Count);

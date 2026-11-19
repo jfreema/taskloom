@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Taskloom.Api.Notifications;
 using Taskloom.Application;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
@@ -22,7 +23,8 @@ public static class BulkEndpoints
     /// Every update follows the PATCH rules (title and description are ignored). One transaction: if any update is
     /// invalid the response is a 400 naming the problem and nothing changes. Results keep the request order.
     /// </summary>
-    private static async Task<IResult> UpdateAsync(JsonElement body, Access access, TaskloomDbContext db, HttpContext http)
+    private static async Task<IResult> UpdateAsync(JsonElement body, Access access, TaskloomDbContext db, HttpContext http,
+        NotifierFactory notifications)
     {
         Json.RequireReadable(body);
         if (!body.TryGetPropertyIgnoreCase("updates", out var updates) || updates.ValueKind != JsonValueKind.Array)
@@ -44,12 +46,18 @@ public static class BulkEndpoints
         // All tasks must exist, share one workspace in which the caller is Member or above, and be in spaces they can see.
         if (tasks.Count != ids.Count) throw new NotFoundException();
         var listIds = tasks.Values.Select(t => t.ListId).Distinct().ToList();
-        var workspaceId = await access.RequireListsAsync(listIds, WorkspaceRole.Member);
+        // The access check also says which of the tasks' creators and assignees can see each list: the watchers, who
+        // hear about the changes.
+        var involved = tasks.Values.SelectMany(t => t.Assignees.Select(a => a.UserId).Append(t.CreatedById)).ToHashSet();
+        var (workspaceId, canSee) = await access.RequireListsAsync(listIds, WorkspaceRole.Member, involved);
 
         var pairs = ids.Select((id, i) => (tasks[id], TaskChange.Parse(items[i], TaskChangeKind.Bulk))).ToList();
         var now = Clock.Now();
+        var notifier = notifications.Start(now);
+        foreach (var task in tasks.Values)
+            notifier.Watch(task.Id, task.Assignees.Select(a => a.UserId).Append(task.CreatedById).Where(canSee[task.ListId].Contains));
         var patcher = await TaskPatcher.CreateAsync(db, access, workspaceId, new ActivityRecorder(db, access.UserId, now), now,
-            ClientDate.Today(http, now), pairs);
+            ClientDate.Today(http, now), pairs, notifier);
         foreach (var (task, change) in pairs) await patcher.ApplyAsync(task, change);
         await db.SaveChangesAsync();
         await tx.CommitAsync();

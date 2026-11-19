@@ -1,29 +1,55 @@
 <script setup lang="ts">
 // A comment in the activity feed (8.10): avatar, name, time, "(edited)", and the body as plain
-// text with clickable links (linkify, never v-html). The author's own comments reveal a "..." menu:
-// Edit (in place; Enter saves, Esc cancels) and Delete (with Undo).
+// text with clickable links (linkify, never v-html) and @mentions as chips (Features 2; a mention of
+// you is tinted). The author's own comments reveal a "..." menu: Edit (in place, with the @ list;
+// Enter saves, Esc cancels) and Delete (with Undo).
 import { computed, nextTick, ref } from 'vue'
 import { Ellipsis, Pencil, Trash2 } from '@lucide/vue'
 import { linkify } from '../../lib/html'
-import type { Comment } from '../../types'
+import { decodeMentions, encodeMentions, mentionSegments, type MentionPicks } from '../../lib/mentions'
+import { useMembers } from '../../stores/members'
+import { useSession } from '../../stores/session'
+import { useTasks } from '../../stores/tasks'
+import type { Comment, Uuid } from '../../types'
 import UiAvatar from '../ui/UiAvatar.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiIconButton from '../ui/UiIconButton.vue'
 import UiMenu from '../ui/UiMenu.vue'
-import UiTextarea from '../ui/UiTextarea.vue'
 import type { MenuItem } from '../ui/menu'
+import MentionTextarea from './MentionTextarea.vue'
 import RelativeTime from './RelativeTime.vue'
 import { MAX_COMMENT_LENGTH, useComments } from './useComments'
 
 const props = defineProps<{ comment: Comment; mine: boolean; sending: boolean }>()
 
 const comments = useComments()
+const members = useMembers()
+const session = useSession()
+const tasks = useTasks()
 const root = ref<HTMLElement | null>(null)
-const editor = ref<InstanceType<typeof UiTextarea> | null>(null)
+const editor = ref<InstanceType<typeof MentionTextarea> | null>(null)
 const editing = ref(false)
 const draft = ref('')
+const picks = ref<MentionPicks>({})
 
-const segments = computed(() => linkify(props.comment.body))
+/** The name as it was when the comment was written (the server sends it), else as it is now. */
+function nameOf(userId: Uuid): string {
+  return props.comment.mentions?.find((m) => m.userId === userId)?.displayName ?? members.nameOf(userId)
+}
+
+interface Segment {
+  text: string
+  href?: string
+  mention?: boolean
+  me?: boolean
+}
+
+const segments = computed<Segment[]>(() => {
+  const me = session.user?.id
+  return mentionSegments(props.comment.body, nameOf).flatMap<Segment>((s) =>
+    s.userId ? [{ text: s.text, mention: true, me: s.userId === me }] : linkify(s.text),
+  )
+})
 
 const items = computed<MenuItem[]>(() => [
   { id: 'edit', label: 'Edit', icon: Pencil, onSelect: () => void startEditing() },
@@ -32,7 +58,9 @@ const items = computed<MenuItem[]>(() => [
 ])
 
 async function startEditing(): Promise<void> {
-  draft.value = props.comment.body
+  const d = decodeMentions(props.comment.body, nameOf)
+  draft.value = d.text
+  picks.value = d.picks
   editing.value = true
   await nextTick()
   editor.value?.focus()
@@ -47,7 +75,7 @@ async function stopEditing(): Promise<void> {
 function save(): void {
   const text = draft.value.trim()
   if (!text) return
-  comments.edit(props.comment, text)
+  comments.edit(props.comment, encodeMentions(text, picks.value).body)
   void stopEditing()
 }
 
@@ -73,14 +101,14 @@ function onEscape(e: KeyboardEvent): void {
         </UiMenu>
       </div>
       <div v-if="editing" class="edit">
-        <UiTextarea
+        <MentionTextarea
           ref="editor"
           v-model="draft"
-          :rows="1"
-          :max-rows="8"
-          submit-on="enter"
+          v-model:picks="picks"
+          :list-id="tasks.get(comment.taskId)?.listId"
+          placement="bottom"
           :maxlength="MAX_COMMENT_LENGTH"
-          aria-label="Edit comment"
+          label="Edit comment"
           @submit="save"
           @escape="onEscape"
         />
@@ -92,6 +120,7 @@ function onEscape(e: KeyboardEvent): void {
       <p v-else class="body">
         <template v-for="(s, i) in segments" :key="i">
           <a v-if="s.href" class="link" :href="s.href" target="_blank" rel="noopener noreferrer nofollow">{{ s.text }}</a>
+          <span v-else-if="s.mention" class="mention" :class="{ 'is-me': s.me }">{{ s.text }}</span>
           <template v-else>{{ s.text }}</template>
         </template>
       </p>
@@ -162,6 +191,21 @@ function onEscape(e: KeyboardEvent): void {
 
 .link:hover {
   text-decoration-color: currentColor;
+}
+
+/* An @mention: a quiet accent chip; a mention of you is filled. */
+.mention {
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+}
+
+.mention.is-me {
+  background: var(--accent);
+  color: var(--accent-fg);
 }
 
 .edit {

@@ -6,8 +6,10 @@
 //   400ms after the last bump (fetchDetail queues behind the task's own requests, so it sees them).
 // - Back on the tab (focus or visibility) after more than 30s, it refetches (8.1).
 // - A 404 with no pending create marks the task missing.
+// - Opening a task reads its Inbox rows (Features 2): once per task opened, when its detail arrives.
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref, type ShallowRef } from 'vue'
 import { errorStatus } from '../../lib/async'
+import { useInbox } from '../../stores/inbox'
 import { useRecents } from '../../stores/recents'
 import { useSession } from '../../stores/session'
 import { useTasks } from '../../stores/tasks'
@@ -39,6 +41,7 @@ export function useTaskDetailData(taskId: Ref<Uuid>): TaskDetailData {
   const workspaces = useWorkspaces()
   const session = useSession()
   const recents = useRecents()
+  const inbox = useInbox()
 
   const detail = shallowRef<TaskDetail | null>(null)
   const requestedAt = ref(0)
@@ -53,6 +56,17 @@ export function useTaskDetailData(taskId: Ref<Uuid>): TaskDetailData {
   let again = false
   let timer: ReturnType<typeof setTimeout> | undefined
   let fetchedAt = 0
+  /** The generation whose Inbox rows were read. */
+  let readGen = -1
+
+  /** The task is on screen: what the Inbox says about it has been seen. */
+  function opened(d: TaskDetail): void {
+    if (d.workspaceId !== workspaces.currentId) return
+    recents.touchTask(tasks.get(d.task.id) ?? d.task)
+    if (readGen === gen) return
+    readGen = gen
+    inbox.markTaskRead(d.task.id)
+  }
 
   function clearTimer(): void {
     if (timer !== undefined) clearTimeout(timer)
@@ -81,7 +95,7 @@ export function useTaskDetailData(taskId: Ref<Uuid>): TaskDetailData {
         requestedAt.value = at
         missing.value = false
         error.value = null
-        if (d.workspaceId === workspaces.currentId) recents.touchTask(tasks.get(id) ?? d.task)
+        opened(d)
       },
       (err: unknown) => {
         if (mine !== gen) return
@@ -121,7 +135,7 @@ export function useTaskDetailData(taskId: Ref<Uuid>): TaskDetailData {
       fetchedAt = cached?.at ?? 0
       if (cached && Date.now() - cached.at < FRESH_MS) {
         settleLocal(cached.detail)
-        if (cached.detail.workspaceId === workspaces.currentId) recents.touchTask(tasks.get(id) ?? cached.detail.task)
+        opened(cached.detail)
         return
       }
       run()

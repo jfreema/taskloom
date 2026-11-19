@@ -7,8 +7,9 @@ import { appRouter } from '../composables/appRouter'
 import { useDelayedDelete } from '../composables/useDelayedDelete'
 import { useToast } from '../composables/useToast'
 import { errorStatus, handled } from '../lib/async'
-import type { AuthProviders, DevLoginRequest, Me, UpdateMeRequest, User } from '../types'
+import type { AuthProviders, DevLoginRequest, Me, UpdateMeRequest, UpdateNotificationSettingsRequest, User } from '../types'
 import { useAdminUsers } from './adminUsers'
+import { useInbox } from './inbox'
 import { useMembers } from './members'
 import { useRecents } from './recents'
 import { useSelection } from './selection'
@@ -16,6 +17,15 @@ import { useTags } from './tags'
 import { useTasks } from './tasks'
 import { useUi } from './ui'
 import { useWorkspaces } from './workspaces'
+
+/** This browser's IANA time zone ("America/Chicago"), or null when it won't say. */
+export function browserTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
+}
 
 export const useSession = defineStore('session', () => {
   const toast = useToast()
@@ -36,6 +46,7 @@ export const useSession = defineStore('session', () => {
     useRecents().reset()
     useUi().reset()
     useAdminUsers().reset()
+    useInbox().reset()
   }
 
   /** GET /api/me. A 401 leaves `user` null; never rejects. */
@@ -47,6 +58,7 @@ export const useSession = defineStore('session', () => {
         if (user.value && user.value.id !== me.id) resetStores()
         user.value = me
         error.value = null
+        syncTimeZone(me)
       } catch (err) {
         if (errorStatus(err) === 401) {
           if (user.value) resetStores()
@@ -75,6 +87,7 @@ export const useSession = defineStore('session', () => {
         user.value = me
         loaded.value = true
         error.value = null
+        syncTimeZone(me)
       }),
     )
   }
@@ -85,7 +98,7 @@ export const useSession = defineStore('session', () => {
       return await api.get<Me>('/api/me', { ignoreUnauthorized: true })
     } catch {
       // Signed in all the same. Without the flag the Admin settings stay hidden until the next load().
-      return { ...signedIn, isSiteAdmin: false, photoChosen: false }
+      return { ...signedIn, isSiteAdmin: false, photoChosen: false, timeZone: null, emailMentions: true, emailReminders: true, emailConfigured: false }
     }
   }
 
@@ -145,6 +158,44 @@ export const useSession = defineStore('session', () => {
     )
   }
 
+  /**
+   * PATCH /api/me/notifications: which emails to send. The switch moves at once and moves back if
+   * the server refuses. Rejects with the ApiError (the settings page shows it).
+   */
+  function updateNotifications(r: UpdateNotificationSettingsRequest): Promise<void> {
+    const previous = user.value
+    if (previous) user.value = { ...previous, ...r }
+    return handled(
+      api.patch<Me>('/api/me/notifications', r).then(
+        (me) => {
+          if (user.value?.id === me.id) user.value = me
+        },
+        (err: unknown) => {
+          if (previous && user.value?.id === previous.id) user.value = { ...user.value, emailMentions: previous.emailMentions, emailReminders: previous.emailReminders, timeZone: previous.timeZone }
+          throw err
+        },
+      ),
+    )
+  }
+
+  /**
+   * Due-date reminders go out in the morning where you are, so the server keeps this browser's
+   * time zone. Sent once per sign-in or reload, only when it differs; quiet, because a refusal
+   * (a zone the server doesn't know) only means reminders keep the old zone.
+   */
+  let zoneSent: string | null = null
+  function syncTimeZone(me: Me): void {
+    const zone = browserTimeZone()
+    if (!zone || zone === me.timeZone || zoneSent === `${me.id} ${zone}`) return
+    zoneSent = `${me.id} ${zone}`
+    api.patch<Me>('/api/me/notifications', { timeZone: zone }).then(
+      (next) => {
+        if (user.value?.id === next.id) user.value = { ...user.value, timeZone: next.timeZone }
+      },
+      () => undefined,
+    )
+  }
+
   /** A new photo, or none, for the signed-in user, mirrored into the members lists. */
   function applyPhoto(me: Me): void {
     if (user.value && user.value.id !== me.id) return
@@ -183,5 +234,5 @@ export const useSession = defineStore('session', () => {
     return handled(providersCache)
   }
 
-  return { user, loaded, error, load, devLogin, logout, updateMe, uploadPhoto, removePhoto, signOutOthers, providers }
+  return { user, loaded, error, load, devLogin, logout, updateMe, updateNotifications, uploadPhoto, removePhoto, signOutOthers, providers }
 })

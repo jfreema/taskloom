@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using Taskloom.Api.Auth;
+using Taskloom.Api.Notifications;
 using Taskloom.Infrastructure;
 
 namespace Taskloom.Api.Endpoints;
@@ -47,7 +48,7 @@ public static class PhotoEndpoints
 
         // The web app sends a 256-pixel square JPEG it made from the chosen picture; any JPEG, PNG, WebP or GIF within
         // the limits is taken as it is.
-        api.MapPost("/me/photo", async (IFormFile file, Access access, TaskloomDbContext db, AuthOptions options, CancellationToken ct) =>
+        api.MapPost("/me/photo", async (IFormFile file, Access access, TaskloomDbContext db, AuthOptions options, NotificationOptions notifications, CancellationToken ct) =>
         {
             if (file.Length == 0) return Problems.BadRequest(UserPhotos.NotAnImageMessage);
             if (file.Length > UserPhotos.MaxBytes) return Problems.BadRequest(UserPhotos.TooLargeMessage);
@@ -60,17 +61,17 @@ public static class PhotoEndpoints
             await UserPhotos.SetAsync(db, user, data, image, UserPhotos.UploadSource, Clock.Now(), ct);
             user.PhotoChosen = true;
             await db.SaveChangesAsync(ct);
-            return Results.Ok(WorkspaceEndpoints.Me(user, options));
+            return Results.Ok(WorkspaceEndpoints.Me(user, options, notifications));
         }).DisableAntiforgery().WithMetadata(new LargeBody(UploadBodyBytes, UserPhotos.TooLargeMessage));
 
         // Back to initials, which signing in then keeps.
-        api.MapDelete("/me/photo", async (Access access, TaskloomDbContext db, AuthOptions options, CancellationToken ct) =>
+        api.MapDelete("/me/photo", async (Access access, TaskloomDbContext db, AuthOptions options, NotificationOptions notifications, CancellationToken ct) =>
         {
             var user = await db.Users.FirstOrDefaultAsync(u => u.Id == access.UserId, ct) ?? throw new UnauthorizedAccessException();
             await UserPhotos.RemoveAsync(db, user, ct);
             user.PhotoChosen = true;
             await db.SaveChangesAsync(ct);
-            return Results.Ok(WorkspaceEndpoints.Me(user, options));
+            return Results.Ok(WorkspaceEndpoints.Me(user, options, notifications));
         });
     }
 }

@@ -83,6 +83,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./views/AppShell.vue'),
     children: [
       { path: '', name: 'home', component: () => import('./views/HomeView.vue'), meta: { title: 'Home' } },
+      { path: 'inbox', name: 'inbox', component: () => import('./views/InboxView.vue'), meta: { title: 'Inbox' } },
       {
         path: 'l/:listId',
         name: 'list-default',
@@ -129,6 +130,12 @@ const routes: RouteRecordRaw[] = [
             name: 'settings-appearance',
             component: () => import('./views/settings/AppearanceSettings.vue'),
             meta: { title: 'Appearance' },
+          },
+          {
+            path: 'notifications',
+            name: 'settings-notifications',
+            component: () => import('./views/settings/NotificationSettings.vue'),
+            meta: { title: 'Notifications' },
           },
           {
             path: 'workspace',

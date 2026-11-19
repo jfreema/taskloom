@@ -129,4 +129,72 @@ public class MigrationTests
             await db.Database.EnsureDeletedAsync();
         }
     }
+
+    [Fact]
+    public async Task Notifications_migration_keeps_users_and_comments_and_turns_emails_on()
+    {
+        const string before = "20261119031049_ProfilePhotosAndListLooks";
+        var database = $"taskloom_mig_{Guid.NewGuid():N}";
+        var options = new DbContextOptionsBuilder<TaskloomDbContext>().UseNpgsql($"{TaskloomFactory.DatabaseServer};Database={database}").Options;
+        await using var db = new TaskloomDbContext(options);
+        try
+        {
+            await db.GetService<IMigrator>().MigrateAsync(before);
+            Guid user = Guid.NewGuid(), other = Guid.NewGuid(), workspace = Guid.NewGuid(), space = Guid.NewGuid(), list = Guid.NewGuid(),
+                status = Guid.NewGuid(), task = Guid.NewGuid(), comment = Guid.NewGuid();
+            var created = new DateTimeOffset(2026, 11, 18, 9, 0, 0, TimeSpan.Zero);
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO users ("Id", "Email", "DisplayName", "CreatedAt", "PhotoChosen")
+                VALUES ({user}, 'kept@example.com', 'Kept', {created}, false), ({other}, 'other@example.com', 'Other', {created}, false)
+                """);
+            await db.Database.ExecuteSqlAsync($"""INSERT INTO workspaces ("Id", "Name", "CreatedAt") VALUES ({workspace}, 'Kept workspace', {created})""");
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO workspace_members ("WorkspaceId", "UserId", "Role", "JoinedAt") VALUES ({workspace}, {user}, 'Owner', {created}), ({workspace}, {other}, 'Member', {created})
+                """);
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO spaces ("Id", "WorkspaceId", "Name", "Color", "Position", "IsPrivate") VALUES ({space}, {workspace}, 'Personal', '#14998A', 1, false)
+                """);
+            await db.Database.ExecuteSqlAsync($"""INSERT INTO lists ("Id", "SpaceId", "Name", "Position") VALUES ({list}, {space}, 'Tasks', 1)""");
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO list_statuses ("Id", "ListId", "Name", "Color", "Category", "Position") VALUES ({status}, {list}, 'To do', '#7A868C', 'NotStarted', 1)
+                """);
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO tasks ("Id", "ListId", "StatusId", "Title", "Description", "DescriptionText", "Priority", "Position", "CreatedById", "CreatedAt", "UpdatedAt")
+                VALUES ({task}, {list}, {status}, 'Kept task', '', '', 'None', 1, {user}, {created}, {created})
+                """);
+            // A comment from before mentions existed, with text that happens to look like one.
+            var body = $"Ask <@{other:D}> about it";
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO task_comments ("Id", "TaskId", "AuthorId", "Body", "CreatedAt") VALUES ({comment}, {task}, {user}, {body}, {created})
+                """);
+
+            await db.GetService<IMigrator>().MigrateAsync();
+
+            // Everyone starts with both kinds of email on, no time zone (UTC until their browser says) and no reminder sent.
+            var users = await db.Users.AsNoTracking().OrderBy(u => u.Email).ToListAsync();
+            Assert.Equal(["kept@example.com", "other@example.com"], users.Select(u => u.Email).ToArray());
+            Assert.All(users, u => Assert.Equal((true, true, null, null), (u.EmailMentions, u.EmailReminders, u.TimeZone, (DateOnly?)u.RemindedOn)));
+            // Old comments are kept as they were, mention nobody, and nobody has an Inbox row yet.
+            var kept = await db.Comments.AsNoTracking().Include(c => c.Mentions).SingleAsync();
+            Assert.Equal((body, 0), (kept.Body, kept.Mentions.Count));
+            Assert.Equal(0, await db.Notifications.CountAsync());
+
+            // The new tables take rows, and the rows go with their comment, their task and their reader.
+            db.CommentMentions.Add(new Domain.CommentMention { CommentId = comment, UserId = other });
+            db.Notifications.Add(new Domain.Notification { UserId = other, TaskId = task, ActorId = user, Kind = Domain.NotificationKind.Mentioned, CommentId = comment, ToValue = new string('x', 500), CreatedAt = created });
+            db.Notifications.Add(new Domain.Notification { UserId = other, TaskId = task, ActorId = user, Kind = Domain.NotificationKind.Assigned, Email = Domain.NotificationEmail.Pending, CreatedAt = created });
+            db.Notifications.Add(new Domain.Notification { UserId = user, TaskId = task, Kind = Domain.NotificationKind.DueToday, ToValue = "2026-11-18", CreatedAt = created });
+            await db.SaveChangesAsync();
+            await db.Comments.Where(c => c.Id == comment).ExecuteDeleteAsync();
+            Assert.Equal((0, 2), (await db.CommentMentions.CountAsync(), await db.Notifications.CountAsync()));
+            await db.Users.Where(u => u.Id == other).ExecuteDeleteAsync();
+            Assert.Equal(Domain.NotificationKind.DueToday, (await db.Notifications.AsNoTracking().SingleAsync()).Kind);
+            await db.Tasks.Where(t => t.Id == task).ExecuteDeleteAsync();
+            Assert.Equal(0, await db.Notifications.CountAsync());
+        }
+        finally
+        {
+            await db.Database.EnsureDeletedAsync();
+        }
+    }
 }

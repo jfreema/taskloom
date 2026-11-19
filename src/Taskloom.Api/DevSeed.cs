@@ -8,7 +8,7 @@ namespace Taskloom.Api;
 /// <summary>
 /// POST /api/dev/seed (spec 11.3): adds a realistic copy of sample content to a workspace, with dates relative to the
 /// server's current UTC date. Development and the end-to-end tests only. Each call adds a new copy (no idempotency);
-/// the shared people and tags are reused, so parallel seeds don't collide.
+/// the shared people and tags are reused, so parallel seeds don't collide. The caller's Inbox gets three unread rows.
 /// </summary>
 public class DevSeed(TaskloomDbContext db)
 {
@@ -142,7 +142,7 @@ public class DevSeed(TaskloomDbContext db)
         // ---- Named tasks (11.3) ----
         var onboarding = AddTask(website, InProgress(websiteStatuses), "Write onboarding guide", today, TaskPriority.High,
             [me, ana.Id], ["design", "docs"], tags, description: OnboardingDescription);
-        AddTask(website, Review(websiteStatuses), "Fix sign-in redirect", today.AddDays(-1), TaskPriority.Urgent, Me(), ["bug"], tags);
+        var signIn = AddTask(website, Review(websiteStatuses), "Fix sign-in redirect", today.AddDays(-1), TaskPriority.Urgent, Me(), ["bug"], tags);
         AddTask(website, ToDo(websiteStatuses), "Plan Q1 roadmap", today.AddDays(3), TaskPriority.Normal, [], [], tags);
         AddTask(website, ToDo(websiteStatuses), "Update pricing page", today.AddDays(10), TaskPriority.None, Ana(), ["design"], tags);
         AddTask(website, Done(websiteStatuses), "Set up analytics", today.AddDays(-3), TaskPriority.None, Me(), [], tags, completedAt: _now.AddDays(-3));
@@ -165,9 +165,22 @@ public class DevSeed(TaskloomDbContext db)
         AddTask(website, ToDo(websiteStatuses), "Review with Ana", null, TaskPriority.None, [], [], tags,
             parent: onboarding, createdAt: subtaskTime.AddSeconds(2));
 
+        var anaComment = new TaskComment { TaskId = onboarding.Id, AuthorId = ana.Id, Body = "Looks good, can we add screenshots?", CreatedAt = _now.AddMinutes(-10) };
         db.Comments.AddRange(
             new TaskComment { TaskId = onboarding.Id, AuthorId = me, Body = "Draft is in the shared folder, comments welcome.", CreatedAt = At(yesterday, 15) },
-            new TaskComment { TaskId = onboarding.Id, AuthorId = ana.Id, Body = "Looks good, can we add screenshots?", CreatedAt = _now.AddMinutes(-10) });
+            anaComment);
+
+        // The caller's Inbox (Features 2), as this content would have left it: Ana's comment, and this morning's
+        // reminders for a task due today and one that became overdue. Unread, and never emailed.
+        var reminded = _now.AddMinutes(-30);
+        db.Notifications.AddRange(
+            new Notification
+            {
+                UserId = me, TaskId = onboarding.Id, ActorId = ana.Id, Kind = NotificationKind.Commented,
+                ToValue = anaComment.Body, CommentId = anaComment.Id, CreatedAt = anaComment.CreatedAt,
+            },
+            new Notification { UserId = me, TaskId = onboarding.Id, Kind = NotificationKind.DueToday, ToValue = IsoDate(today), CreatedAt = reminded.AddTicks(10) },
+            new Notification { UserId = me, TaskId = signIn.Id, Kind = NotificationKind.Overdue, ToValue = IsoDate(yesterday), CreatedAt = reminded });
 
         string TagName(string normalized) => tags.TryGetValue(normalized, out var t) ? t.Name : normalized;
         (TaskActivityKind Kind, string? From, string? To, Guid Actor)[] history =
@@ -265,6 +278,9 @@ public class DevSeed(TaskloomDbContext db)
             .Select(name => new TaskTag { TaskId = task.Id, TagId = tags[name].Id }));
         return task;
     }
+
+    /// <summary>A date as reminder rows keep it (<see cref="Jobs.ReminderJob"/> writes the same, so it never repeats these).</summary>
+    private static string IsoDate(DateOnly date) => date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 
     private double NextPosition(Guid groupId)
     {

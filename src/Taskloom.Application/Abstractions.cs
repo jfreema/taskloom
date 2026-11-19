@@ -12,8 +12,17 @@ public interface IFileStore
     Task DeleteAsync(string key, CancellationToken ct = default);
 }
 
-/// <summary>Outbound email (notifications, invites). Not wired to a provider yet.</summary>
+/// <summary>One email to one person, as HTML with the same content in plain text.</summary>
+/// <param name="To">The recipient's address.</param>
+/// <param name="ToName">Their display name, for the To header.</param>
+public sealed record EmailMessage(string To, string? ToName, string Subject, string Html, string Text);
+
+/// <summary>
+/// Outbound email (notifications and due-date reminders). Implementations live in adapter projects
+/// (Taskloom.Infrastructure has one that only logs and one for any SMTP server), picked by Email:Provider, so the app
+/// never references a mail service directly. A send that fails throws; the caller retries later.
+/// </summary>
 public interface IEmailSender
 {
-    Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default);
+    Task SendAsync(EmailMessage message, CancellationToken ct = default);
 }

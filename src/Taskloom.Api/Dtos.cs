@@ -16,7 +16,13 @@ public record UserDto(Guid Id, string Email, string DisplayName, string? PhotoUr
 /// <summary>GET and PATCH /api/me, and the photo endpoints: the signed-in user.</summary>
 /// <param name="IsSiteAdmin">Their email is in Auth:SiteAdmins, so the app shows Settings › People.</param>
 /// <param name="PhotoChosen">They uploaded or removed their photo by hand, so signing in no longer replaces it.</param>
-public record MeDto(Guid Id, string Email, string DisplayName, bool IsSiteAdmin, string? PhotoUrl, bool PhotoChosen);
+/// <param name="TimeZone">Their IANA time zone as last reported by their browser, or null; it sets when their morning reminder goes out.</param>
+/// <param name="EmailMentions">Email them when someone assigns them a task or mentions them.</param>
+/// <param name="EmailReminders">Email them each morning about tasks due that day or newly overdue.</param>
+/// <param name="EmailConfigured">This server sends email (Email:Provider isn't "Log"); otherwise the two settings do nothing yet.</param>
+public record MeDto(
+    Guid Id, string Email, string DisplayName, bool IsSiteAdmin, string? PhotoUrl, bool PhotoChosen,
+    string? TimeZone, bool EmailMentions, bool EmailReminders, bool EmailConfigured);
 
 /// <param name="Pending">The user has no sign-in identity yet (invited, never signed in).</param>
 /// <param name="Disabled">A site admin turned the account off; they stay a member.</param>
@@ -64,7 +70,10 @@ public record TaskDto(
     RepeatDto? Repeat, Guid? NextRepeatId);
 
 public record TaskRefDto(Guid Id, string Title, Guid ListId);
-public record CommentDto(Guid Id, Guid TaskId, UserDto Author, string Body, DateTimeOffset CreatedAt, DateTimeOffset? EditedAt);
+/// <summary>Someone a comment mentions: its body holds <c>&lt;@UserId&gt;</c> where "@DisplayName" shows.</summary>
+public record MentionDto(Guid UserId, string DisplayName);
+/// <param name="Body">Plain text; a mention is the token <c>&lt;@user id&gt;</c> (see <paramref name="Mentions"/>).</param>
+public record CommentDto(Guid Id, Guid TaskId, UserDto Author, string Body, DateTimeOffset CreatedAt, DateTimeOffset? EditedAt, List<MentionDto> Mentions);
 public record AttachmentDto(Guid Id, Guid TaskId, string FileName, string ContentType, long SizeBytes, Guid UploadedById, DateTimeOffset CreatedAt);
 public record ActivityDto(Guid Id, Guid TaskId, UserDto Actor, TaskActivityKind Kind, string? From, string? To, DateTimeOffset CreatedAt);
 
@@ -75,6 +84,20 @@ public record TaskDetailDto(
     List<TaskDto> Subtasks, List<CommentDto> Comments, List<AttachmentDto> Attachments, List<ActivityDto> Activity);
 
 public record WorkspaceTasksDto(List<TaskDto> Tasks, List<TaskRefDto> Parents);
+
+/// <summary>A row of the Inbox (Features 2).</summary>
+/// <param name="TaskTitle">The task's title now, not when it happened.</param>
+/// <param name="Actor">Who did it; null for the morning reminders (DueToday and Overdue).</param>
+/// <param name="From">The value before, in the formats of <see cref="ActivityValues"/>; null when there was none.</param>
+/// <param name="To">The value after; the comment as one line of plain text for Mentioned and Commented; the due date for reminders.</param>
+public record NotificationDto(
+    Guid Id, NotificationKind Kind, Guid TaskId, string TaskTitle, Guid ListId, UserDto? Actor,
+    string? From, string? To, Guid? CommentId, DateTimeOffset CreatedAt, DateTimeOffset? ReadAt);
+/// <summary>GET /api/workspaces/{id}/notifications: a page of the Inbox, newest first.</summary>
+/// <param name="Unread">Every unread row of the caller in this workspace, not only this page's.</param>
+/// <param name="HasMore">Older rows exist: ask again with <c>before</c> set to the last row's createdAt.</param>
+public record NotificationsDto(List<NotificationDto> Items, int Unread, bool HasMore);
+public record NotificationCountDto(int Unread);
 public record BulkUpdateResultDto(List<TaskDto> Tasks);
 public record AuthProviderDto(string Key, string DisplayName);
 public record AuthProvidersDto(bool DevLogin, List<AuthProviderDto> Providers);
@@ -87,6 +110,17 @@ public record AuthProvidersDto(bool DevLogin, List<AuthProviderDto> Providers);
 public enum Placement { Top, Bottom }
 
 public record UpdateMeRequest(string? DisplayName);
+/// <summary>PATCH /api/me/notifications: only the properties sent change.</summary>
+/// <param name="TimeZone">An IANA time zone name such as "America/Chicago" (the web app sends the browser's).</param>
+public record UpdateNotificationSettingsRequest(bool? EmailMentions, bool? EmailReminders, string? TimeZone);
+/// <summary>
+/// POST /api/notifications/read: marks the caller's own rows read (or unread with <c>read: false</c>), either the ones
+/// in <paramref name="Ids"/> or every one about <paramref name="TaskId"/>. Rows of other people are left alone.
+/// </summary>
+public record MarkNotificationsRequest(List<Guid>? Ids, Guid? TaskId, bool? Read);
+/// <summary>POST /api/workspaces/{id}/notifications/read-all.</summary>
+/// <param name="Before">Only rows created up to this time: the newest one the person has been shown.</param>
+public record ReadAllNotificationsRequest(DateTimeOffset? Before);
 public record CreateWorkspaceRequest(Guid? Id, string? Name);
 public record RenameRequest(string? Name);
 public record AddMemberRequest(string? Email, WorkspaceRole Role, string? DisplayName);

@@ -8,6 +8,8 @@ using Npgsql;
 using Taskloom.Api;
 using Taskloom.Api.Auth;
 using Taskloom.Api.Endpoints;
+using Taskloom.Api.Jobs;
+using Taskloom.Api.Notifications;
 using Taskloom.Application;
 using Taskloom.Cloud.Azure;
 using Taskloom.Infrastructure;
@@ -38,7 +40,11 @@ switch ((config["FileStore:Provider"] ?? "Local").ToLowerInvariant())
         builder.Services.AddSingleton<IFileStore>(new LocalDiskFileStore(root));
         break;
 }
-builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
+// Features 2: the Inbox, its emails (Email:Provider "Log" or "Smtp") and the jobs that send them and the reminders.
+builder.Services.AddTaskloomEmail(config);
+builder.Services.AddSingleton(NotificationOptions.From(config));
+builder.Services.AddScoped<NotifierFactory>();
+builder.Services.AddTaskloomJobs();
 builder.Services.AddAzureMonitorIfConfigured(config);
 
 // ---- Auth ----
@@ -80,6 +86,10 @@ if (authOptions.MicrosoftLacksTenant)
     app.Logger.LogWarning("Microsoft sign-in is off: set Auth:Microsoft:TenantId (ENTRA_TENANT_ID) to the Entra tenant id, a GUID.");
 if (authOptions.DevLogin.Enabled && !app.Environment.IsDevelopment())
     app.Logger.LogWarning("Dev login is on outside Development: anyone who can reach this server can sign in as any email address. Set Auth:DevLogin:Enabled to false anywhere real.");
+
+var notificationOptions = app.Services.GetRequiredService<NotificationOptions>();
+if (notificationOptions.EmailConfigured && notificationOptions.PublicUrl.Length == 0)
+    app.Logger.LogWarning("Emails go out without links: set App:PublicUrl to the address people open Taskloom at, like https://tasks.example.com.");
 
 if (config.GetValue("Database:MigrateOnStartup", true))
 {
@@ -162,6 +172,8 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/healthz");
 app.MapAuthEndpoints();
+// POST /jobs/run, for a scheduler; only there when Jobs:TriggerKey is set.
+app.MapJobEndpoints();
 
 var api = app.MapGroup("/api").RequireAuthorization().AddEndpointFilter<RequireTaskloomHeader>();
 api.MapWorkspaceEndpoints();
@@ -173,6 +185,7 @@ api.MapBulkEndpoints();
 api.MapCommentEndpoints();
 api.MapAttachmentEndpoints();
 api.MapPhotoEndpoints();
+api.MapNotificationEndpoints();
 // Development only: the path does not exist unless dev login is enabled.
 if (authOptions.DevLogin.Enabled) api.MapDevEndpoints();
 // Unknown /api paths are 404, never the SPA; known paths with the wrong method or content type are 405 or 415.

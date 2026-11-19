@@ -131,4 +131,34 @@ public class RoundTripTests(RoundTripTests.Site factory) : IClassFixture<RoundTr
         await TripsAsync(11, c => c.BulkAsync(tasks.Take(2).Select(t => (object)new { id = t.Id, statusId = done }).ToArray()), user.Client);
         await TripsAsync(11, c => c.BulkAsync(tasks.Skip(2).Select(t => (object)new { id = t.Id, statusId = done }).ToArray()), user.Client);
     }
+
+    [Fact]
+    public async Task The_inbox_and_what_feeds_it_add_no_trips()
+    {
+        var user = await factory.NewUserAsync();
+        var (colleagueClient, colleague) = await factory.JoinAsync(user, WorkspaceRole.Member, "Colleague");
+        var (_, third) = await factory.JoinAsync(user, WorkspaceRole.Member, "Third");
+        var ws = user.Workspace.Id;
+        var task = await user.Client.CreateTaskAsync(user.List.Id, new { title = "Watched", assigneeIds = new[] { colleague.UserId, third.UserId } });
+
+        // Changes to a task other people are waiting on cost what they cost before Features 2: the people to tell are
+        // read with the access check, and their Inbox rows are saved with the change.
+        await TripsAsync(6, Patch(task.Id, new { statusId = user.Status("Done").Id }), user.Client);
+        await TripsAsync(4, Patch(task.Id, new { dueDate = "2026-12-01", priority = "High" }), user.Client);
+        await TripsAsync(6, c => c.PostAsJsonAsync($"/api/tasks/{task.Id}/move", new { statusId = user.Status("To do").Id }), user.Client);
+        // A comment: access with the people to tell, the author, the save. A mention is read in the same access check.
+        await TripsAsync(3, c => c.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new { body = "Any news?" }), user.Client);
+        await TripsAsync(3, c => c.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new { body = $"{Builders.At(third.UserId)} any news?" }), user.Client);
+        // And they did reach the Inbox.
+        Assert.Equal(7, await colleagueClient.UnreadAsync(ws));
+
+        // The sidebar's badge, asked for every minute by every open tab: one query.
+        await TripsAsync(1, Get($"/api/workspaces/{ws}/notifications/count"), colleagueClient);
+        // The Inbox page: membership with the unread count, then the page.
+        await TripsAsync(2, Get($"/api/workspaces/{ws}/notifications"), colleagueClient);
+        // Opening a task marks its rows read: one statement.
+        await TripsAsync(1, c => c.PostAsJsonAsync("/api/notifications/read", new { taskId = task.Id }), colleagueClient);
+        // Mark all as read: membership, then one statement.
+        await TripsAsync(2, c => c.PostAsJsonAsync($"/api/workspaces/{ws}/notifications/read-all", new { }), colleagueClient);
+    }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Taskloom.Api.Auth;
+using Taskloom.Api.Notifications;
 using Taskloom.Application;
 using Taskloom.Domain;
 using Taskloom.Infrastructure;
@@ -13,21 +14,37 @@ public static class WorkspaceEndpoints
 
     public static void MapWorkspaceEndpoints(this RouteGroupBuilder api)
     {
-        api.MapGet("/me", async (Access access, TaskloomDbContext db, AuthOptions options) =>
+        api.MapGet("/me", async (Access access, TaskloomDbContext db, AuthOptions options, NotificationOptions notifications) =>
         {
             var u = await db.Users.FirstOrDefaultAsync(x => x.Id == access.UserId);
             // A session whose user is gone is signed out: 401, without a body.
-            return u is null ? throw new UnauthorizedAccessException() : Results.Ok(Me(u, options));
+            return u is null ? throw new UnauthorizedAccessException() : Results.Ok(Me(u, options, notifications));
         });
 
-        api.MapPatch("/me", async (UpdateMeRequest req, Access access, TaskloomDbContext db, AuthOptions options) =>
+        api.MapPatch("/me", async (UpdateMeRequest req, Access access, TaskloomDbContext db, AuthOptions options, NotificationOptions notifications) =>
         {
             var name = Text.Require(req.DisplayName, Limits.Name, "Enter a display name.", "Display names can be up to 200 characters.");
             var u = await db.Users.FirstOrDefaultAsync(x => x.Id == access.UserId);
             if (u is null) throw new UnauthorizedAccessException();
             u.DisplayName = name;
             await db.SaveChangesAsync();
-            return Results.Ok(Me(u, options));
+            return Results.Ok(Me(u, options, notifications));
+        });
+
+        // Features 2: which emails the caller gets, and the time zone their browser is in (it decides when their morning
+        // reminder goes out). Only what is sent changes.
+        api.MapPatch("/me/notifications", async (UpdateNotificationSettingsRequest req, Access access, TaskloomDbContext db, AuthOptions options,
+            NotificationOptions notifications) =>
+        {
+            var zone = req.TimeZone?.Trim();
+            if (zone is not null && !TimeZones.IsKnown(zone)) throw ProblemException.BadRequest(TimeZones.UnknownMessage);
+            var u = await db.Users.FirstOrDefaultAsync(x => x.Id == access.UserId);
+            if (u is null) throw new UnauthorizedAccessException();
+            if (req.EmailMentions is { } mentions) u.EmailMentions = mentions;
+            if (req.EmailReminders is { } reminders) u.EmailReminders = reminders;
+            if (zone is not null) u.TimeZone = zone;
+            await db.SaveChangesAsync();
+            return Results.Ok(Me(u, options, notifications));
         });
 
         // Ends every other session of the caller (a browser they no longer use, a copied cookie); this one stays.
@@ -168,6 +185,10 @@ public static class WorkspaceEndpoints
             await db.SpaceMembers
                 .Where(x => x.UserId == userId && db.Spaces.Any(s => s.Id == x.SpaceId && s.WorkspaceId == id))
                 .ExecuteDeleteAsync();
+            // Their Inbox rows about this workspace go too, read or not: they can't see the tasks any more.
+            await db.Notifications
+                .Where(n => n.UserId == userId && db.Lists.Any(l => l.Id == n.Task!.ListId && l.Space!.WorkspaceId == id))
+                .ExecuteDeleteAsync();
             db.WorkspaceMembers.Remove(m);
             await db.SaveChangesAsync();
             await tx.CommitAsync();
@@ -175,8 +196,9 @@ public static class WorkspaceEndpoints
         });
     }
 
-    public static MeDto Me(User u, AuthOptions options) =>
-        new(u.Id, u.Email, u.DisplayName, options.IsSiteAdmin(u.Email), UserPhotos.UrlFor(u.Id, u.PhotoVersion), u.PhotoChosen);
+    public static MeDto Me(User u, AuthOptions options, NotificationOptions notifications) =>
+        new(u.Id, u.Email, u.DisplayName, options.IsSiteAdmin(u.Email), UserPhotos.UrlFor(u.Id, u.PhotoVersion), u.PhotoChosen,
+            u.TimeZone, u.EmailMentions, u.EmailReminders, notifications.EmailConfigured);
 
     private static bool IsAssignable(WorkspaceRole role) => role is WorkspaceRole.Admin or WorkspaceRole.Member or WorkspaceRole.Guest;
 }

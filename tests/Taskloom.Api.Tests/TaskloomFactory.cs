@@ -26,12 +26,14 @@ public class TaskloomFactory : WebApplicationFactory<Program>
 
     /// <summary>
     /// Extra configuration ("Auth:Microsoft:TenantId" and the like), read when the app starts. It starts with sessions
-    /// checked on every request and rate limiting off; tests of those change or remove these two.
+    /// checked on every request, rate limiting off and the job timer off (tests run jobs by hand, through
+    /// <c>JobRunner</c>); tests of those change or remove these.
     /// </summary>
     public Dictionary<string, string?> Settings { get; } = new()
     {
         ["Auth:Session:RecheckSeconds"] = "0",
         ["RateLimits:Enabled"] = "false",
+        ["Jobs:Enabled"] = "false",
     };
 
     /// <summary>Service registrations applied after the app's own, for example a static OpenID Connect configuration.</summary>

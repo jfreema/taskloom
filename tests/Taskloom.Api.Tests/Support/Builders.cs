@@ -87,6 +87,31 @@ public static class Builders
         return await (await client.PostAsync($"/api/tasks/{taskId}/attachments", form)).ReadAsync<AttachmentDto>();
     }
 
+    public static Task<HttpResponseMessage> PostCommentAsync(this HttpClient client, Guid taskId, string body) =>
+        client.PostAsJsonAsync($"/api/tasks/{taskId}/comments", new { body });
+
+    public static async Task<CommentDto> CommentAsync(this HttpClient client, Guid taskId, string body) =>
+        await (await client.PostCommentAsync(taskId, body)).ReadAsync<CommentDto>();
+
+    /// <summary>The token a comment's body carries for a mention of the person.</summary>
+    public static string At(Guid userId) => $"<@{userId:D}>";
+
+    /// <summary>A page of the Inbox, newest first.</summary>
+    public static async Task<NotificationsDto> InboxAsync(this HttpClient client, Guid workspaceId, string query = "") =>
+        await (await client.GetAsync($"/api/workspaces/{workspaceId}/notifications{query}")).ReadAsync<NotificationsDto>();
+
+    public static async Task<int> UnreadAsync(this HttpClient client, Guid workspaceId) =>
+        (await (await client.GetAsync($"/api/workspaces/{workspaceId}/notifications/count")).ReadAsync<NotificationCountDto>()).Unread;
+
+    public static Task<HttpResponseMessage> MarkReadAsync(this HttpClient client, object body) => client.PostAsJsonAsync("/api/notifications/read", body);
+
+    public static async Task<MeDto> NotificationSettingsAsync(this HttpClient client, object body) =>
+        await (await client.PatchAsJsonAsync("/api/me/notifications", body)).ReadAsync<MeDto>();
+
+    /// <summary>The person's Inbox rows, oldest first, straight from the database (with what the Inbox doesn't show: the email state).</summary>
+    public static Task<List<Notification>> NotificationRowsAsync(this TaskloomFactory factory, Guid userId) =>
+        factory.DbAsync(db => db.Notifications.AsNoTracking().Where(n => n.UserId == userId).OrderBy(n => n.CreatedAt).ThenBy(n => n.Id).ToListAsync());
+
     /// <summary>POST /api/dev/seed; returns the response so callers can check failures.</summary>
     public static Task<HttpResponseMessage> SeedAsync(this HttpClient client, Guid workspaceId, int? fillers = null) =>
         client.PostAsJsonAsync("/api/dev/seed", fillers is null ? new { workspaceId } : (object)new { workspaceId, fillers });

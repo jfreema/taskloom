@@ -9,13 +9,15 @@ defineProps<{
   description?: string
   /** aria-busy while the page's data loads. */
   busy?: boolean
+  /** The region's name when the title alone would repeat another landmark's (the toasts are "Notifications"). */
+  label?: string
 }>()
 
 const titleId = `${useId()}-title`
 </script>
 
 <template>
-  <section class="settings-page" :aria-labelledby="titleId" :aria-busy="busy ? 'true' : undefined">
+  <section class="settings-page" :aria-labelledby="label ? undefined : titleId" :aria-label="label" :aria-busy="busy ? 'true' : undefined">
     <header class="page-header">
       <div class="heading">
         <h2 :id="titleId" class="page-title">{{ title }}</h2>

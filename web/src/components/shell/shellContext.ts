@@ -8,10 +8,10 @@ import type { InjectionKey, Ref } from 'vue'
 export const contentPanelKey: InjectionKey<Ref<HTMLElement | null>> = Symbol('taskloom.contentPanel')
 
 /** The route names that show the phone "New task" button (3.6) and accept ?task= (3.2). */
-export const PANEL_ROUTE_NAMES: ReadonlySet<string> = new Set(['home', 'list'])
+export const PANEL_ROUTE_NAMES: ReadonlySet<string> = new Set(['home', 'inbox', 'list'])
 
-/** Routes that still work without a workspace: the profile and appearance settings. */
-export const WORKSPACE_FREE_ROUTES: ReadonlySet<string> = new Set(['settings-profile', 'settings-appearance'])
+/** Routes that still work without a workspace: the account's own settings. */
+export const WORKSPACE_FREE_ROUTES: ReadonlySet<string> = new Set(['settings-profile', 'settings-appearance', 'settings-notifications'])
 
 /**
  * Where a view's entry keys work (9.5, 9.6): focus is on the page (#main) but in none of its
