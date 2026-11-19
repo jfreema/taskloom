@@ -44,15 +44,11 @@ public static class BulkEndpoints
         // All tasks must exist, share one workspace in which the caller is Member or above, and be in spaces they can see.
         if (tasks.Count != ids.Count) throw new NotFoundException();
         var listIds = tasks.Values.Select(t => t.ListId).Distinct().ToList();
-        var workspaceIds = await db.Lists.Where(l => listIds.Contains(l.Id)).Select(l => l.Space!.WorkspaceId).Distinct().ToListAsync();
-        if (workspaceIds.Count != 1) throw new NotFoundException();
-        var role = await access.RequireWorkspaceAsync(workspaceIds[0]);
-        if (await access.VisibleListIds(workspaceIds[0]).CountAsync(l => listIds.Contains(l)) != listIds.Count) throw new NotFoundException();
-        if (role > WorkspaceRole.Member) throw new ForbiddenException();
+        var workspaceId = await access.RequireListsAsync(listIds, WorkspaceRole.Member);
 
         var pairs = ids.Select((id, i) => (tasks[id], TaskChange.Parse(items[i], TaskChangeKind.Bulk))).ToList();
         var now = Clock.Now();
-        var patcher = await TaskPatcher.CreateAsync(db, access, workspaceIds[0], new ActivityRecorder(db, access.UserId, now), now,
+        var patcher = await TaskPatcher.CreateAsync(db, access, workspaceId, new ActivityRecorder(db, access.UserId, now), now,
             ClientDate.Today(http, now), pairs);
         foreach (var (task, change) in pairs) await patcher.ApplyAsync(task, change);
         await db.SaveChangesAsync();

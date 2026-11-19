@@ -44,6 +44,11 @@ public sealed class TaskChange
     public List<Guid>? AddTagIds { get; private set; }
     public List<Guid>? RemoveTagIds { get; private set; }
 
+    /// <summary>True when the change sets, adds or removes assignees.</summary>
+    public bool ChangesAssignees => AssigneeIds is not null || AddAssigneeIds is not null || RemoveAssigneeIds is not null;
+    /// <summary>True when the change sets, adds or removes tags.</summary>
+    public bool ChangesTags => TagIds is not null || AddTagIds is not null || RemoveTagIds is not null;
+
     public const string StatusMessage = "Choose a status of this list.";
     public const string ListMessage = "Choose a list in this workspace.";
     private const string AssigneeIdsMessage = "assigneeIds must be a list of user ids.";
@@ -124,10 +129,11 @@ public sealed class TaskChange
 
 /// <summary>
 /// Applies <see cref="TaskChange"/>s with the rules of spec 5.5 "Patch task", for PATCH /api/tasks/{id} and
-/// POST /api/tasks/bulk alike. Everything it needs (the workspace's lists, statuses, members and tags, the subtasks
-/// of tasks moving list, and the edge positions of the statuses tasks may move into) is loaded once in
-/// <see cref="CreateAsync"/>, so applying makes no per-item queries. It only changes tracked entities and records
-/// activity; the caller saves, so a 400 from any item leaves nothing changed.
+/// POST /api/tasks/bulk alike. <see cref="CreateAsync"/> reads only what the changes need, each kind of thing once for
+/// all items: the lists and statuses a status or list change touches, the people and tags named, the subtasks of tasks
+/// moving list, and the edge positions of the statuses tasks may move into. A rename or a new due date reads nothing.
+/// Applying then makes no per-item queries. It only changes tracked entities and records activity; the caller saves,
+/// so a 400 from any item leaves nothing changed.
 /// </summary>
 public sealed class TaskPatcher
 {
@@ -165,39 +171,86 @@ public sealed class TaskPatcher
         _subtasks = subtasks;
         _positions = positions;
         _repeater = repeater;
+        foreach (var (listId, listStatuses) in _statusesByList) repeater.Know(listId, listStatuses);
     }
 
     public const string AssigneesMustBeMembers = "Everyone assigned must be a member of this workspace.";
     public const string TagsMustBelongToWorkspace = "Tags must belong to this workspace.";
     public const string AssigneesMustSeeSpace = "Only people in this private space can be assigned to its tasks.";
 
-    /// <param name="access">The caller: only the lists they can see are loaded, so a task can't move into a private space
+    /// <param name="access">The caller: only lists they can see are read, so a task can't move into a private space
     /// they aren't in.</param>
-    /// <param name="items">The tasks (tracked, with <c>Assignees</c> and <c>Tags</c> loaded) and their changes.</param>
+    /// <param name="items">The tasks (tracked) and their changes. A task's <c>Assignees</c> must be loaded when its change
+    /// touches them, and its <c>Tags</c> likewise.</param>
     /// <param name="today">The caller's own date (<see cref="ClientDate"/>), for repeating tasks.</param>
     public static async Task<TaskPatcher> CreateAsync(TaskloomDbContext db, Access access, Guid workspaceId, ActivityRecorder activity,
         DateTimeOffset now, DateOnly today, IReadOnlyList<(TaskItem Task, TaskChange Change)> items)
     {
-        var visibleListIds = access.VisibleListIds(workspaceId);
-        var lists = await db.Lists.AsNoTracking().Where(l => visibleListIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id);
-        var statuses = await db.Statuses.AsNoTracking().Where(s => visibleListIds.Contains(s.ListId)).ToListAsync();
-        var memberNames = await db.WorkspaceMembers.Where(m => m.WorkspaceId == workspaceId)
-            .Select(m => new { m.UserId, m.User!.DisplayName }).ToDictionaryAsync(m => m.UserId, m => m.DisplayName);
-        var tags = await db.Tags.AsNoTracking().Where(t => t.WorkspaceId == workspaceId).ToDictionaryAsync(t => t.Id);
-
-        // The people of each private space, read only when someone is being assigned: they alone may be.
-        var privatePeople = new Dictionary<Guid, HashSet<Guid>>();
-        if (items.Any(i => i.Change.AssigneeIds is { Count: > 0 } || i.Change.AddAssigneeIds is { Count: > 0 }))
+        // The lists, with their statuses, of tasks changing status or list or getting someone new (whose space decides
+        // who may be assigned), and the lists they move to. One query.
+        var listIds = new HashSet<Guid>();
+        foreach (var (task, change) in items)
         {
-            var rows = await db.Spaces.Where(s => s.WorkspaceId == workspaceId && s.IsPrivate)
-                .Select(s => new { s.Id, People = s.Members.Select(m => m.UserId).ToList() }).ToListAsync();
-            privatePeople = rows.ToDictionary(r => r.Id, r => r.People.ToHashSet());
+            if (change.StatusId is null && change.ListId is null && !Assigns(change)) continue;
+            listIds.Add(task.ListId);
+            if (change.ListId is { } target) listIds.Add(target);
+        }
+        var lists = new Dictionary<Guid, TaskList>();
+        var statuses = new List<ListStatus>();
+        var privateSpaces = new HashSet<Guid>();
+        if (listIds.Count > 0)
+        {
+            var visibleListIds = access.VisibleListIds(workspaceId);
+            var rows = await db.Lists.AsNoTracking().Where(l => listIds.Contains(l.Id) && visibleListIds.Contains(l.Id))
+                .Select(l => new { List = l, l.Space!.IsPrivate, Statuses = l.Statuses.ToList() }).ToListAsync();
+            foreach (var row in rows)
+            {
+                lists[row.List.Id] = row.List;
+                statuses.AddRange(row.Statuses);
+                if (row.IsPrivate) privateSpaces.Add(row.List.SpaceId);
+            }
         }
 
-        // Assignees who have left the workspace still need a name when they are removed.
-        var formerIds = items.SelectMany(i => i.Task.Assignees).Select(a => a.UserId).Where(u => !memberNames.ContainsKey(u)).Distinct().ToList();
-        var formerNames = formerIds.Count == 0 ? []
-            : await db.Users.Where(u => formerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName);
+        // The people named by assignee changes and the tasks' current assignees: who is a member, what they're called
+        // (including assignees who have since left the workspace, who still need a name when removed), and which of
+        // these private spaces they're in. One query, only when assignees change.
+        var memberNames = new Dictionary<Guid, string>();
+        var formerNames = new Dictionary<Guid, string>();
+        var privatePeople = privateSpaces.ToDictionary(s => s, _ => new HashSet<Guid>());
+        var assigneeItems = items.Where(i => i.Change.ChangesAssignees).ToList();
+        if (assigneeItems.Count > 0)
+        {
+            var current = assigneeItems.SelectMany(i => i.Task.Assignees).Select(a => a.UserId).ToHashSet();
+            var named = assigneeItems.SelectMany(i => (i.Change.AssigneeIds ?? []).Concat(i.Change.AddAssigneeIds ?? []).Concat(i.Change.RemoveAssigneeIds ?? []));
+            var userIds = named.Concat(current).Distinct().ToList();
+            var spaceIds = privateSpaces.ToList();
+            var people = await db.Users.Where(u => userIds.Contains(u.Id))
+                .Select(u => new
+                {
+                    u.Id,
+                    u.DisplayName,
+                    IsMember = db.WorkspaceMembers.Any(m => m.WorkspaceId == workspaceId && m.UserId == u.Id),
+                    PrivateSpaces = db.SpaceMembers.Where(m => m.UserId == u.Id && spaceIds.Contains(m.SpaceId)).Select(m => m.SpaceId).ToList(),
+                })
+                .ToListAsync();
+            foreach (var person in people)
+            {
+                if (person.IsMember) memberNames[person.Id] = person.DisplayName;
+                else if (current.Contains(person.Id)) formerNames[person.Id] = person.DisplayName;
+                foreach (var spaceId in person.PrivateSpaces) privatePeople[spaceId].Add(person.Id);
+            }
+        }
+
+        // The tags named by tag changes and the tasks' current tags (names for the activity rows). One query, only when
+        // tags change.
+        var tags = new Dictionary<Guid, Tag>();
+        var tagItems = items.Where(i => i.Change.ChangesTags).ToList();
+        if (tagItems.Count > 0)
+        {
+            var tagIds = tagItems.SelectMany(i => (i.Change.TagIds ?? []).Concat(i.Change.AddTagIds ?? []).Concat(i.Change.RemoveTagIds ?? [])
+                .Concat(i.Task.Tags.Select(t => t.TagId))).Distinct().ToList();
+            tags = await db.Tags.AsNoTracking().Where(t => t.WorkspaceId == workspaceId && tagIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id);
+        }
 
         // Subtasks move with a top-level task that changes list.
         var moving = items.Where(i => i.Change.ListId is { } l && l != i.Task.ListId && i.Task.ParentTaskId is null)
@@ -218,6 +271,9 @@ public sealed class TaskPatcher
             subtasks.ToLookup(t => t.ParentTaskId!.Value), positions, new Repeater(db, activity, now, today));
     }
 
+    /// <summary>True when the change may add assignees, who must be able to see the task's space.</summary>
+    private static bool Assigns(TaskChange change) => change.AssigneeIds is { Count: > 0 } || change.AddAssigneeIds is { Count: > 0 };
+
     /// <summary>
     /// Applies one change to a tracked task. Throws a 400 <see cref="ProblemException"/> when a rule fails. A repeating
     /// task that this completes creates its next task (<see cref="Repeater"/>), after every other field is applied.
@@ -225,7 +281,6 @@ public sealed class TaskPatcher
     public async Task ApplyAsync(TaskItem task, TaskChange change)
     {
         var changed = false;
-        var oldStatus = _statuses[task.StatusId];
         var before = Repeater.Snapshot(task);
 
         // ---- list and status (resolved first: a statusId must belong to listId's list when both are sent) ----
@@ -235,6 +290,8 @@ public sealed class TaskPatcher
             if (task.ParentTaskId is not null) throw ProblemException.BadRequest("Subtasks move with their parent.");
             if (!_lists.TryGetValue(listId, out targetList)) throw ProblemException.BadRequest(TaskChange.ListMessage);
         }
+        // Read only for a change of status or list, the changes its list's statuses were loaded for.
+        var oldStatus = change.StatusId is not null || targetList is not null ? _statuses[task.StatusId] : null;
         ListStatus? newStatus = null;
         if (change.StatusId is { } statusId)
         {
@@ -243,7 +300,7 @@ public sealed class TaskPatcher
         }
         else if (targetList is not null)
         {
-            newStatus = MapStatus(oldStatus, targetList.Id);
+            newStatus = MapStatus(oldStatus!, targetList.Id);
         }
 
         if (targetList is not null)
@@ -264,7 +321,7 @@ public sealed class TaskPatcher
 
         if (newStatus is not null && newStatus.Id != task.StatusId)
         {
-            _activity.Record(task.Id, TaskActivityKind.StatusChanged, oldStatus.Name, newStatus.Name);
+            _activity.Record(task.Id, TaskActivityKind.StatusChanged, oldStatus!.Name, newStatus.Name);
             SetStatus(task, oldStatus, newStatus, _now);
             // A task moved to another list goes to the bottom of its status there; a re-statused one to the top.
             if (change.Position is null)
@@ -374,7 +431,7 @@ public sealed class TaskPatcher
         // Only people being added must be members who can see the task (in its new list, when it moves); an assignee who
         // has left the workspace, or can no longer see the task, can stay or go.
         if (added.Any(u => !_memberNames.ContainsKey(u))) throw ProblemException.BadRequest(AssigneesMustBeMembers);
-        if (_privatePeople.TryGetValue(_lists[task.ListId].SpaceId, out var people) && added.Any(u => !people.Contains(u)))
+        if (added.Count > 0 && _privatePeople.TryGetValue(_lists[task.ListId].SpaceId, out var people) && added.Any(u => !people.Contains(u)))
             throw ProblemException.BadRequest(AssigneesMustSeeSpace);
 
         foreach (var userId in added)

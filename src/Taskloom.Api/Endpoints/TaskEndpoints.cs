@@ -121,16 +121,23 @@ public static class TaskEndpoints
     }
 
     // ---- GET /api/tasks/{id} ----
+    // Five queries whatever the task: the access check with the description and creator, the task with its subtasks (or
+    // its parent), then the comments, the files and the activity.
     private static async Task<TaskDetailDto> DetailAsync(Guid id, Access access, TaskloomDbContext db, CancellationToken ct)
     {
-        var (task, workspaceId) = await access.RequireTaskAsync(id);
-        var dto = await TaskProjections.LoadAsync(db, id, ct);
-        var createdBy = await db.Users.Where(u => u.Id == task.CreatedById)
-            .Select(u => new UserDto(u.Id, u.Email, u.DisplayName, UserPhotos.UrlFor(u.Id, u.PhotoVersion))).FirstAsync(ct);
-        var parent = task.ParentTaskId is null ? null
-            : await db.Tasks.Where(t => t.Id == task.ParentTaskId).Select(t => new TaskRefDto(t.Id, t.Title, t.ListId)).FirstOrDefaultAsync(ct);
-        var subtasks = await db.Tasks.Where(t => t.ParentTaskId == id).InOrder()
-            .Select(TaskProjections.ToDto).AsSplitQuery().ToListAsync(ct);
+        var (head, workspaceId) = await access.RequireTaskAsync(id, t => new
+        {
+            t.Description,
+            t.ParentTaskId,
+            CreatedBy = db.Users.Where(u => u.Id == t.CreatedById).Select(u => new { u.Id, u.Email, u.DisplayName, u.PhotoVersion }).First(),
+        }, ct: ct);
+        var createdBy = new UserDto(head.CreatedBy.Id, head.CreatedBy.Email, head.CreatedBy.DisplayName, UserPhotos.UrlFor(head.CreatedBy.Id, head.CreatedBy.PhotoVersion));
+        // A task has a handful of subtasks and a subtask has none, so one query (not split) brings the family.
+        var family = await db.Tasks.Where(t => t.Id == id || t.ParentTaskId == id || t.Id == head.ParentTaskId).InOrder()
+            .Select(TaskProjections.ToDto).ToListAsync(ct);
+        var dto = family.SingleOrDefault(t => t.Id == id) ?? throw new NotFoundException();
+        var parent = family.SingleOrDefault(t => t.Id == head.ParentTaskId) is { } p ? new TaskRefDto(p.Id, p.Title, p.ListId) : null;
+        var subtasks = family.Where(t => t.ParentTaskId == id).ToList();
         var comments = await db.Comments.Where(c => c.TaskId == id).OrderBy(c => c.CreatedAt).ThenBy(c => c.Id)
             .Select(c => new CommentDto(c.Id, c.TaskId, new UserDto(c.AuthorId, c.Author!.Email, c.Author.DisplayName, UserPhotos.UrlFor(c.AuthorId, c.Author.PhotoVersion)), c.Body, c.CreatedAt, c.EditedAt))
             .ToListAsync(ct);
@@ -143,19 +150,18 @@ public static class TaskEndpoints
             .Select(a => new ActivityDto(a.Id, a.TaskId, new UserDto(a.ActorId, a.Actor!.Email, a.Actor.DisplayName, UserPhotos.UrlFor(a.ActorId, a.Actor.PhotoVersion)), a.Kind, a.FromValue, a.ToValue, a.CreatedAt))
             .ToListAsync(ct);
         activity.Reverse();
-        return new TaskDetailDto(dto, task.Description, workspaceId, createdBy, parent, subtasks, comments, attachments, activity);
+        return new TaskDetailDto(dto, head.Description, workspaceId, createdBy, parent, subtasks, comments, attachments, activity);
     }
 
     // ---- PATCH /api/tasks/{id} (spec 5.5 Patch task, through TaskPatcher) ----
     private static async Task<IResult> PatchAsync(Guid id, JsonElement body, Access access, TaskloomDbContext db, HttpContext http)
     {
-        var (task, workspaceId) = await access.RequireTaskAsync(id, WorkspaceRole.Member);
+        // Read first, so the access query knows whether to bring the task's assignees and tags.
         Json.RequireReadable(body);
         var change = TaskChange.Parse(body, TaskChangeKind.Patch);
+        var (task, workspaceId) = await RequireForChangeAsync(access, db, id, change);
 
         await using var tx = await db.Database.BeginTransactionAsync();
-        await db.Entry(task).Collection(t => t.Assignees).LoadAsync();
-        await db.Entry(task).Collection(t => t.Tags).LoadAsync();
         var now = Clock.Now();
         var patcher = await TaskPatcher.CreateAsync(db, access, workspaceId, new ActivityRecorder(db, access.UserId, now), now,
             ClientDate.Today(http, now), [(task, change)]);
@@ -170,9 +176,11 @@ public static class TaskEndpoints
     {
         var (task, _) = await access.RequireTaskAsync(id, WorkspaceRole.Member);
         await using var tx = await db.Database.BeginTransactionAsync();
-        var status = await db.Statuses.AsNoTracking().FirstOrDefaultAsync(s => s.Id == req.StatusId && s.ListId == task.ListId)
-                     ?? throw ProblemException.BadRequest(TaskChange.StatusMessage);
-        var oldStatus = await db.Statuses.AsNoTracking().FirstAsync(s => s.Id == task.StatusId);
+        // The list's statuses in one query: the target, the current one, and the list's first open status should the
+        // task repeat.
+        var statuses = await db.Statuses.AsNoTracking().Where(s => s.ListId == task.ListId).OrderBy(s => s.Position).ThenBy(s => s.Id).ToListAsync();
+        var status = statuses.FirstOrDefault(s => s.Id == req.StatusId) ?? throw ProblemException.BadRequest(TaskChange.StatusMessage);
+        var oldStatus = statuses.First(s => s.Id == task.StatusId);
 
         // The true siblings: same list, target status and parent, without the task itself. The client only knows the
         // neighbours it can see; filters and the Done column's cap can hide others.
@@ -232,10 +240,33 @@ public static class TaskEndpoints
         task.Position = position;
         if (changed) task.UpdatedAt = now;
         // Dropping a repeating task in Done creates its next one; dragging it back out takes that back.
-        await new Repeater(db, activity, now, ClientDate.Today(http, now)).AfterChangeAsync(task, before);
+        var repeater = new Repeater(db, activity, now, ClientDate.Today(http, now));
+        repeater.Know(task.ListId, statuses);
+        await repeater.AfterChangeAsync(task, before);
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         return Results.Ok(await TaskProjections.LoadAsync(db, id));
+    }
+
+    /// <summary>
+    /// The task (tracked) when the caller is Member or above, read in the access query together with its assignees if the
+    /// change touches them and its tags if it touches those, as <see cref="TaskPatcher"/> needs them. A set left out
+    /// comes back empty (the join's rows are filtered away), so a tick doesn't repeat the task's row for each assignee.
+    /// </summary>
+    private static async Task<(TaskItem Task, Guid WorkspaceId)> RequireForChangeAsync(Access access, TaskloomDbContext db, Guid id, TaskChange change)
+    {
+        bool assignees = change.ChangesAssignees, tags = change.ChangesTags;
+        var (row, workspaceId) = await access.RequireTaskAsync(id, t => new
+        {
+            Task = t,
+            Assignees = t.Assignees.Where(_ => assignees).ToList(),
+            Tags = t.Tags.Where(_ => tags).ToList(),
+        }, WorkspaceRole.Member);
+        // The rows are tracked and fixed up into the task's collections; a set read is marked loaded so nothing reads it again.
+        var entry = db.Entry(row.Task);
+        if (assignees) entry.Collection(t => t.Assignees).IsLoaded = true;
+        if (tags) entry.Collection(t => t.Tags).IsLoaded = true;
+        return (row.Task, workspaceId);
     }
 
     /// <summary>

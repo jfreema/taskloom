@@ -122,6 +122,10 @@ public sealed class Repeater(TaskloomDbContext db, ActivityRecorder activity, Da
 
     public static Before Snapshot(TaskItem task) => new(task.StatusId, task.Position, task.CompletedAt is not null);
 
+    /// <summary>Hands over a list's statuses the caller has already read, so completing a task there reads them no more.</summary>
+    public void Know(Guid listId, IEnumerable<ListStatus> statuses) =>
+        _statuses[listId] = statuses.OrderBy(s => s.Position).ThenBy(s => s.Id).ToList();
+
     /// <summary>Called once every change to <paramref name="task"/> is applied. Returns the task it created, if any.</summary>
     public async Task<TaskItem?> AfterChangeAsync(TaskItem task, Before before)
     {
@@ -143,8 +147,6 @@ public sealed class Repeater(TaskloomDbContext db, ActivityRecorder activity, Da
     {
         var rule = task.Repeat!;
         if (Recurrence.Next(rule, task.DueDate, today) is not { } due) return null;
-        await db.Entry(task).Collection(t => t.Assignees).LoadAsync();
-        await db.Entry(task).Collection(t => t.Tags).LoadAsync();
         var statuses = await StatusesAsync(task.ListId);
         // Never straight into Done: a list with no open status ends the series.
         var open = statuses.FirstOrDefault(s => s.Category == StatusCategory.NotStarted)
@@ -152,15 +154,23 @@ public sealed class Repeater(TaskloomDbContext db, ActivityRecorder activity, Da
         if (open is null) return null;
 
         var shift = due.DayNumber - (task.DueDate ?? today).DayNumber;
-        var subtasks = await db.Tasks.AsNoTracking().Include(t => t.Assignees).Include(t => t.Tags)
-            .Where(t => t.ParentTaskId == task.Id).InOrder().AsSplitQuery().ToListAsync();
-        var people = await AssignableAsync(task.ListId, task.Assignees.Concat(subtasks.SelectMany(s => s.Assignees)).Select(a => a.UserId));
+        // The family as stored, with assignees and tags, in one query (a handful of rows, so not split): the subtasks, and
+        // the task itself for its sets when this request didn't load them. A set it did load may have just changed, so
+        // that one is taken from the task.
+        var stored = await db.Tasks.AsNoTracking().Include(t => t.Assignees).Include(t => t.Tags)
+            .Where(t => t.ParentTaskId == task.Id || t.Id == task.Id).InOrder().ToListAsync();
+        var subtasks = stored.Where(t => t.Id != task.Id).ToList();
+        var self = stored.SingleOrDefault(t => t.Id == task.Id);
+        var entry = db.Entry(task);
+        var assignees = entry.Collection(t => t.Assignees).IsLoaded ? task.Assignees : self?.Assignees ?? [];
+        var tags = entry.Collection(t => t.Tags).IsLoaded ? task.Tags : self?.Tags ?? [];
+        var people = await AssignableAsync(task.ListId, assignees.Concat(subtasks.SelectMany(s => s.Assignees)).Select(a => a.UserId));
 
         var position = open.Id == before.StatusId ? before.Position : await BottomAsync(task.ListId, open.Id);
-        var next = Copy(task, null, open.Id, position, due, Shift(task.StartDate, shift), people);
+        var next = Copy(task, assignees, tags, null, open.Id, position, due, Shift(task.StartDate, shift), people);
         next.Repeat = rule;
         foreach (var sub in subtasks)
-            Copy(sub, next.Id, open.Id, sub.Position, Shift(sub.DueDate, shift), Shift(sub.StartDate, shift), people);
+            Copy(sub, sub.Assignees, sub.Tags, next.Id, open.Id, sub.Position, Shift(sub.DueDate, shift), Shift(sub.StartDate, shift), people);
 
         task.Repeat = null;
         task.NextRepeatId = next.Id;
@@ -168,7 +178,8 @@ public sealed class Repeater(TaskloomDbContext db, ActivityRecorder activity, Da
         return next;
     }
 
-    private TaskItem Copy(TaskItem from, Guid? parentId, Guid statusId, double position, DateOnly? due, DateOnly? start, HashSet<Guid> people)
+    private TaskItem Copy(TaskItem from, List<TaskAssignee> fromAssignees, List<TaskTag> fromTags, Guid? parentId, Guid statusId, double position,
+        DateOnly? due, DateOnly? start, HashSet<Guid> people)
     {
         // A microsecond apart, so the copies keep their order wherever positions tie.
         var created = now.AddTicks(10 * _created++);
@@ -180,9 +191,9 @@ public sealed class Repeater(TaskloomDbContext db, ActivityRecorder activity, Da
             CreatedById = from.CreatedById, CreatedAt = created, UpdatedAt = created,
         };
         db.Tasks.Add(copy);
-        var assignees = from.Assignees.Where(a => people.Contains(a.UserId)).OrderBy(a => a.CreatedAt).ThenBy(a => a.UserId).ToList();
+        var assignees = fromAssignees.Where(a => people.Contains(a.UserId)).OrderBy(a => a.CreatedAt).ThenBy(a => a.UserId).ToList();
         db.TaskAssignees.AddRange(assignees.Select((a, i) => new TaskAssignee { TaskId = copy.Id, UserId = a.UserId, CreatedAt = created.AddTicks(10 * i) }));
-        db.TaskTags.AddRange(from.Tags.Select(t => new TaskTag { TaskId = copy.Id, TagId = t.TagId }));
+        db.TaskTags.AddRange(fromTags.Select(t => new TaskTag { TaskId = copy.Id, TagId = t.TagId }));
         return copy;
     }
 
@@ -193,11 +204,17 @@ public sealed class Repeater(TaskloomDbContext db, ActivityRecorder activity, Da
     private async Task TakeBackAsync(TaskItem task, Guid nextId)
     {
         var family = db.Tasks.Where(t => t.Id == nextId || t.ParentTaskId == nextId);
-        var touched = await family.AnyAsync(t => t.UpdatedAt != t.CreatedAt || t.CompletedAt != null
-            || db.Activities.Any(a => a.TaskId == t.Id) || db.Comments.Any(c => c.TaskId == t.Id) || db.Attachments.Any(a => a.TaskId == t.Id));
-        if (touched) return;
-        var next = await db.Tasks.FirstOrDefaultAsync(t => t.Id == nextId);
-        if (next is null) return;
+        // The next task and whether anyone has touched it, in one query.
+        var row = await db.Tasks.Where(t => t.Id == nextId)
+            .Select(n => new
+            {
+                Task = n,
+                Touched = family.Any(t => t.UpdatedAt != t.CreatedAt || t.CompletedAt != null
+                    || db.Activities.Any(a => a.TaskId == t.Id) || db.Comments.Any(c => c.TaskId == t.Id) || db.Attachments.Any(a => a.TaskId == t.Id)),
+            })
+            .FirstOrDefaultAsync();
+        if (row is null || row.Touched) return;
+        var next = row.Task;
         task.Repeat = next.Repeat;
         task.NextRepeatId = null;
         // Its subtasks, assignees and tags go with it (CASCADE).

@@ -292,6 +292,49 @@ public class RepeatTests(TaskloomFactory factory) : IClassFixture<TaskloomFactor
     }
 
     [Fact]
+    public async Task The_next_task_gets_the_assignees_and_tags_the_completing_change_leaves()
+    {
+        var user = await UserAsync();
+        var (_, colleague) = await factory.JoinAsync(user, WorkspaceRole.Member, "Colleague");
+        var tag = await user.Client.CreateTagAsync(user.Workspace.Id, "home");
+        var other = await user.Client.CreateTagAsync(user.Workspace.Id, "work");
+        var done = user.Status("Done").Id;
+
+        // Dragged to Done: the move reads nothing of the task's sets, so they come from the database with its subtasks.
+        var dragged = await user.Client.CreateTaskAsync(user.List.Id, new
+        {
+            title = "Bins", assigneeIds = new[] { colleague.UserId, user.Me.Id }, tagIds = new[] { tag.Id }, repeat = new { unit = "Week" },
+        });
+        var sub = await user.Client.CreateTaskAsync(user.List.Id, new { title = "Recycling", parentTaskId = dragged.Id, assigneeIds = new[] { colleague.UserId } });
+        var moved = await user.Client.MoveTaskAsync(dragged.Id, new { statusId = done });
+        var fromDrag = await user.Client.TaskDetailAsync(moved.NextRepeatId!.Value);
+        Assert.Equal([colleague.UserId, user.Me.Id], fromDrag.Task.AssigneeIds);
+        Assert.Equal([tag.Id], fromDrag.Task.TagIds);
+        Assert.Equal([colleague.UserId], Assert.Single(fromDrag.Subtasks).AssigneeIds);
+
+        // One PATCH that completes the task and changes its assignees: the next task gets the new assignees and the
+        // unchanged tags.
+        var patched = await user.Client.CreateTaskAsync(user.List.Id, new
+        {
+            title = "Water plants", assigneeIds = new[] { user.Me.Id }, tagIds = new[] { tag.Id, other.Id }, repeat = new { unit = "Day" },
+        });
+        var completed = await user.Client.PatchTaskAsync(patched.Id, new { statusId = done, assigneeIds = new[] { colleague.UserId } });
+        var fromPatch = (await user.Client.TaskDetailAsync(completed.NextRepeatId!.Value)).Task;
+        Assert.Equal([colleague.UserId], fromPatch.AssigneeIds);
+        Assert.Equal([tag.Id, other.Id], fromPatch.TagIds);
+
+        // And the other way round: new tags, unchanged assignees.
+        var tagged = await user.Client.CreateTaskAsync(user.List.Id, new
+        {
+            title = "Pay rent", assigneeIds = new[] { colleague.UserId, user.Me.Id }, tagIds = new[] { tag.Id }, repeat = new { unit = "Month" },
+        });
+        var completedTagged = await user.Client.PatchTaskAsync(tagged.Id, new { statusId = done, tagIds = new[] { other.Id } });
+        var fromTagged = (await user.Client.TaskDetailAsync(completedTagged.NextRepeatId!.Value)).Task;
+        Assert.Equal([colleague.UserId, user.Me.Id], fromTagged.AssigneeIds);
+        Assert.Equal([other.Id], fromTagged.TagIds);
+    }
+
+    [Fact]
     public async Task Rules_are_stored_as_readable_json()
     {
         var user = await UserAsync();

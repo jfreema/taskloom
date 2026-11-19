@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
@@ -97,11 +98,62 @@ public class Access(TaskloomDbContext db, IHttpContextAccessor http, AuthOptions
         return (row.List, row.WorkspaceId);
     }
 
-    public async Task<(TaskItem Task, Guid WorkspaceId)> RequireTaskAsync(Guid taskId, WorkspaceRole atLeast = WorkspaceRole.Guest)
+    /// <summary>The task (tracked) and its workspace when the caller can see its space and has the role; one query.</summary>
+    public Task<(TaskItem Task, Guid WorkspaceId)> RequireTaskAsync(Guid taskId, WorkspaceRole atLeast = WorkspaceRole.Guest,
+        CancellationToken ct = default) =>
+        RequireTaskAsync(taskId, t => t, atLeast, ct);
+
+    /// <summary>
+    /// <paramref name="data"/> read from the task, and its workspace, when the caller can see its space and has the role.
+    /// The check and the data come back in one query, so an endpoint can read what it needs of the task (a tracked
+    /// entity, its assignees, its creator) in the same trip to the database.
+    /// </summary>
+    public async Task<(T Data, Guid WorkspaceId)> RequireTaskAsync<T>(Guid taskId, Expression<Func<TaskItem, T>> data,
+        WorkspaceRole atLeast = WorkspaceRole.Guest, CancellationToken ct = default)
     {
-        var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == taskId) ?? throw new NotFoundException();
-        var (_, workspaceId) = await RequireListAsync(task.ListId, atLeast);
-        return (task, workspaceId);
+        var uid = UserId;
+        Expression<Func<TaskInList, T, TaskCheck<T>>> shape = (x, d) => new TaskCheck<T>
+        {
+            Data = d,
+            WorkspaceId = x.List.Space!.WorkspaceId,
+            IsPrivate = x.List.Space.IsPrivate,
+            Role = db.WorkspaceMembers.Where(m => m.WorkspaceId == x.List.Space.WorkspaceId && m.UserId == uid).Select(m => (WorkspaceRole?)m.Role).FirstOrDefault(),
+            InSpace = db.SpaceMembers.Any(m => m.SpaceId == x.List.SpaceId && m.UserId == uid),
+        };
+        // shape with d replaced by data's body read from x.Task.
+        var x = shape.Parameters[0];
+        var dataBody = Replace(data.Body, data.Parameters[0], Expression.Property(x, nameof(TaskInList.Task)));
+        var select = Expression.Lambda<Func<TaskInList, TaskCheck<T>>>(Replace(shape.Body, shape.Parameters[1], dataBody), x);
+
+        var row = await db.Tasks.Where(t => t.Id == taskId)
+            .Join(db.Lists, t => t.ListId, l => l.Id, (t, l) => new TaskInList { Task = t, List = l })
+            .Select(select)
+            .FirstOrDefaultAsync(ct) ?? throw new NotFoundException();
+        Check(row.Role, row.IsPrivate, row.InSpace, atLeast);
+        return (row.Data, row.WorkspaceId);
+    }
+
+    /// <summary>
+    /// The workspace of tasks in <paramref name="listIds"/> (distinct) when every list exists, all are in one workspace,
+    /// the caller can see each one's space and has the role there; one query. Otherwise 404, or 403 for the role.
+    /// </summary>
+    public async Task<Guid> RequireListsAsync(IReadOnlyCollection<Guid> listIds, WorkspaceRole atLeast)
+    {
+        var uid = UserId;
+        var rows = await db.Lists.Where(l => listIds.Contains(l.Id))
+            .Select(l => new
+            {
+                l.Space!.WorkspaceId,
+                l.Space.IsPrivate,
+                Role = db.WorkspaceMembers.Where(m => m.WorkspaceId == l.Space.WorkspaceId && m.UserId == uid).Select(m => (WorkspaceRole?)m.Role).FirstOrDefault(),
+                InSpace = db.SpaceMembers.Any(m => m.SpaceId == l.SpaceId && m.UserId == uid),
+            })
+            .ToListAsync();
+        if (rows.Count != listIds.Count || rows.Select(r => r.WorkspaceId).Distinct().Count() != 1) throw new NotFoundException();
+        // Every list must be visible before the role counts, so a task the caller can't see is a 404 whatever else is sent.
+        foreach (var r in rows) Check(r.Role, r.IsPrivate, r.InSpace, WorkspaceRole.Guest);
+        Check(rows[0].Role, false, false, atLeast);
+        return rows[0].WorkspaceId;
     }
 
     /// <summary>The ids of the lists of a workspace that the caller can see (a query to compose, not yet run).</summary>
@@ -116,6 +168,29 @@ public class Access(TaskloomDbContext db, IHttpContextAccessor http, AuthOptions
     {
         if (role is null || (isPrivate && !inSpace)) throw new NotFoundException();
         if (role > atLeast) throw new ForbiddenException();
+    }
+
+    private static Expression Replace(Expression tree, ParameterExpression parameter, Expression with) =>
+        new ParameterReplacer(parameter, with).Visit(tree);
+
+    private sealed class ParameterReplacer(ParameterExpression parameter, Expression with) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node) => node == parameter ? with : node;
+    }
+
+    private sealed class TaskInList
+    {
+        public required TaskItem Task { get; init; }
+        public required TaskList List { get; init; }
+    }
+
+    private sealed class TaskCheck<T>
+    {
+        public required T Data { get; init; }
+        public Guid WorkspaceId { get; init; }
+        public bool IsPrivate { get; init; }
+        public WorkspaceRole? Role { get; init; }
+        public bool InSpace { get; init; }
     }
 }
 
