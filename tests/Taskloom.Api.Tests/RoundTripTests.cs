@@ -161,4 +161,23 @@ public class RoundTripTests(RoundTripTests.Site factory) : IClassFixture<RoundTr
         // Mark all as read: membership, then one statement.
         await TripsAsync(2, c => c.PostAsJsonAsync($"/api/workspaces/{ws}/notifications/read-all", new { }), colleagueClient);
     }
+
+    [Fact]
+    public async Task The_dashboard_takes_two_trips_however_many_tasks()
+    {
+        var user = await factory.NewUserAsync();
+        var (_, colleague) = await factory.JoinAsync(user, WorkspaceRole.Member, "Colleague");
+        var tag = await user.Client.CreateTagAsync(user.Workspace.Id, "home");
+        var ws = user.Workspace.Id;
+        // Membership, then one row per task with its assignees.
+        await TripsAsync(2, Get($"/api/workspaces/{ws}/dashboard"), user.Client);
+        for (var i = 0; i < 12; i++)
+            await user.Client.CreateTaskAsync(user.List.Id, new
+            {
+                title = $"Task {i}", dueDate = $"2026-11-{10 + i}", assigneeIds = i % 2 == 0 ? new[] { user.Me.Id, colleague.UserId } : [],
+                tagIds = new[] { tag.Id },
+            });
+        await TripsAsync(2, Get($"/api/workspaces/{ws}/dashboard"), user.Client);
+        await TripsAsync(2, Get($"/api/workspaces/{ws}/dashboard?scope=mine&spaceId={user.Space.Id}"), user.Client);
+    }
 }

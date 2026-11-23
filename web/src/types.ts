@@ -619,3 +619,67 @@ export const ROLE_DESCRIPTION: Record<Role, string> = {
   Member: 'Creates and edits tasks and lists.',
   Guest: 'Views and comments only.',
 }
+
+// ---- Dashboard (GET /api/workspaces/{id}/dashboard; Endpoints/DashboardEndpoints.cs) ----
+
+export type DashboardScope = 'all' | 'mine'
+
+export interface DashboardTotals {
+  total: number
+  open: number
+  done: number
+  /** Open and due before today. */
+  overdue: number
+  dueToday: number
+  /** Open without a due date. */
+  noDueDate: number
+  /** Open and assigned to nobody. */
+  unassigned: number
+  subtasks: number
+  completedLast7: number
+  createdLast7: number
+}
+
+/** Open tasks by due date; nextWeek is 2 to 7 days out. */
+export interface DashboardDue {
+  overdue: number
+  today: number
+  tomorrow: number
+  nextWeek: number
+  later: number
+  none: number
+}
+
+export interface DashboardPerson {
+  /** null: the unassigned row. */
+  userId: Uuid | null
+  open: number
+  overdue: number
+  /** Open and due within the next 7 days. */
+  dueSoon: number
+  done: number
+}
+
+export interface DashboardTask {
+  id: Uuid
+  title: string
+  listId: Uuid
+  dueDate: IsoDate
+  priority: Priority
+  assigneeIds: Uuid[]
+}
+
+export interface Dashboard {
+  today: IsoDate
+  totals: DashboardTotals
+  due: DashboardDue
+  /** Tasks per status id. */
+  byStatus: { id: Uuid; count: number }[]
+  byPriority: { priority: Priority; open: number; done: number }[]
+  byList: { listId: Uuid; open: number; done: number; overdue: number }[]
+  byAssignee: DashboardPerson[]
+  /** The last 14 days, oldest first. */
+  trend: { date: IsoDate; created: number; completed: number }[]
+  /** The most overdue open tasks, oldest due date first. */
+  overdue: DashboardTask[]
+}

@@ -156,3 +156,6 @@ public record CreateCommentRequest(Guid? Id, string? Body);
 public record UpdateCommentRequest(string? Body);
 /// <param name="Fillers">Filler tasks to add: default 48, 0 to 2000.</param>
 public record DevSeedRequest(Guid WorkspaceId, int? Fillers);
+
+/// <param name="Replace">Rebuild the demo data when the workspace already has it (its demo spaces are deleted first).</param>
+public record DemoSeedRequest(Guid WorkspaceId, bool? Replace);

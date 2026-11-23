@@ -36,6 +36,13 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
   assigned to, plus your due-date reminders. Your own changes never show. The sidebar counts what is unread. Opening
   a task reads everything about it; rows can be marked read or unread one by one, or all at once. You only ever see
   rows about tasks you can still see, so leaving a private space takes its rows with it. Rows are kept for 90 days.
+- **Dashboard** (G then D): a breakdown of the workspace's tasks. Tiles for open, overdue, due today, completed in the
+  last 7 days and unassigned; then the share of tasks not started, active and done with a bar per status (statuses
+  with the same name are counted together across lists), open tasks by due date (overdue, today, tomorrow, the next
+  7 days, later, no date), by priority, and per person (overdue, due this week, later), tasks created and completed
+  per day over the last 14 days, open, overdue and done per space and list, and the most overdue tasks, which open
+  in the task panel. Show everyone's tasks or only yours, across every space or in one space or list (remembered per
+  person). Like Home, it only counts tasks in spaces you can see. Subtasks count as tasks.
 - **@mentions:** "@" in a comment lists the people who can see the task (in a private space, only its people). The
   comment shows the mention as a chip, and the person finds it in their Inbox even if the task isn't theirs.
 - **Due-date reminders and email:** each morning (8:00 in your own time zone, which the app takes from your
@@ -116,6 +123,7 @@ shortcuts never fire while you type, and you can turn them off in Settings › A
 | [ | Show or hide the sidebar |
 | G then H | Go to Home |
 | G then I | Go to the Inbox |
+| G then D | Go to the Dashboard |
 | Mod+Z | Undo the latest action |
 | Esc | Close the top menu or dialog, close the task panel, or clear the selection |
 
@@ -247,6 +255,24 @@ address), so the browser sees one origin. In this mode attachments are saved to 
 With the dev sign-in on, `POST /api/dev/seed` with `{"workspaceId": "<id>"}` fills a workspace you own with
 sample spaces, lists, tasks, tags and members, dated around today. Add `"fillers": 1000` (up to 2000) for a
 large list to test performance. Calls that change data need the header `X-Taskloom: 1`.
+
+### Demo data for the dashboard
+
+`scripts/seed-demo.sh you@example.com` signs in with the dev sign-in and fills the first workspace you own with a
+large set of demo data: five spaces (one private), fourteen lists with their own status sets, about 500 tasks and
+subtasks spread over the last two months and the next six weeks (many done, some overdue), eight demo people, tags,
+comments and a few repeating tasks. It only adds: your own spaces, lists and tasks are never touched.
+
+```bash
+scripts/seed-demo.sh you@example.com              # add the demo data (refuses if it's already there)
+scripts/seed-demo.sh you@example.com --replace    # rebuild it, dated around today
+scripts/seed-demo.sh you@example.com --remove     # take it out again
+```
+
+`--replace` and `--remove` delete only the demo spaces (their ids are derived from the workspace's), including
+anything you added inside them; the demo people stay members. Set `TASKLOOM_URL` for another address and
+`TASKLOOM_WORKSPACE` to pick a workspace by name. The script calls `POST /api/dev/demo-seed` and
+`DELETE /api/dev/demo-seed/<workspaceId>`, which exist only with the dev sign-in on.
 
 ### Optional: real Google or Microsoft sign-in locally
 

@@ -186,6 +186,7 @@ api.MapCommentEndpoints();
 api.MapAttachmentEndpoints();
 api.MapPhotoEndpoints();
 api.MapNotificationEndpoints();
+api.MapDashboardEndpoints();
 // Development only: the path does not exist unless dev login is enabled.
 if (authOptions.DevLogin.Enabled) api.MapDevEndpoints();
 // Unknown /api paths are 404, never the SPA; known paths with the wrong method or content type are 405 or 415.

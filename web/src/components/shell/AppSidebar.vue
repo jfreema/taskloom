@@ -5,7 +5,7 @@
 // (`inDrawer`: no "Hide sidebar"; the drawer closes on navigation, Esc or the scrim).
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { House, Inbox, PanelLeft, Search, SquarePen } from '@lucide/vue'
+import { House, Inbox, LayoutDashboard, PanelLeft, Search, SquarePen } from '@lucide/vue'
 import { useDelayedFlag } from '../../composables/useDelayedFlag'
 import { isApple } from '../../lib/platform'
 import { useInbox } from '../../stores/inbox'
@@ -35,6 +35,7 @@ const showWorkspaceSkeleton = useDelayedFlag(loadingTree, skeletonDelay())
 const canEdit = computed(() => workspaces.canEdit())
 const onHome = computed(() => route.name === 'home')
 const onInbox = computed(() => route.name === 'inbox')
+const onDashboard = computed(() => route.name === 'dashboard')
 /** "12", or "99+" past two digits. */
 const unreadText = computed(() => (inbox.unread > 99 ? '99+' : String(inbox.unread)))
 const inboxLabel = computed(() => (inbox.unread > 0 ? `Inbox, ${inbox.unread} unread` : 'Inbox'))
@@ -94,6 +95,16 @@ function newTask(): void {
         <UiIcon :icon="Inbox" :size="16" class="nav-icon" />
         <span class="truncate">Inbox</span>
         <span v-if="inbox.unread > 0" class="nav-count" data-testid="inbox-unread" aria-hidden="true">{{ unreadText }}</span>
+      </RouterLink>
+      <RouterLink
+        v-if="hasWorkspace"
+        to="/dashboard"
+        class="nav-item focus-inset"
+        :class="{ 'is-active': onDashboard }"
+        :aria-current="onDashboard ? 'page' : undefined"
+      >
+        <UiIcon :icon="LayoutDashboard" :size="16" class="nav-icon" />
+        <span class="truncate">Dashboard</span>
       </RouterLink>
       <SidebarTree v-if="hasWorkspace || !workspaces.loaded" />
     </div>

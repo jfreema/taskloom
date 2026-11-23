@@ -84,6 +84,7 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: '', name: 'home', component: () => import('./views/HomeView.vue'), meta: { title: 'Home' } },
       { path: 'inbox', name: 'inbox', component: () => import('./views/InboxView.vue'), meta: { title: 'Inbox' } },
+      { path: 'dashboard', name: 'dashboard', component: () => import('./views/DashboardView.vue'), meta: { title: 'Dashboard' } },
       {
         path: 'l/:listId',
         name: 'list-default',
