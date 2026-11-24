@@ -47,7 +47,7 @@ export interface PaletteOption {
   due?: IsoDate | null
   done?: boolean
   kbd?: string
-  /** Theme items: the current choice. */
+  /** Theme and style items: the current choice. */
   current?: boolean
   /** Keeps the palette open (Show all, Try again). */
   stay?: boolean

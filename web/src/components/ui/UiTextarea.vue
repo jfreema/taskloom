@@ -118,7 +118,7 @@ defineExpose({ focus, el })
   display: flex;
   min-width: 0;
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
+  border: var(--control-border-w) solid var(--control-edge);
   border-bottom-color: var(--border-control);
   border-radius: var(--radius-sm);
   transition:
@@ -127,7 +127,7 @@ defineExpose({ focus, el })
 }
 
 .ui-textarea:hover:not(.is-disabled):not(:focus-within) {
-  border-color: color-mix(in srgb, var(--border-control) 45%, var(--border-default));
+  border-color: var(--control-edge-hover);
   border-bottom-color: var(--border-control);
 }
 
@@ -183,7 +183,7 @@ defineExpose({ focus, el })
    over the frame's top and bottom border (it is transparent), so the whole 44px takes a tap. */
 @media (pointer: coarse) {
   .control {
-    margin: -1px 0;
+    margin: calc(var(--control-border-w) * -1) 0;
     padding-top: calc((var(--touch-min) - var(--lh-md)) / 2);
     padding-bottom: calc((var(--touch-min) - var(--lh-md)) / 2);
   }

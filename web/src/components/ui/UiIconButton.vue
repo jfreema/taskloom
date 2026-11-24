@@ -102,7 +102,7 @@ function onLinkClick(e: MouseEvent, navigate: (e?: MouseEvent) => unknown): void
   width: var(--control-sm);
   height: var(--control-sm);
   padding: 0;
-  border: 1px solid transparent;
+  border: var(--control-border-w) solid transparent;
   border-radius: var(--radius-sm);
   background-color: transparent;
   color: var(--text-secondary);
@@ -144,7 +144,7 @@ function onLinkClick(e: MouseEvent, navigate: (e?: MouseEvent) => unknown): void
 /* Secondary */
 .ui-icon-button--secondary {
   background-color: var(--bg-surface);
-  border-color: var(--border-default);
+  border-color: var(--button-edge);
   box-shadow: var(--shadow-1);
   color: var(--text-primary);
 }

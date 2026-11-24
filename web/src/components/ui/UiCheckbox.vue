@@ -127,7 +127,7 @@ label.ui-checkbox {
   justify-content: center;
   width: 100%;
   height: 100%;
-  border: 1.5px solid var(--border-control);
+  border: var(--check-border-w) solid var(--border-control);
   border-radius: var(--radius-xs);
   background: var(--bg-surface);
   color: var(--accent-fg);

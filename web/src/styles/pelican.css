@@ -1,0 +1,224 @@
+/*
+ * Pelican style (Look 3): Taskloom dressed in Pelican, the State of Louisiana's design system (Louisiana OTS,
+ * https://pelican.ots.la.gov). It re-declares Loom's tokens (tokens.css) under <html data-look="pelican">;
+ * the components stay Taskloom's own, not Pelican's Bootstrap ones. composables/useLook.ts sets the attribute.
+ *
+ * Source: Pelican 2.4.0, npm @la-ots/pelican@2.4.0, dist/css/pelican.min.css (Bootstrap 5.3.3 inside), as
+ * ASP-Platforms-Backups vendors it. Pelican's own code is CC0 1.0.
+ *
+ * 1. Pelican's palette: its --theme-<family>-<shade> custom properties copied unchanged as --pl-<family>-<shade>,
+ *    between the "pelican-palette" markers. `npm run pelican:sync -- 2.5.0` compares them with another release
+ *    (add --write to update them in place); everything below names them, so the look follows.
+ * 2. Light: Loom's tokens mapped onto Pelican's roles (the --theme-* role each follows is noted).
+ * 3. Dark: Pelican has no dark mode. This one is ASP-Platforms-Backups' night mode (wwwroot/app.css, section 6):
+ *    near-black page and surfaces, Pelican's accents; the top bar stays black and the sidebar navy.
+ * 4. Regions: the navy sidebar re-declares the tokens its rows, search field and buttons use.
+ *
+ * A token in tokens.css that names another (var()) takes that token's value on <html>, so a block here that
+ * changes a base token also re-declares the tokens built from it when they must follow.
+ */
+
+:root[data-look="pelican"] {
+  /* ---- 1. Pelican 2.4.0 palette (--theme-* in pelican.min.css's :root) ---- */
+  /* pelican-palette:start 2.4.0 */
+  --pl-primary-50: #f4fcff; --pl-primary-100: #e9f8ff; --pl-primary-200: #d4ecfe; --pl-primary-300: #b4ddf8; --pl-primary-400: #6facdd;
+  --pl-primary-500: #3c7eb3; --pl-primary-600: #245e8c; --pl-primary-700: #104a78; --pl-primary-800: #00284d; --pl-primary-900: #001646;
+  --pl-secondary-50: #eefffc; --pl-secondary-100: #c5fffa; --pl-secondary-200: #8bfff5; --pl-secondary-300: #4afef0; --pl-secondary-400: #15ece2;
+  --pl-secondary-500: #00d0c9; --pl-secondary-600: #00a8a5; --pl-secondary-700: #008282; --pl-secondary-800: #066769; --pl-secondary-900: #0a5757;
+  --pl-accent-50: #fffaea; --pl-accent-100: #fff2c5; --pl-accent-200: #ffe586; --pl-accent-300: #ffd146; --pl-accent-400: #ffbc1c;
+  --pl-accent-500: #fe9903; --pl-accent-600: #e17100; --pl-accent-700: #bb4c02; --pl-accent-800: #973b09; --pl-accent-900: #7c310b;
+  --pl-success-50: #e8ffe6; --pl-success-100: #cbffc8; --pl-success-200: #9dfe98; --pl-success-300: #60fa5c; --pl-success-400: #2df02b;
+  --pl-success-500: #0cd60d; --pl-success-600: #05ab09; --pl-success-700: #09820e; --pl-success-800: #0d6211; --pl-success-900: #115616;
+  --pl-info-50: #ebf9ff; --pl-info-100: #d1f3ff; --pl-info-200: #aeeaff; --pl-info-300: #76dfff; --pl-info-400: #35cbff;
+  --pl-info-500: #07a8ff; --pl-info-600: #0083ff; --pl-info-700: #006aff; --pl-info-800: #0057d7; --pl-info-900: #004ba1;
+  --pl-warning-50: #ffffea; --pl-warning-100: #fffbc5; --pl-warning-200: #fff885; --pl-warning-300: #ffee46; --pl-warning-400: #ffdf1b;
+  --pl-warning-500: #ffc107; --pl-warning-600: #e29400; --pl-warning-700: #bb6902; --pl-warning-800: #985108; --pl-warning-900: #7c420b;
+  --pl-danger-50: #ffefef; --pl-danger-100: #ffdcdd; --pl-danger-200: #ffbfc0; --pl-danger-300: #ff9294; --pl-danger-400: #ff5457;
+  --pl-danger-500: #ff1f23; --pl-danger-600: #ff0004; --pl-danger-700: #db0004; --pl-danger-800: #b00003; --pl-danger-900: #94080a;
+  --pl-gray-white: #ffffff; --pl-gray-50: #f7f8f8; --pl-gray-100: #ebeeef; --pl-gray-200: #d8dddf; --pl-gray-300: #b6c1c3; --pl-gray-400: #8f9fa3;
+  --pl-gray-500: #6e8287; --pl-gray-600: #586a6f; --pl-gray-700: #46585d; --pl-gray-800: #3a4b50; --pl-gray-900: #324348; --pl-gray-black: #000000;
+  --pl-focus-color: #2491ff;
+  /* pelican-palette:end */
+
+  /* ---- 2. Light ---- */
+  color-scheme: light;
+  --bg-canvas: var(--pl-gray-50);                  /* body-bg */
+  --bg-surface: var(--pl-gray-white);              /* card-bg */
+  --bg-subtle: var(--pl-gray-50);                  /* card-nested-bg */
+  --bg-raised: var(--pl-gray-white);
+  --bg-column: var(--pl-gray-100);
+  --bg-card: var(--pl-gray-white);
+  --bg-hover: rgba(0, 40, 77, .06); --bg-pressed: rgba(0, 40, 77, .10);   /* primary at 6% and 10% */
+  --bg-selected: var(--pl-primary-100);
+  --bg-inverse: var(--pl-gray-black);              /* tooltip-bg */
+  --bg-scrim: rgba(0, 40, 77, .45);                /* modal-backdrop: primary */
+  --border-subtle: var(--pl-gray-300);             /* border-color-lighter: cards, tables, dividers */
+  --border-default: var(--pl-gray-300);
+  --border-control: var(--pl-gray-700);            /* form-border-color */
+  --border-floating: var(--pl-gray-300);
+  --text-primary: var(--pl-gray-900);              /* bs-body-color */
+  --text-secondary: var(--pl-gray-700);            /* text-normal */
+  --text-tertiary: var(--pl-gray-600);             /* 5.6:1 on the page */
+  --text-disabled: var(--pl-gray-400);
+  --text-inverse: var(--pl-gray-white); --text-inverse-secondary: var(--pl-gray-300);
+  --text-inverse-accent: var(--pl-info-300); --text-inverse-danger: var(--pl-danger-300);
+  --accent: var(--pl-primary-800);                 /* primary */
+  --accent-hover: var(--pl-primary-700); --accent-pressed: var(--pl-primary-900); --accent-fg: var(--pl-gray-white);
+  --accent-text: var(--pl-info-800);               /* link-color: 6.3:1 on white */
+  --accent-subtle: var(--pl-primary-100);
+  --focus-ring: var(--pl-focus-color); --focus-ring-inverse: var(--pl-info-300);
+  --selection: rgba(0, 87, 215, .2);
+  --danger: var(--pl-danger-800); --danger-hover: var(--pl-danger-900); --danger-fg: var(--pl-gray-white);
+  --danger-text: var(--pl-danger-800); --danger-subtle: var(--pl-danger-50);
+  --warning-text: var(--pl-warning-800); --warning-subtle: var(--pl-warning-50);
+  --success-text: var(--pl-success-800); --success-subtle: var(--pl-success-50);
+  --info-text: var(--pl-info-800); --info-subtle: var(--pl-info-50);
+  --priority-urgent: var(--pl-danger-800); --priority-high: var(--pl-accent-600);
+  --priority-normal: var(--pl-info-800); --priority-low: var(--pl-gray-500);
+  --tint-pill: 14%; --tint-pill-border: 30%; --tint-tile: 18%; --tint-tile-ink: 55%; --tint-ink: 60%;
+  /* Flatter than Loom: Pelican's cards and buttons sit flat; only floating things lift. A shadow, not "none",
+     because components list --shadow-1 with other shadows. */
+  --shadow-1: 0 0 0 transparent;
+  --shadow-2: 0 1px 3px rgba(0, 22, 70, .10);
+  --shadow-3: 0 6px 18px -6px rgba(0, 22, 70, .22), 0 1px 3px rgba(0, 22, 70, .10);
+  --shadow-4: 0 14px 36px -8px rgba(0, 22, 70, .28), 0 3px 8px -3px rgba(0, 22, 70, .12);
+  --shadow-5: 0 24px 64px -12px rgba(0, 22, 70, .36);
+  --scroll-shade: rgba(0, 22, 70, .16);
+
+  /* Type: Public Sans (theme-font-family), headings bold in the primary navy (text-headings-color). */
+  --font-sans: "Public Sans", "Public Sans Variable", -apple-system, blinkmacsystemfont, "Segoe UI", "Helvetica Neue", "Arial", "Noto Sans", sans-serif;
+  --fw-bold: 700;
+  --heading-color: var(--pl-primary-800);
+  --fw-heading: 700;
+  --fs-page-title: var(--fs-2xl); --lh-page-title: var(--lh-2xl);
+
+  /* Shapes: bs-border-radius .25rem, theme-border-width .125rem on controls. */
+  --radius-xs: 2px; --radius-sm: 4px; --radius-md: 4px; --radius-lg: 4px; --radius-xl: 4px; --radius-2xl: 6px;
+  --control-border-w: 2px;
+  --check-border-w: 2px;
+  --control-edge: var(--pl-gray-700);              /* form-border-color, all four sides */
+  --control-edge-hover: var(--pl-gray-900);
+  --button-edge: var(--pl-gray-600);               /* ui: btn-outline-ui */
+  --segmented-bg: var(--bg-surface); --segmented-edge: var(--button-edge);
+  --segmented-thumb: var(--accent); --segmented-thumb-fg: var(--accent-fg);
+  --segmented-thumb-shadow: none;
+  --segmented-count-selected: color-mix(in srgb, var(--accent-fg) 80%, var(--accent));
+  --nav-radius: 0px; --fw-nav-active: 700;
+
+  /* App Screen: a black top bar with a gold rule, the page grey and edge to edge under a white title band. */
+  --brandbar-h: 40px; --brandbar-bg: var(--pl-gray-black); --brandbar-fg: var(--pl-gray-white);
+  --brandbar-rule: var(--pl-accent-500); --brandbar-rule-w: 3px;
+  --inset: 0px; --panel-radius: 0px; --panel-edge: transparent;
+  --bg-page: var(--bg-canvas);
+  --bg-page-header: var(--bg-surface);             /* page-title-bg */
+  --page-header-rule-w: 2px;
+  --stat-rule-w: 4px;
+  --card-head-rule-w: 1px; --card-head-pad: var(--space-3);
+}
+
+/* ---- 3. Dark (Taskloom's own; Pelican has none). The same declarations appear twice, as in tokens.css. ---- */
+:root[data-look="pelican"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #11161d; --bg-surface: #171e26; --bg-subtle: #1e2731; --bg-raised: #1e2731;
+  --bg-column: #0d1117; --bg-card: #1e2731;
+  --bg-hover: rgba(214, 222, 230, .06); --bg-pressed: rgba(214, 222, 230, .10);
+  --bg-selected: #132a49;                          /* info-700 at 16% on a surface */
+  --bg-inverse: #eef3f8; --bg-scrim: rgba(0, 0, 0, .6);
+  --border-subtle: #2a333d; --border-default: #3e4955; --border-control: #7d8b99; --border-floating: #3e4955;
+  --text-primary: #d6dee6; --text-secondary: #b3bdc7; --text-tertiary: #9ba6b1; --text-disabled: #5b6672;
+  --text-inverse: #11161d; --text-inverse-secondary: var(--pl-gray-700);
+  --text-inverse-accent: var(--pl-info-800); --text-inverse-danger: var(--pl-danger-800);
+  --accent: var(--pl-info-700);                    /* ui-priority, pinned: white text 4.7:1 */
+  --accent-hover: var(--pl-info-800); --accent-pressed: var(--pl-info-900); --accent-fg: var(--pl-gray-white);
+  --accent-text: var(--pl-primary-300);            /* link: 11.7:1 on a surface */
+  --accent-subtle: #132a49;
+  --focus-ring: var(--pl-info-300); --focus-ring-inverse: var(--pl-info-800);
+  --selection: rgba(0, 106, 255, .32);
+  --danger: var(--pl-danger-700); --danger-hover: var(--pl-danger-800); --danger-fg: var(--pl-gray-white);
+  --danger-text: var(--pl-danger-300); --danger-subtle: #3a1517;
+  --warning-text: var(--pl-warning-400); --warning-subtle: #35270c;
+  --success-text: var(--pl-success-200); --success-subtle: #0f2e14;
+  --info-text: var(--pl-primary-300); --info-subtle: #14243f;
+  --priority-urgent: var(--pl-danger-400); --priority-high: var(--pl-accent-500);
+  --priority-normal: var(--pl-primary-400); --priority-low: var(--pl-gray-400);
+  --tint-pill: 24%; --tint-pill-border: 35%; --tint-tile: 26%; --tint-tile-ink: 55%; --tint-ink: 60%;
+  --shadow-1: 0 0 0 transparent;
+  --shadow-2: 0 1px 3px rgba(0, 0, 0, .45);
+  --shadow-3: 0 6px 18px -6px rgba(0, 0, 0, .6), 0 1px 3px rgba(0, 0, 0, .4);
+  --shadow-4: 0 14px 36px -8px rgba(0, 0, 0, .7), 0 3px 8px -3px rgba(0, 0, 0, .5);
+  --shadow-5: 0 24px 64px -12px rgba(0, 0, 0, .8);
+  --scroll-shade: rgba(0, 0, 0, .6);
+  --heading-color: #eef3f8;
+  --control-edge: #7d8b99;                         /* form-border-color: 4.8:1 on a surface */
+  --control-edge-hover: #9ba6b1;
+  --button-edge: #7d8b99;
+  --bg-page-header: var(--bg-surface);
+  --brandbar-shadow: 0 1px 0 #2a333d;              /* the black bar meets a near-black page */
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look="pelican"]:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg-canvas: #11161d; --bg-surface: #171e26; --bg-subtle: #1e2731; --bg-raised: #1e2731;
+    --bg-column: #0d1117; --bg-card: #1e2731;
+    --bg-hover: rgba(214, 222, 230, .06); --bg-pressed: rgba(214, 222, 230, .10);
+    --bg-selected: #132a49;
+    --bg-inverse: #eef3f8; --bg-scrim: rgba(0, 0, 0, .6);
+    --border-subtle: #2a333d; --border-default: #3e4955; --border-control: #7d8b99; --border-floating: #3e4955;
+    --text-primary: #d6dee6; --text-secondary: #b3bdc7; --text-tertiary: #9ba6b1; --text-disabled: #5b6672;
+    --text-inverse: #11161d; --text-inverse-secondary: var(--pl-gray-700);
+    --text-inverse-accent: var(--pl-info-800); --text-inverse-danger: var(--pl-danger-800);
+    --accent: var(--pl-info-700);
+    --accent-hover: var(--pl-info-800); --accent-pressed: var(--pl-info-900); --accent-fg: var(--pl-gray-white);
+    --accent-text: var(--pl-primary-300);
+    --accent-subtle: #132a49;
+    --focus-ring: var(--pl-info-300); --focus-ring-inverse: var(--pl-info-800);
+    --selection: rgba(0, 106, 255, .32);
+    --danger: var(--pl-danger-700); --danger-hover: var(--pl-danger-800); --danger-fg: var(--pl-gray-white);
+    --danger-text: var(--pl-danger-300); --danger-subtle: #3a1517;
+    --warning-text: var(--pl-warning-400); --warning-subtle: #35270c;
+    --success-text: var(--pl-success-200); --success-subtle: #0f2e14;
+    --info-text: var(--pl-primary-300); --info-subtle: #14243f;
+    --priority-urgent: var(--pl-danger-400); --priority-high: var(--pl-accent-500);
+    --priority-normal: var(--pl-primary-400); --priority-low: var(--pl-gray-400);
+    --tint-pill: 24%; --tint-pill-border: 35%; --tint-tile: 26%; --tint-tile-ink: 55%; --tint-ink: 60%;
+    --shadow-1: 0 0 0 transparent;
+    --shadow-2: 0 1px 3px rgba(0, 0, 0, .45);
+    --shadow-3: 0 6px 18px -6px rgba(0, 0, 0, .6), 0 1px 3px rgba(0, 0, 0, .4);
+    --shadow-4: 0 14px 36px -8px rgba(0, 0, 0, .7), 0 3px 8px -3px rgba(0, 0, 0, .5);
+    --shadow-5: 0 24px 64px -12px rgba(0, 0, 0, .8);
+    --scroll-shade: rgba(0, 0, 0, .6);
+    --heading-color: #eef3f8;
+    --control-edge: #7d8b99;
+    --control-edge-hover: #9ba6b1;
+    --button-edge: #7d8b99;
+    --bg-page-header: var(--bg-surface);
+    --brandbar-shadow: 0 1px 0 #2a333d;
+  }
+}
+
+/* ---- 4. Regions: the navy sidebar (sidebar-wrapper-bg: primary), in light and dark alike ---- */
+:root[data-look="pelican"] .app-sidebar {
+  color-scheme: dark;
+  --bg-canvas: var(--pl-primary-800);              /* the docked sidebar */
+  --bg-raised: var(--pl-primary-800);              /* the drawer */
+  --bg-surface: var(--pl-primary-900);             /* the search field, secondary buttons */
+  --bg-subtle: transparent;                        /* key caps */
+  --bg-hover: rgba(255, 255, 255, .10); --bg-pressed: rgba(255, 255, 255, .16);
+  --bg-selected: var(--pl-info-800);               /* sidebar-item-bg: info. White on it 6.3:1 */
+  --sidebar-band: var(--pl-primary-900);           /* sidebar-header-border / submenu-bg: the workspace and account rows */
+  --sidebar-band-pad: var(--space-2);
+  --border-subtle: var(--pl-primary-900);
+  --border-default: rgba(255, 255, 255, .55); --border-control: rgba(255, 255, 255, .8);
+  --text-primary: var(--pl-gray-white);            /* sidebar-link-color */
+  --text-secondary: rgba(255, 255, 255, .9); --text-tertiary: rgba(255, 255, 255, .75); --text-disabled: rgba(255, 255, 255, .45);
+  --accent: var(--pl-accent-500);                  /* gold: the workspace tile and the Inbox count, black text 9.6:1 */
+  --accent-hover: var(--pl-accent-400); --accent-pressed: var(--pl-accent-600); --accent-fg: var(--pl-gray-black);
+  --accent-text: var(--pl-gray-white);
+  --focus-ring: var(--pl-info-300);                /* 9.8:1 on the navy */
+  --glyph-ink: 45%; --glyph-wash: var(--pl-gray-white); --glyph-active: var(--pl-gray-white);   /* list icons' colours, lightened */
+  --scroll-shade: rgba(0, 0, 0, .4);
+  --shadow-1: 0 0 0 transparent;
+  /* Built from the tokens above, so re-declared here (see the note at the top). */
+  --control-edge: rgba(255, 255, 255, .55); --control-edge-hover: rgba(255, 255, 255, .8);
+  --button-edge: rgba(255, 255, 255, .55);
+}

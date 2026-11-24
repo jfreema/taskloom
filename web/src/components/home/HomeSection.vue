@@ -103,7 +103,7 @@ onUpdated(() => emit('rendered'))
   margin: 0;
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-heading);
 }
 
 .toggle {

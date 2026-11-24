@@ -73,7 +73,8 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
 - **Undo:** completing, moving, rescheduling, bulk edits and deletes all show a toast with Undo (Mod+Z works too).
 - **Settings:**
   - Profile: your display name, and "Sign out other devices" for browsers you no longer use.
-  - Appearance: System, Light or Dark theme, and whether single-key shortcuts are on.
+  - Appearance: the Loom or Pelican style, System, Light or Dark theme, the density, and whether single-key
+    shortcuts are on. The command palette switches the style and theme too.
   - Notifications: whether assignments and mentions, and due-date reminders, are also emailed to you.
   - Workspace: rename or delete it. Owner and Admins also see every private space here, with Join.
   - Members: invite several people at once, change roles, remove people, copy the sign-in link. People whose
@@ -100,9 +101,10 @@ ASP.NET Core API and PostgreSQL. It ships as one container image and is built to
   session on the server that the cookie names and that is checked again every minute, so signing out, "Sign out
   other devices", turning an account off or taking an email off the allowlist ends it, even for a copied cookie. A
   session ends after 14 days without use and 30 days after sign-in. Sign-in and API calls are rate limited.
-- **Design:** the "Loom" design system with light and dark themes. Phone layouts use a drawer, a task sheet, an
-  agenda calendar and a "+" button, with 44px touch targets. The app is keyboard-first and targets WCAG 2.2 AA;
-  the end-to-end tests run axe on the screens in both themes.
+- **Design:** the "Loom" design system with light and dark themes, and a Pelican style that dresses the app in the
+  State of Louisiana's design system (see [The Pelican style](#the-pelican-style)). Phone layouts use a drawer, a
+  task sheet, an agenda calendar and a "+" button, with 44px touch targets. The app is keyboard-first and targets
+  WCAG 2.2 AA; the end-to-end tests run axe on the screens in both themes.
 
 Not in this version: folders, custom fields, Gantt and timeline views, time tracking, push notifications,
 real-time or offline sync, and Planner import.
@@ -443,12 +445,33 @@ src/
 tests/Taskloom.Api.Tests   API tests against a real PostgreSQL
 web/                       Vue 3 + TypeScript + Pinia + Vue Router (no cloud SDKs)
   src/components/ui        the Loom primitives (buttons, menus, popovers, dialogs, toasts...); /_ui shows them all
+  src/styles               tokens.css (Loom's tokens), pelican.css (the Pelican style), base.css
   e2e/                     Playwright end-to-end tests and the screenshots they save
 deploy/azure/              Bicep for Azure Container Apps, PostgreSQL Flexible Server, Blob Storage
 ```
 
 Cloud services sit behind interfaces, and a setting picks the implementation, so moving between local, Azure or
 another cloud changes configuration, not code.
+
+## The Pelican style
+
+Settings › Appearance › Style switches between Loom (the default) and Pelican, the State of Louisiana's design
+system (Louisiana OTS, [pelican.ots.la.gov](https://pelican.ots.la.gov)). It is saved in the browser like the theme
+(`taskloom.look`) and works in light and dark. Pelican is a token set, not Pelican's Bootstrap components:
+`web/src/styles/pelican.css` re-declares Loom's tokens under `<html data-look="pelican">` for Public Sans, Pelican's
+colours, 4px corners and 2px control borders, plus a black top bar with a gold rule, a navy sidebar whose current item
+is Pelican's blue, and the page edge to edge under a white title band. Pelican has no dark mode, so dark is the
+night mode of ASP-Platforms-Backups (near-black page, Pelican's accents, the sidebar still navy).
+
+It follows Pelican 2.4.0 (`@la-ots/pelican`). Section 1 of `pelican.css` is Pelican's palette copied unchanged; the
+rest names it. When Pelican releases a new version, compare and update the palette:
+
+```bash
+cd web && npm run pelican:sync -- 2.5.0
+```
+
+Add `--write` to rewrite the palette block. The script also prints the role tokens the mapping follows (link
+colour, headings, sidebar, borders) from the new release, to check against the notes in `pelican.css`.
 
 ## Compression and caching
 

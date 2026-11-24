@@ -155,7 +155,7 @@ defineExpose({ focus, select, el })
   height: var(--control-md);
   padding: 0 10px;
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
+  border: var(--control-border-w) solid var(--control-edge);
   border-bottom-color: var(--border-control);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -181,7 +181,7 @@ defineExpose({ focus, select, el })
 }
 
 .ui-input:hover:not(.is-disabled):not(:focus-within) {
-  border-color: color-mix(in srgb, var(--border-control) 45%, var(--border-default));
+  border-color: var(--control-edge-hover);
   border-bottom-color: var(--border-control);
 }
 
@@ -266,8 +266,8 @@ defineExpose({ focus, select, el })
   /* The field reaches over the frame's top and bottom border (it is transparent), so the whole
      44px takes a tap as the field's own. */
   .ui-input:not(.ui-input--sm) .control {
-    height: calc(100% + 2px);
-    margin: -1px 0;
+    height: calc(100% + 2 * var(--control-border-w));
+    margin: calc(var(--control-border-w) * -1) 0;
   }
 
   .ui-input--sm {
@@ -279,8 +279,8 @@ defineExpose({ focus, select, el })
     content: "";
     position: absolute;
     z-index: -1;
-    left: -1px;
-    right: -1px;
+    left: calc(var(--control-border-w) * -1);
+    right: calc(var(--control-border-w) * -1);
     top: 50%;
     height: var(--touch-min);
     transform: translateY(-50%);

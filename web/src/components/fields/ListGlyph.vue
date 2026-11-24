@@ -2,6 +2,8 @@
 // A list's icon (Look 2): its chosen icon (lib/listIcons.ts) in its colour, or the plain list icon
 // in --text-tertiary when it has none. Decorative: the list name is always written next to it.
 // `active` is the sidebar's current list, whose uncoloured icon takes the accent like its text.
+// Pelican's navy sidebar (Look 3) washes colours toward white (--glyph-ink, --glyph-wash) and draws
+// the current list's icon in its row's text colour (--glyph-active).
 import { computed } from 'vue'
 import { listIconOf } from '../../lib/listIcons'
 import UiIcon from '../ui/UiIcon.vue'
@@ -42,5 +44,14 @@ const icon = computed(() => listIconOf(props.list.icon).icon)
 
 .list-glyph.has-color {
   color: var(--c);
+}
+
+/* The colours are mixed only there, so everywhere else the glyph's colour is exactly the list's. */
+:root[data-look='pelican'] .app-sidebar .list-glyph.has-color {
+  color: color-mix(in srgb, var(--c) var(--glyph-ink), var(--glyph-wash));
+}
+
+:root[data-look='pelican'] .app-sidebar .list-glyph.has-color.is-active {
+  color: var(--glyph-active);
 }
 </style>

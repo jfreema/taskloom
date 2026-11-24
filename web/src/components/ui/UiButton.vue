@@ -145,7 +145,7 @@ function onLinkClick(e: MouseEvent, navigate: (e?: MouseEvent) => unknown): void
   gap: var(--space-1-5);
   height: var(--control-md);
   padding: 0 var(--space-3);
-  border: 1px solid transparent;
+  border: var(--control-border-w) solid transparent;
   border-radius: var(--radius-sm);
   background-color: transparent;
   background-image: none;
@@ -215,7 +215,7 @@ function onLinkClick(e: MouseEvent, navigate: (e?: MouseEvent) => unknown): void
 /* Secondary */
 .ui-button--secondary {
   background-color: var(--bg-surface);
-  border-color: var(--border-default);
+  border-color: var(--button-edge);
   box-shadow: var(--shadow-1);
 }
 

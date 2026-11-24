@@ -1,3 +1,5 @@
-/* Loom styles: tokens first, then the base rules that use them. main.ts imports this file once. */
+/* Loom styles: tokens first (Loom's, then the Pelican style's, which must follow them), then the base rules
+   that use them. main.ts imports this file once. */
 @import './tokens.css';
+@import './pelican.css';
 @import './base.css';

@@ -122,7 +122,7 @@ withDefaults(
   width: 100%;
   height: var(--control-md);
   padding: 0 var(--space-2) 0 10px;
-  border: 1px solid var(--border-default);
+  border: var(--control-border-w) solid var(--control-edge);
   border-bottom-color: var(--border-control);
   background: var(--bg-surface);
   font-size: var(--fs-md);
@@ -132,7 +132,7 @@ withDefaults(
 .field-trigger--select:hover,
 .field-trigger--select[aria-expanded="true"] {
   background: var(--bg-surface);
-  border-color: color-mix(in srgb, var(--border-control) 45%, var(--border-default));
+  border-color: var(--control-edge-hover);
   border-bottom-color: var(--border-control);
 }
 

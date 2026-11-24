@@ -93,7 +93,7 @@ function pick(value: string | string[] | null, close: () => void): void {
   height: var(--control-md);
   padding: 0 var(--space-2) 0 10px;
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
+  border: var(--control-border-w) solid var(--control-edge);
   border-bottom-color: var(--border-control);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -114,7 +114,7 @@ function pick(value: string | string[] | null, close: () => void): void {
 }
 
 .ui-select:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--border-control) 45%, var(--border-default));
+  border-color: var(--control-edge-hover);
   border-bottom-color: var(--border-control);
 }
 

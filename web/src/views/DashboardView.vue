@@ -577,10 +577,10 @@ const subtitle = computed(() => {
 
 <style scoped>
 .heading {
-  font-size: var(--fs-lg);
-  line-height: var(--lh-lg);
-  font-weight: var(--fw-semibold);
-  color: var(--text-primary);
+  font-size: var(--fs-page-title);
+  line-height: var(--lh-page-title);
+  font-weight: var(--fw-heading);
+  color: var(--heading-color);
 }
 
 .dashboard {

@@ -55,7 +55,8 @@ const path = computed(() => {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-1);
+  /* Pelican (Look 3): a rule in the tile's tone along the top. */
+  box-shadow: inset 0 var(--stat-rule-w) 0 var(--tone), var(--shadow-1);
   overflow: hidden;
 }
 
@@ -93,7 +94,7 @@ const path = computed(() => {
   line-height: var(--lh-3xl);
   font-weight: var(--fw-semibold);
   letter-spacing: -0.01em;
-  color: var(--text-primary);
+  color: var(--heading-color);
 }
 
 .hero .value {

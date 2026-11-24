@@ -111,10 +111,10 @@ function newTask(): void {
   flex: 0 1 auto;
   min-width: 0;
   margin: 0;
-  color: var(--text-primary);
+  color: var(--heading-color);
   font-size: var(--fs-lg);
   line-height: var(--lh-lg);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-heading);
 }
 
 .menu-button {

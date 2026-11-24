@@ -145,8 +145,8 @@ function onSidebarButton(): void {
   top: 0;
   z-index: var(--z-sticky);
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  border-bottom: var(--page-header-rule-w) solid var(--border-subtle);
+  background: var(--bg-page-header);
 }
 
 .page-header-wrap.is-bare {
@@ -198,7 +198,8 @@ function onSidebarButton(): void {
   margin: 0;
   font-size: var(--fs-lg);
   line-height: var(--lh-lg);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-heading);
+  color: var(--heading-color);
 }
 
 .actions {

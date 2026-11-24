@@ -1,10 +1,11 @@
 // The palette's actions (8.11), in order: New task {N} (Member+), Go to Home {G H}, the three
-// themes, Keyboard shortcuts {?}, Settings, Invite people (Admin+), New space and New list…
+// themes, the two styles (Look 3), Keyboard shortcuts {?}, Settings, Invite people (Admin+), New space and New list…
 // (Member+; New list asks for the space when there are several), Edit statuses on list pages
 // (Member+), then one "Switch to <workspace>" per other workspace.
 import { computed, type Component, type ComputedRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Building2, House, Inbox, Keyboard, LayoutDashboard, ListChecks, Monitor, Moon, Plus, Settings, SquarePen, Sun, UserPlus } from '@lucide/vue'
+import { Building2, House, Inbox, Keyboard, Landmark, LayoutDashboard, ListChecks, Monitor, Moon, Plus, Settings, Spool, SquarePen, Sun, UserPlus } from '@lucide/vue'
+import { useLook, type Look } from '../../composables/useLook'
 import { useTheme } from '../../composables/useTheme'
 import { useWorkspaceSwitch } from '../../composables/useWorkspaceSwitch'
 import { noop } from '../../lib/async'
@@ -17,7 +18,7 @@ export interface PaletteAction {
   label: string
   icon: Component
   kbd?: string
-  /** Theme items: the current choice. */
+  /** Theme and style items: the current choice. */
   current?: boolean
   /** Extra words it answers to, matched at the start of a word. */
   keywords?: string
@@ -30,10 +31,16 @@ const THEMES: { value: ThemePreference; label: string; icon: Component }[] = [
   { value: 'dark', label: 'Dark', icon: Moon },
 ]
 
+const LOOKS: { value: Look; label: string; icon: Component; keywords: string }[] = [
+  { value: 'loom', label: 'Loom', icon: Spool, keywords: 'default' },
+  { value: 'pelican', label: 'Pelican', icon: Landmark, keywords: 'louisiana state government' },
+]
+
 export function usePaletteActions(): ComputedRef<PaletteAction[]> {
   const ui = useUi()
   const workspaces = useWorkspaces()
   const theme = useTheme()
+  const style = useLook()
   const router = useRouter()
   const route = useRoute()
   const switcher = useWorkspaceSwitch()
@@ -69,6 +76,16 @@ export function usePaletteActions(): ComputedRef<PaletteAction[]> {
         current: theme.preference.value === t.value,
         keywords: 'appearance mode colour color',
         run: () => theme.setPreference(t.value),
+      })
+    }
+    for (const l of LOOKS) {
+      out.push({
+        key: `look-${l.value}`,
+        label: `Style: ${l.label}`,
+        icon: l.icon,
+        current: style.look.value === l.value,
+        keywords: `appearance theme look design ${l.keywords}`,
+        run: () => style.setLook(l.value),
       })
     }
     out.push({ key: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, kbd: '?', keywords: 'keys help', run: () => ui.openShortcuts() })

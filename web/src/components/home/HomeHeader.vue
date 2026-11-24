@@ -88,7 +88,7 @@ const scopeModel = computed<string>({
 .greeting {
   margin: 0;
   overflow-wrap: anywhere;
-  color: var(--text-primary);
+  color: var(--heading-color);
   font-size: var(--fs-3xl);
   line-height: var(--lh-3xl);
   font-weight: var(--fw-bold);

@@ -6,6 +6,7 @@
 // - then one demo card per primitive and field, live.
 // The demos live in components/ui/gallery, one file per group.
 import { Monitor, Moon, Sun } from '@lucide/vue'
+import { useLook } from '../../composables/useLook'
 import { useTheme } from '../../composables/useTheme'
 import { useBreakpoint } from '../../composables/useBreakpoint'
 import type { ThemePreference } from '../../types'
@@ -25,6 +26,7 @@ import { useForcedStates } from '../../components/ui/gallery/forcedStates'
 import FieldGallery from '../../components/fields/FieldGallery.vue'
 
 const { preference, setPreference } = useTheme()
+const { look, setLook } = useLook()
 const { isPhone } = useBreakpoint()
 useForcedStates()
 
@@ -37,6 +39,15 @@ const themeOptions = [
 function setTheme(v: string): void {
   setPreference(v as ThemePreference)
 }
+
+const lookOptions = [
+  { value: 'loom', label: 'Loom' },
+  { value: 'pelican', label: 'Pelican' },
+]
+
+function setStyle(v: string): void {
+  if (v === 'loom' || v === 'pelican') setLook(v)
+}
 </script>
 
 <template>
@@ -46,14 +57,17 @@ function setTheme(v: string): void {
         <AppLogo :size="24" />
         <h1 class="title">UI gallery</h1>
       </div>
-      <UiSegmented
-        :model-value="preference"
-        :options="themeOptions"
-        aria-label="Theme"
-        size="sm"
-        :icon-only="isPhone"
-        @update:model-value="setTheme"
-      />
+      <div class="switches">
+        <UiSegmented :model-value="look" :options="lookOptions" aria-label="Style" size="sm" @update:model-value="setStyle" />
+        <UiSegmented
+          :model-value="preference"
+          :options="themeOptions"
+          aria-label="Theme"
+          size="sm"
+          :icon-only="isPhone"
+          @update:model-value="setTheme"
+        />
+      </div>
     </header>
 
     <main class="grid">
@@ -76,6 +90,11 @@ function setTheme(v: string): void {
 .gallery {
   min-height: 100dvh;
   background: var(--bg-canvas);
+}
+
+.switches {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .top {

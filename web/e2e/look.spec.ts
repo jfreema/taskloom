@@ -1,5 +1,6 @@
 // Look 2 (more visual personality): profile photos in every avatar and Settings › Profile, a list's icon and colour,
-// the compact density, and runs of small changes folded in the activity feed. Each new screen is checked with axe.
+// the compact density, and runs of small changes folded in the activity feed. Look 3: the Pelican style.
+// Each new screen is checked with axe.
 import { MOD, api, expect, expectNoAxeViolations, signIn, test, uniqueEmail, type Me, type Member } from './fixtures'
 
 type Page = Parameters<typeof api>[0]
@@ -285,5 +286,60 @@ test.describe('Look 2', () => {
     await expect(feed.locator('[data-activity-run]')).toHaveCount(0)
     await expect(feed.getByText('Halfway there')).toBeVisible()
     await feed.getByRole('radio', { name: 'All' }).click()
+  })
+})
+
+test.describe('Look 3', () => {
+  /** The computed value of a CSS property on the first element a selector finds. */
+  const css = (page: Page, selector: string, property: string): Promise<string> =>
+    page.locator(selector).first().evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), property)
+
+  test('Pelican style: pick it, see the top bar, navy sidebar and Public Sans in light and dark, keep it, switch back', async ({
+    page,
+    seeded,
+  }) => {
+    await page.goto('/settings/appearance')
+    const style = page.getByRole('radiogroup', { name: 'Style' })
+    await expect(style.getByRole('radio', { name: /Loom/ })).toBeChecked()
+    await expect(page.locator('html')).not.toHaveAttribute('data-look', /.*/)
+    await expect(page.locator('.brand-bar')).toHaveCount(0)
+
+    await style.getByRole('radio', { name: /Pelican/ }).check()
+    await expect(page.locator('html')).toHaveAttribute('data-look', 'pelican')
+    expect(await page.evaluate(() => localStorage.getItem('taskloom.look'))).toBe('pelican')
+    await expectNoAxeViolations(page)
+
+    await page.goto(`/l/${seeded.lists[LIST].id}/list`)
+    await expect(page.getByRole('treegrid')).not.toHaveAttribute('aria-busy', 'true')
+    // Pelican's App Screen: the black top bar with its gold rule, the navy sidebar, Public Sans (served by the app).
+    await expect(page.locator('.brand-bar')).toHaveText('Taskloom')
+    expect(await css(page, '.brand-bar', 'background-color')).toBe('rgb(0, 0, 0)')
+    expect(await css(page, '.brand-bar', 'border-bottom-color')).toBe('rgb(254, 153, 3)')
+    expect(await css(page, '.app-sidebar', 'background-color')).toBe('rgb(0, 40, 77)')
+    expect(await css(page, 'body', 'font-family')).toMatch(/^"Public Sans"/)
+    expect(await page.evaluate(async () => (await document.fonts.ready, document.fonts.check('14px "Public Sans Variable"')))).toBe(true)
+    expect(await css(page, '.app-sidebar .row.is-active', 'background-color')).toBe('rgb(0, 87, 215)')
+    await expectNoAxeViolations(page)
+
+    // Dark: the page goes near-black; the top bar stays black and the sidebar navy.
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await expect.poll(() => css(page, 'body', 'background-color')).toBe('rgb(17, 22, 29)')
+    expect(await css(page, '.app-sidebar', 'background-color')).toBe('rgb(0, 40, 77)')
+    await expectNoAxeViolations(page)
+    await page.emulateMedia({ colorScheme: 'light' })
+
+    // Set before the app starts, so a reload never shows Loom first.
+    await page.reload()
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-look'))).toBe('pelican')
+    await expect(page.getByRole('treegrid')).not.toHaveAttribute('aria-busy', 'true')
+
+    // The command palette switches back.
+    await page.keyboard.press(`${MOD}+K`)
+    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    await palette.getByRole('combobox', { name: 'Search tasks or type a command' }).fill('Style: Loom')
+    await palette.getByRole('option', { name: /^Style: Loom/ }).click()
+    await expect(page.locator('html')).not.toHaveAttribute('data-look', /.*/)
+    await expect(page.locator('.brand-bar')).toHaveCount(0)
+    expect(await page.evaluate(() => localStorage.getItem('taskloom.look'))).toBeNull()
   })
 })

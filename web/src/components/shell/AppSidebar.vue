@@ -135,7 +135,9 @@ function newTask(): void {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-2) 0;
+  /* Pelican (Look 3) puts the workspace row in a darker band, with as much room below it as above. */
+  padding: var(--space-2) var(--space-2) var(--sidebar-band-pad, 0px);
+  background: var(--sidebar-band, transparent);
 }
 
 .workspace {
@@ -186,7 +188,7 @@ function newTask(): void {
   min-width: 0;
   height: var(--control-md);
   padding: 0 var(--space-1-5) 0 var(--space-2);
-  border: 1px solid var(--border-default);
+  border: var(--control-border-w) solid var(--control-edge);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-tertiary);
@@ -198,7 +200,7 @@ function newTask(): void {
 }
 
 .search:hover {
-  border-color: var(--border-control);
+  border-color: var(--control-edge-hover);
 }
 
 .search-icon {
@@ -232,7 +234,7 @@ function newTask(): void {
   gap: var(--space-2);
   min-height: var(--row-sidebar);
   padding: 0 var(--space-2);
-  border-radius: var(--radius-sm);
+  border-radius: var(--nav-radius);
   color: var(--text-secondary);
   font-size: var(--fs-md);
   line-height: var(--lh-md);
@@ -247,7 +249,7 @@ function newTask(): void {
 .nav-item.is-active {
   background: var(--bg-selected);
   color: var(--accent-text);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-nav-active);
 }
 
 .nav-icon {
@@ -280,6 +282,7 @@ function newTask(): void {
   padding: var(--space-1) var(--space-2) var(--space-2);
   padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border-subtle);
+  background: var(--sidebar-band, transparent);
 }
 
 @media (max-width: 639px) {

@@ -125,15 +125,17 @@ watch(
 
 <style scoped>
 .ui-segmented {
+  /* 2px inside a 1px edge; Pelican's 2px edge (Look 3) keeps 1px more. */
+  --track-pad: calc(var(--space-0-5) + var(--control-border-w) - 1px);
   position: relative;
   display: inline-flex;
   align-items: stretch;
   gap: var(--space-0-5);
   height: var(--control-md);
-  padding: var(--space-0-5);
+  padding: var(--track-pad);
   border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  background: var(--segmented-bg);
+  box-shadow: inset 0 0 0 var(--control-border-w) var(--segmented-edge);
   isolation: isolate;
 }
 
@@ -143,15 +145,15 @@ watch(
 
 .thumb {
   position: absolute;
-  top: var(--space-0-5);
-  bottom: var(--space-0-5);
+  top: var(--track-pad);
+  bottom: var(--track-pad);
   left: 0;
   z-index: 0;
   border-radius: var(--radius-sm);
-  /* --bg-card equals --bg-surface in light; in dark it is the lighter surface, so the thumb stands
-     off the --bg-subtle track there too (--bg-surface would sit darker than the track). */
-  background: var(--bg-card);
-  box-shadow: var(--shadow-2), 0 0 0 1px var(--border-subtle);
+  /* Loom's --segmented-thumb is --bg-card: it equals --bg-surface in light; in dark it is the lighter
+     surface, so the thumb stands off the --bg-subtle track there too. Pelican's is the navy accent. */
+  background: var(--segmented-thumb);
+  box-shadow: var(--segmented-thumb-shadow);
   pointer-events: none;
 }
 
@@ -202,7 +204,7 @@ watch(
 }
 
 .segment.is-selected {
-  color: var(--text-primary);
+  color: var(--segmented-thumb-fg);
 }
 
 .segment:focus-visible {
@@ -213,6 +215,10 @@ watch(
   color: var(--text-tertiary);
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
+}
+
+.is-selected .count {
+  color: var(--segmented-count-selected);
 }
 
 /* Touch (7.5): every segment is at least 44px wide (a short label such as "All" would be narrower),

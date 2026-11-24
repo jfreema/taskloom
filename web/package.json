@@ -8,7 +8,8 @@
     "build": "vue-tsc -b && vite build",
     "typecheck": "vue-tsc -b",
     "preview": "vite preview",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "pelican:sync": "node scripts/pelican-sync.mjs"
   },
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "4.0.0",
@@ -17,6 +18,7 @@
     "@floating-ui/dom": "1.8.0",
     "@floating-ui/vue": "2.0.1",
     "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/public-sans": "5.3.0",
     "@lucide/vue": "1.61.0",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-list": "3.32.0",

@@ -1,6 +1,6 @@
 /*
  * Sidebar rows (8.3), shared by SidebarSpace and SidebarListRow through <style scoped src>.
- * Rows are 30px (44px on coarse pointers) with 8px side padding and radius 6. The row draws the
+ * Rows are 30px (44px on coarse pointers) with 8px side padding and radius 6 (square in Pelican). The row draws the
  * focus ring (inset) for its main button or link, so the ring also wraps the row's actions.
  */
 .row {
@@ -8,7 +8,7 @@
   display: flex;
   align-items: center;
   min-height: var(--row-sidebar);
-  border-radius: var(--radius-sm);
+  border-radius: var(--nav-radius);
   color: var(--text-secondary);
   transition: background-color var(--dur-1) var(--ease-out);
 }
@@ -55,7 +55,7 @@
 }
 
 .is-active > .row-main {
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-nav-active);
 }
 
 .name {

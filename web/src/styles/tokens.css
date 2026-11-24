@@ -1,9 +1,12 @@
 /*
- * Loom design tokens (spec 7.3 to 7.8). The only stylesheet that holds colour values.
+ * Loom design tokens (spec 7.3 to 7.8). With pelican.css, the only stylesheets that hold colour values.
  * Theme: data-theme is absent for "System", and "light" or "dark" for an explicit choice
  * (public/theme-init.js sets it before first paint; composables/useTheme.ts keeps it in sync).
  * Density (Look 2): data-density="compact" tightens rows and cards, set the same way
  * (composables/useDensity.ts). Touch screens keep their 44px rows either way.
+ * Style (Look 3): data-look="pelican" swaps in the Pelican token set from pelican.css, set the same
+ * way (composables/useLook.ts). Loom, the default, has no attribute. The "Shapes that differ by
+ * style" tokens below are the knobs Pelican turns beyond colours and fonts.
  */
 :root {
   color-scheme: light;
@@ -51,6 +54,26 @@
 
   --dur-1: 80ms; --dur-2: 120ms; --dur-3: 180ms; --dur-4: 240ms;
   --ease-out: cubic-bezier(.16, 1, .3, 1); --ease-in: cubic-bezier(.4, 0, 1, 1); --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+
+  /* Shapes that differ by style (Look 3). Loom's values; pelican.css sets its own. A token here that
+     names another (var()) takes that token's value on <html>, so a region that re-declares the
+     base token (Pelican's navy sidebar) re-declares these too. */
+  --control-border-w: 1px;      /* text fields, selects, secondary buttons, the sidebar's search */
+  --check-border-w: 1.5px;      /* checkboxes */
+  --control-edge: var(--border-default);   /* a field's sides; its bottom edge is --border-control */
+  --control-edge-hover: color-mix(in srgb, var(--border-control) 45%, var(--border-default));
+  --button-edge: var(--border-default);    /* secondary buttons and icon buttons */
+  --segmented-bg: var(--bg-subtle); --segmented-edge: var(--border-subtle);
+  --segmented-thumb: var(--bg-card); --segmented-thumb-fg: var(--text-primary);
+  --segmented-thumb-shadow: var(--shadow-2), 0 0 0 1px var(--border-subtle);
+  --segmented-count-selected: var(--text-tertiary);
+  --heading-color: var(--text-primary); --fw-heading: var(--fw-semibold);
+  --fs-page-title: var(--fs-lg); --lh-page-title: var(--lh-lg);   /* Dashboard, Inbox, Settings */
+  --nav-radius: var(--radius-sm); --fw-nav-active: var(--fw-medium);   /* sidebar rows */
+  --bg-page: var(--bg-surface); --bg-page-header: var(--bg-surface); --page-header-rule-w: 1px;
+  --panel-radius: var(--radius-lg); --panel-edge: var(--border-subtle);   /* the inset content panel */
+  --stat-rule-w: 0px;           /* the Dashboard's number tiles: a rule in their tone along the top */
+  --card-head-rule-w: 0px; --card-head-pad: 0px;   /* a line under the Dashboard cards' titles */
 }
 
 /* Dark colours. The same declarations appear twice: for an explicit choice, and for "System" on a dark OS. */

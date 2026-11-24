@@ -2,7 +2,8 @@
 // The signed-in frame (3.3, 3.6, 8.2).
 // - Layout: a grid of the sidebar (248px, docked at 1024px and wider; animates to 0 when collapsed)
 //   and the inset content panel (8px margin, radius 10, --bg-surface, --shadow-1; full-bleed below
-//   640px). Inside the panel, a second grid of the page area and the docked task panel. The page
+//   640px). The Pelican style (Look 3) adds a black top bar above both and sets the panel edge to edge
+//   (--inset 0) on its grey page (--bg-page). Inside the panel, a second grid of the page area and the docked task panel. The page
 //   area is the `page` size container (7.5); <main id="main"> inside it scrolls.
 // - Below 1024px the sidebar is a modal left drawer that closes on navigation, Esc or the scrim.
 // - Start-up (8.2): the router guard has loaded the session; this loads the workspace tree, then
@@ -22,6 +23,7 @@ import { Building2, Plus } from '@lucide/vue'
 import { useBreakpoint } from '../composables/useBreakpoint'
 import { useDelayedDelete } from '../composables/useDelayedDelete'
 import { useDelayedFlag } from '../composables/useDelayedFlag'
+import { useLook } from '../composables/useLook'
 import { useLayerStack } from '../composables/useLayerStack'
 import { INBOX_POLL_MS, useInbox } from '../stores/inbox'
 import { useMembers } from '../stores/members'
@@ -57,6 +59,7 @@ const inbox = useInbox()
 const route = useRoute()
 const { isDesktop, isPhone } = useBreakpoint()
 const layers = useLayerStack()
+const { look } = useLook()
 
 const contentPanel = ref<HTMLElement | null>(null)
 provide(contentPanelKey, contentPanel)
@@ -197,6 +200,8 @@ function skipToContent(): void {
     class="app-shell"
     :class="{ 'has-sidebar': isDesktop, 'is-collapsed': collapsed, 'has-fab': fabRoom, 'main-scrolls': mainScrolls }"
   >
+    <!-- Pelican's App Screen top bar: the app's name on black over a gold rule. -->
+    <div v-if="look === 'pelican'" class="brand-bar">Taskloom</div>
     <div v-if="isDesktop" ref="dock" class="sidebar-dock" :inert="collapsed">
       <AppSidebar />
     </div>
@@ -261,8 +266,32 @@ function skipToContent(): void {
   --fab-room: 0px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  /* The first row holds Pelican's top bar; without it, it is empty and 0px tall. */
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100dvh;
   background: var(--bg-canvas);
+}
+
+.sidebar-dock,
+.content-panel {
+  grid-row: 2;
+}
+
+.brand-bar {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  height: var(--brandbar-h);
+  padding: 0 var(--space-5);
+  border-bottom: var(--brandbar-rule-w) solid var(--brandbar-rule);
+  background: var(--brandbar-bg);
+  box-shadow: var(--brandbar-shadow, none);
+  color: var(--brandbar-fg);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.01em;
 }
 
 .app-shell.has-sidebar {
@@ -299,9 +328,9 @@ function skipToContent(): void {
   min-width: 0;
   min-height: 0;
   margin: var(--inset);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--bg-surface);
+  border: 1px solid var(--panel-edge);
+  border-radius: var(--panel-radius);
+  background: var(--bg-page);
   box-shadow: var(--shadow-1);
   overflow: hidden;
 }

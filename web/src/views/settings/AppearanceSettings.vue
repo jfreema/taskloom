@@ -1,81 +1,76 @@
 <script setup lang="ts">
 // Settings › Appearance (spec 8.13).
-// - "Theme": UiRadioCards (System, Light, Dark) bound to useTheme. Each card shows a 96×56 mini
-//   mock painted with that theme's canvas, surface and accent; System shows both halves. The colours
-//   come from the token rules in styles/tokens.css (read once through the CSSOM), so this file holds
-//   no colour values and the previews follow any change to the tokens.
+// - "Style" (Look 3): UiRadioCards (Loom, Pelican) bound to useLook. Each card shows a 96×56 mock of
+//   that style in the theme showing now: Loom's inset panel, or Pelican's black top bar, navy sidebar
+//   and grey page.
+// - "Theme": UiRadioCards (System, Light, Dark) bound to useTheme, with mocks of the current style in
+//   light and dark; System shows both halves. Both styles have light and dark colours.
+//   The mocks' colours come from the token rules in styles/tokens.css and styles/pelican.css, read
+//   once through the CSSOM (lib/tokenPalettes.ts), so this file holds no colour values and the
+//   previews follow any change to the tokens.
 // - "Density" (Look 2): UiRadioCards (Comfortable, Compact) bound to useDensity, each with a mock of
 //   rows at that spacing.
 // - "Single-key shortcuts": UiSwitch bound to shortcutsEnabled (taskloom.shortcuts.singleKey,
 //   default on).
 // All are saved in this browser only.
 import { computed, useId } from 'vue'
+import LookMock, { type MockPalette } from '../../components/settings/LookMock.vue'
 import SettingsPage from '../../components/settings/SettingsPage.vue'
 import UiRadioCards, { type RadioCardOption } from '../../components/ui/UiRadioCards.vue'
 import UiSwitch from '../../components/ui/UiSwitch.vue'
 import { useDensity } from '../../composables/useDensity'
+import { useLook, type Look } from '../../composables/useLook'
 import { shortcutsEnabled } from '../../composables/useShortcut'
 import { useTheme } from '../../composables/useTheme'
+import { readTokens, type Mode } from '../../lib/tokenPalettes'
 import type { ThemePreference } from '../../types'
 
-interface Palette {
-  canvas: string
-  surface: string
-  accent: string
-  line: string
-  ink: string
-}
+const ROOT_TOKENS = [
+  '--bg-canvas', '--bg-page', '--bg-surface', '--accent', '--border-default', '--text-tertiary',
+  '--brandbar-bg', '--brandbar-rule', '--brandbar-fg', '--inset',
+] as const
+const SIDEBAR_TOKENS = ['--bg-canvas', '--border-default', '--bg-selected', '--text-primary'] as const
 
-const TOKEN: Record<keyof Palette, string> = {
-  canvas: '--bg-canvas',
-  surface: '--bg-surface',
-  accent: '--accent',
-  line: '--border-default',
-  ink: '--text-tertiary',
-}
-
-function paletteFrom(style: CSSStyleDeclaration): Palette | null {
-  const out = {} as Palette
-  for (const key of Object.keys(TOKEN) as (keyof Palette)[]) {
-    const v = style.getPropertyValue(TOKEN[key]).trim()
-    if (!v) return null
-    out[key] = v
+function paletteOf(look: Look, mode: Mode): MockPalette {
+  const t = readTokens(look, mode, ROOT_TOKENS)
+  const side = readTokens(look, mode, SIDEBAR_TOKENS, '.app-sidebar')
+  return {
+    canvas: t['--bg-canvas'],
+    page: t['--bg-page'],
+    surface: t['--bg-surface'],
+    accent: t['--accent'],
+    line: t['--border-default'],
+    ink: t['--text-tertiary'],
+    sidebar: side['--bg-canvas'],
+    sidebarLine: side['--border-default'],
+    sidebarActive: side['--bg-selected'],
+    sidebarText: side['--text-primary'],
+    bar: t['--brandbar-bg'],
+    barRule: t['--brandbar-rule'],
+    barText: t['--brandbar-fg'],
+    inset: parseFloat(t['--inset']) > 0,
   }
-  return out
 }
 
-/** The light (`:root`) and dark (`:root[data-theme="dark"]`) token rules, found in the loaded stylesheets. */
-function readPalettes(): { light: Palette; dark: Palette } {
-  let light: Palette | null = null
-  let dark: Palette | null = null
-  const visit = (rules: CSSRuleList): void => {
-    for (const rule of Array.from(rules)) {
-      if (light && dark) return
-      if (rule instanceof CSSStyleRule) {
-        const selector = rule.selectorText.replace(/\s+/g, '')
-        if (!light && selector === ':root') light = paletteFrom(rule.style)
-        else if (!dark && /^:root\[data-theme=(["']?)dark\1\]$/.test(selector)) dark = paletteFrom(rule.style)
-      } else if (rule instanceof CSSGroupingRule && !(rule instanceof CSSMediaRule)) {
-        visit(rule.cssRules)
-      }
-    }
-  }
-  for (const sheet of Array.from(document.styleSheets)) {
-    try {
-      visit(sheet.cssRules)
-    } catch {
-      // A cross-origin sheet can't be read; the tokens are never in one.
-    }
-  }
-  // Should a rule be missing, both previews fall back to the live theme rather than break.
-  const live = paletteFrom(getComputedStyle(document.documentElement))
-  const fallback: Palette = live ?? { canvas: 'Canvas', surface: 'Canvas', accent: 'AccentColor', line: 'GrayText', ink: 'GrayText' }
-  return { light: light ?? fallback, dark: dark ?? fallback }
+const palettes: Record<Look, Record<Mode, MockPalette>> = {
+  loom: { light: paletteOf('loom', 'light'), dark: paletteOf('loom', 'dark') },
+  pelican: { light: paletteOf('pelican', 'light'), dark: paletteOf('pelican', 'dark') },
 }
 
-const palettes = readPalettes()
+const { look, setLook } = useLook()
+const { preference, resolved, setPreference } = useTheme()
 
-const { preference, setPreference } = useTheme()
+const lookModel = computed<string>({
+  get: () => look.value,
+  set: (v) => {
+    if (v === 'loom' || v === 'pelican') setLook(v)
+  },
+})
+
+const lookOptions: RadioCardOption[] = [
+  { value: 'loom', label: 'Loom', description: "Taskloom's own" },
+  { value: 'pelican', label: 'Pelican', description: "Louisiana's design system" },
+]
 
 const theme = computed<string>({
   get: () => preference.value,
@@ -114,21 +109,37 @@ function densityRows(value: string): { ys: number[]; gap: number } {
 const uid = useId()
 const clipId = `${uid}-half`
 
-// One mock: the sidebar's lines on the canvas, and a surface panel with a title, an accent button
-// and three rows, each with an accent check.
-const ROWS = [20, 29, 38] as const
-
-function halves(value: string): { palette: Palette; clip?: string }[] {
-  if (value === 'light') return [{ palette: palettes.light }]
-  if (value === 'dark') return [{ palette: palettes.dark }]
-  return [{ palette: palettes.light }, { palette: palettes.dark, clip: `url(#${clipId})` }]
+/** A theme card's mock: the current style in that theme; System clips the dark one to the right half. */
+function halves(value: string): { palette: MockPalette; clip?: string }[] {
+  const p = palettes[look.value]
+  if (value === 'light') return [{ palette: p.light }]
+  if (value === 'dark') return [{ palette: p.dark }]
+  return [{ palette: p.light }, { palette: p.dark, clip: `url(#${clipId})` }]
 }
+
+/** A style card's mock: that style in the theme showing now. */
+const lookPalette = (value: string): MockPalette => palettes[value === 'pelican' ? 'pelican' : 'loom'][resolved.value]
 </script>
 
 <template>
   <SettingsPage title="Appearance" description="How Taskloom looks and listens to keys. Saved in this browser.">
+    <section class="block" aria-labelledby="appearance-style">
+      <h3 id="appearance-style" class="block-title">Style</h3>
+      <p class="block-text">Pelican dresses Taskloom in the State of Louisiana's design system: Public Sans, a black top bar and a navy sidebar.</p>
+      <UiRadioCards v-model="lookModel" name="look" aria-label="Style" :options="lookOptions">
+        <template #preview="{ option }">
+          <span class="stage">
+            <svg class="mock" viewBox="0 0 96 56" aria-hidden="true" focusable="false">
+              <LookMock :palette="lookPalette(option.value)" />
+            </svg>
+          </span>
+        </template>
+      </UiRadioCards>
+    </section>
+
     <section class="block" aria-labelledby="appearance-theme">
       <h3 id="appearance-theme" class="block-title">Theme</h3>
+      <p class="block-text">Light and dark work with either style.</p>
       <UiRadioCards v-model="theme" name="theme" aria-label="Theme" :options="options">
         <template #preview="{ option }">
           <span class="stage">
@@ -139,21 +150,9 @@ function halves(value: string): { palette: Palette; clip?: string }[] {
                 </clipPath>
               </defs>
               <g v-for="(h, i) in halves(option.value)" :key="i" :clip-path="h.clip">
-                <rect width="96" height="56" rx="6" :fill="h.palette.canvas" />
-                <rect x="6" y="9" width="14" height="3" rx="1.5" :fill="h.palette.ink" opacity="0.55" />
-                <rect x="6" y="16" width="17" height="3" rx="1.5" :fill="h.palette.line" />
-                <rect x="6" y="23" width="12" height="3" rx="1.5" :fill="h.palette.line" />
-                <rect x="6" y="30" width="15" height="3" rx="1.5" :fill="h.palette.line" />
-                <rect x="27" y="5" width="64" height="46" rx="4" :fill="h.palette.surface" />
-                <rect x="32" y="10" width="22" height="4" rx="2" :fill="h.palette.ink" opacity="0.7" />
-                <rect x="77" y="9.5" width="10" height="5" rx="2" :fill="h.palette.accent" />
-                <g v-for="y in ROWS" :key="y">
-                  <circle cx="35" :cy="y + 1.5" r="2" :fill="h.palette.accent" />
-                  <rect x="40" :y="y" :width="y === 29 ? 26 : 36" height="3" rx="1.5" :fill="h.palette.line" />
-                </g>
-                <rect x="0.5" y="0.5" width="95" height="55" rx="5.5" fill="none" :stroke="h.palette.line" />
+                <LookMock :palette="h.palette" />
               </g>
-              <line v-if="option.value === 'system'" x1="48" y1="0.5" x2="48" y2="55.5" :stroke="palettes.dark.line" />
+              <line v-if="option.value === 'system'" x1="48" y1="0.5" x2="48" y2="55.5" :style="{ stroke: palettes[look].dark.line }" />
             </svg>
           </span>
         </template>

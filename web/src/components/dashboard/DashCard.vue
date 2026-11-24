@@ -44,15 +44,18 @@ const headingId = useId()
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  /* Pelican (Look 3) rules the title off from the body, edge to edge across the card. */
+  margin: 0 calc(var(--space-5) * -1) var(--space-4);
+  padding: 0 var(--space-5) var(--card-head-pad);
+  border-bottom: var(--card-head-rule-w) solid var(--border-subtle);
 }
 
 .title {
   margin: 0;
   font-size: var(--fs-md);
   line-height: var(--lh-md);
-  font-weight: var(--fw-semibold);
-  color: var(--text-primary);
+  font-weight: var(--fw-heading);
+  color: var(--heading-color);
 }
 
 .caption {

@@ -142,7 +142,7 @@ function onKeydown(e: KeyboardEvent): void {
   min-width: 0;
   height: var(--control-sm);
   padding: 0 var(--space-2);
-  border: 1px solid var(--border-default);
+  border: var(--control-border-w) solid var(--control-edge);
   border-bottom-color: var(--border-control);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
